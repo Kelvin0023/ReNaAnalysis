@@ -1,4 +1,6 @@
-numpy
-scipy
+numpy~=1.21.0
+scipy~=1.7.2
 mne
-matplotlib
+matplotlib~=3.5.0
+renalabapp
+pyxdf~=1.16.3
