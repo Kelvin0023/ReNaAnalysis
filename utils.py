@@ -70,13 +70,13 @@ def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timesta
     for event_name, event_marker_id in event_ids.items():
         y = epochs[event_name].get_data()
         y = np.mean(y, axis=1)
-        y1 = np.mean(y, axis=0) + 0.075 * np.std(y, axis=0)  # this is the upper envelope
-        y2 = np.mean(y, axis=0) - 0.075 * np.std(y, axis=0)  # this is the lower envelope
+        y1 = np.mean(y, axis=0) + 0.1 * np.std(y, axis=0)  # this is the upper envelope
+        y2 = np.mean(y, axis=0) - 0.1 * np.std(y, axis=0)  # this is the lower envelope
         time_vector = np.linspace(tmin, tmax, y.shape[-1])
         plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
                          interpolate=True,
                          alpha=0.5)
-        plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name], label=event_name)
+        plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name], label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
 
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right in m)')
