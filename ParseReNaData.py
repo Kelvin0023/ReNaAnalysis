@@ -11,4 +11,4 @@ data_path = 'C:/Users/S-Vec/Downloads/ReNa Pilot/10_30_2021_21_03_46-Exp_ReNa-Sb
 session_log = json.load(open(session_log_path, 'r'))
 itemCatalog_log = json.load(open(itemCatalog_path, 'r'))
 
-RNStream
+data = RNStream(data_path).stream_in(ignore_stream=('monitor1',), jitter_removal=False)
