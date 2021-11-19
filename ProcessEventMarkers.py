@@ -13,7 +13,7 @@ from utils import interpolate_nan_array, add_event_markers_to_data_array, plot_e
 
 tmin = -0.1
 tmax = 3
-color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'yellow'}
+color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
 # first participant
 # data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-13-2021/11_13_2021_11_04_11-Exp_ReNaPilot-Sbj_AN-Ssn_0.dats'
@@ -21,14 +21,14 @@ color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'yellow'}
 # session_log_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-13-2021/ReNaSessionLog_11-13-2021-11-03-54.json'
 
 # second participant
-data_path = 'C:/Users/S-Vec/Downloads/ReNaPilot-2021Fall/11-10-2021/11_10_2021_12_06_17-Exp_ReNaPilot-Sbj_ZL-Ssn_0.dats'
-item_catalog_path = 'C:/Users/S-Vec/Downloads/ReNaPilot-2021Fall/11-10-2021/ReNaItemCatalog_11-10-2021-12-04-46.json'
-session_log_path = 'C:/Users/S-Vec/Downloads/ReNaPilot-2021Fall/11-10-2021/ReNaSessionLog_11-10-2021-12-04-46.json'
+# data_path = 'C:/Users/S-Vec/Downloads/ReNaPilot-2021Fall/11-10-2021/11_10_2021_12_06_17-Exp_ReNaPilot-Sbj_ZL-Ssn_0.dats'
+# item_catalog_path = 'C:/Users/S-Vec/Downloads/ReNaPilot-2021Fall/11-10-2021/ReNaItemCatalog_11-10-2021-12-04-46.json'
+# session_log_path = 'C:/Users/S-Vec/Downloads/ReNaPilot-2021Fall/11-10-2021/ReNaSessionLog_11-10-2021-12-04-46.json'
 
 # second participant
-# data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/11_10_2021_12_06_17-Exp_ReNaPilot-Sbj_ZL-Ssn_0.dats'
-# item_catalog_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/ReNaItemCatalog_11-10-2021-12-04-46.json'
-# session_log_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/ReNaSessionLog_11-10-2021-12-04-46.json'
+data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/11_10_2021_12_06_17-Exp_ReNaPilot-Sbj_ZL-Ssn_0.dats'
+item_catalog_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/ReNaItemCatalog_11-10-2021-12-04-46.json'
+session_log_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/ReNaSessionLog_11-10-2021-12-04-46.json'
 
 varjoEyetracking_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeData.json'
 

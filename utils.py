@@ -31,20 +31,23 @@ def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data
     assert event_markers.shape[0] == 4
     data_event_marker_array = np.zeros(shape=(4, data_array.shape[1]))
 
-    event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1}
+    event_ids = {'BlockBegins': 4, 'Novelty': 3, 'Target': 2, 'Distractor': 1}
 
     for i in range(event_markers.shape[1]):
         event, info1, info2, info3 = event_markers[:, i]
+        data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
+
         if str(int(event)) in session_log.keys():
             print('Processing block with ID: {0}'.format(event))
             block_num = event
+            data_event_marker_array[0][data_event_marker_index] = 4  # encodes start of a block
             continue
+
         if event in item_codes:  # for item events
             targets = session_log[str(int(block_num))]['targets']
             distractors = session_log[str(int(block_num))]['distractors']
             novelties = session_log[str(int(block_num))]['novelties']
 
-            data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
             if event in distractors:
                 data_event_marker_array[0][data_event_marker_index] = 1
             elif event in targets:
@@ -83,18 +86,19 @@ def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timesta
                     verbose=False, picks=['L Pupil Diameter', 'R Pupil Diameter'])
 
     for event_name, event_marker_id in event_ids.items():
-        y = epochs[event_name].get_data()
-        y = np.mean(y, axis=1)  # average left and right
-        y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+            y = epochs[event_name].get_data()
+            y = np.mean(y, axis=1)  # average left and right
+            y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
 
-        y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-        y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-        time_vector = np.linspace(tmin, tmax, y.shape[-1])
-        plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-                         interpolate=True,
-                         alpha=0.5)
-        plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
-                 label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+            y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+            y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
+            time_vector = np.linspace(tmin, tmax, y.shape[-1])
+            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+                             interpolate=True,
+                             alpha=0.5)
+            plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
+                     label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
     plt.legend()
@@ -141,18 +145,19 @@ def plot_epochs_visual_search(itemMarkers, itemMarkers_timestamps, event_markers
                     verbose=False, picks=['L Pupil Diameter', 'R Pupil Diameter'])
 
     for event_name, event_marker_id in event_ids.items():
-        y = epochs[event_name].get_data()
-        y = np.mean(y, axis=1)  # average left and right
-        y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+            y = epochs[event_name].get_data()
+            y = np.mean(y, axis=1)  # average left and right
+            y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
 
-        y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-        y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-        time_vector = np.linspace(tmin, tmax, y.shape[-1])
-        plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-                         interpolate=True,
-                         alpha=0.5)
-        plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
-                 label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+            y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+            y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
+            time_vector = np.linspace(tmin, tmax, y.shape[-1])
+            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+                             interpolate=True,
+                             alpha=0.5)
+            plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
+                     label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
     plt.legend()
