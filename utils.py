@@ -64,12 +64,12 @@ def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data
 def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names, session_log,
                 item_codes, tmin, tmax, color_dict, title=''):
     # interpolate nan's
-    data_array = interpolate_nan_array(data_array)
-
+    data_array_interpolated = interpolate_nan_array(data_array)
+    # data_array_interpolated = data_array
     srate = len(data_timestamps) / (data_timestamps[-1] - data_timestamps[0])
     eyetracking_with_event_marker_data, event_ids = add_event_markers_to_data_array(event_markers,
                                                                                     event_marker_timestamps,
-                                                                                    data_array,
+                                                                                    data_array_interpolated,
                                                                                     data_timestamps, session_log,
                                                                                     item_codes)
 
@@ -85,6 +85,7 @@ def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timesta
                     preload=True,
                     verbose=False, picks=['L Pupil Diameter', 'R Pupil Diameter'])
 
+    # Average epoch data
     for event_name, event_marker_id in event_ids.items():
         if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
             y = epochs[event_name].get_data()
@@ -105,6 +106,21 @@ def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timesta
     plt.title(title)
     plt.show()
 
+    # ERP Image
+    for event_name, event_marker_id in event_ids.items():
+        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+            y = epochs[event_name].get_data()
+            y = np.mean(y, axis=1)  # average left and right
+            # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+            time_vector = np.linspace(tmin, tmax, y.shape[-1])
+            plt.imshow(y)
+            plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5), ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax-tmin)/5)])
+            plt.xlabel('Time (sec)')
+            plt.ylabel('Trails')
+            plt.legend()
+            plt.title('{0}: {1}'.format(title, event_name))
+            plt.show()
+
     # gaze epochs
     # epochs = Epochs(raw, events=find_events(raw), event_id=event_ids, tmin=0, tmax=tmax, baseline=(0, 0),
     #                 preload=True,
@@ -118,6 +134,12 @@ def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timesta
     # # [plt.plot(time_vector, x) for x in y_gaze_x]
     # plt.imshow(y_gaze_x)
     # plt.show()
+
+    #
+    # 1. grab the sequence for each block
+    # 2. stitch the blocks together
+    # 3. create design matrix based on the events
+
     return epochs
 
 
