@@ -81,7 +81,7 @@ def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timesta
 
     # pupil epochs
     epochs = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin, tmax=tmax,
-                    baseline=(0, 0),
+                    baseline=None,
                     preload=True,
                     verbose=False, picks=['L Pupil Diameter', 'R Pupil Diameter'])
 
@@ -89,12 +89,15 @@ def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timesta
     for event_name, event_marker_id in event_ids.items():
         if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
             y = epochs[event_name].get_data()
-            y = np.mean(y, axis=1)  # average left and right
+            time_vector = np.linspace(tmin, tmax, y.shape[-1])
+
+            # y = np.mean(y, axis=1)  # average left and right
+            y = y[:, 0, :]  # get the left eye data
             y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
 
+            y = np.array([mne.baseline.rescale(x, time_vector, (-0.1, 0.)) for x in y])
             y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
             y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-            time_vector = np.linspace(tmin, tmax, y.shape[-1])
             plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
                              interpolate=True,
                              alpha=0.5)
