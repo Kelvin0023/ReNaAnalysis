@@ -62,7 +62,7 @@ def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data
 
 
 def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names, session_log,
-                item_codes, tmin, tmax, color_dict, title=''):
+                item_codes, tmin, tmax, color_dict, title='', is_plotting=True):
     # interpolate nan's
     data_array_interpolated = interpolate_nan_array(data_array)
     # data_array_interpolated = data_array
@@ -86,43 +86,44 @@ def plot_epochs(event_markers, event_marker_timestamps, data_array, data_timesta
                     verbose=False, picks=['L Pupil Diameter', 'R Pupil Diameter'])
 
     # Average epoch data
-    for event_name, event_marker_id in event_ids.items():
-        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-            y = epochs[event_name].get_data()
-            time_vector = np.linspace(tmin, tmax, y.shape[-1])
+    if is_plotting:
+        for event_name, event_marker_id in event_ids.items():
+            if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+                y = epochs[event_name].get_data()
+                time_vector = np.linspace(tmin, tmax, y.shape[-1])
 
-            # y = np.mean(y, axis=1)  # average left and right
-            y = y[:, 0, :]  # get the left eye data
-            y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+                # y = np.mean(y, axis=1)  # average left and right
+                y = y[:, 0, :]  # get the left eye data
+                y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
 
-            y = np.array([mne.baseline.rescale(x, time_vector, (-0.1, 0.)) for x in y])
-            y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-            y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-                             interpolate=True,
-                             alpha=0.5)
-            plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
-                     label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
-    plt.legend()
-    plt.title(title)
-    plt.show()
+                y = np.array([mne.baseline.rescale(x, time_vector, (-0.1, 0.)) for x in y])
+                y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+                y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
+                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+                                 interpolate=True,
+                                 alpha=0.5)
+                plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
+                         label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+        plt.xlabel('Time (sec)')
+        plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
+        plt.legend()
+        plt.title(title)
+        plt.show()
 
-    # ERP Image
-    for event_name, event_marker_id in event_ids.items():
-        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-            y = epochs[event_name].get_data()
-            y = np.mean(y, axis=1)  # average left and right
-            # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-            time_vector = np.linspace(tmin, tmax, y.shape[-1])
-            plt.imshow(y)
-            plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5), ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax-tmin)/5)])
-            plt.xlabel('Time (sec)')
-            plt.ylabel('Trails')
-            plt.legend()
-            plt.title('{0}: {1}'.format(title, event_name))
-            plt.show()
+        # ERP Image
+        for event_name, event_marker_id in event_ids.items():
+            if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+                y = epochs[event_name].get_data()
+                y = np.mean(y, axis=1)  # average left and right
+                # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+                time_vector = np.linspace(tmin, tmax, y.shape[-1])
+                plt.imshow(y)
+                plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5), ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax-tmin)/5)])
+                plt.xlabel('Time (sec)')
+                plt.ylabel('Trails')
+                plt.legend()
+                plt.title('{0}: {1}'.format(title, event_name))
+                plt.show()
 
     # gaze epochs
     # epochs = Epochs(raw, events=find_events(raw), event_id=event_ids, tmin=0, tmax=tmax, baseline=(0, 0),
