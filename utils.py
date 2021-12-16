@@ -1,6 +1,5 @@
 import numpy as np
 import scipy
-from nslr_hmm import nslr_hmm
 from scipy.interpolate import interp1d
 import json
 
@@ -61,7 +60,7 @@ def add_event_markers_to_data_array(event_markers, event_ids, event_marker_times
 
 
 def generate_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names, session_log,
-                    item_codes, tmin, tmax, event_ids, color_dict, title=''):
+                    item_codes, tmin, tmax, event_ids, color_dict, title='', is_plotting=True):
     # interpolate nan's
     data_array_interpolated = interpolate_nan_array(data_array)
     # data_array_interpolated = data_array
@@ -80,85 +79,89 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
 
     # pupil epochs
     epochs = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin, tmax=tmax,
-                    baseline=(0, 0),
+                    baseline=None,
                     preload=True,
                     verbose=False, picks=['L Pupil Diameter', 'R Pupil Diameter'])
 
     # Average epoch data
-    for event_name, event_marker_id in event_ids.items():
-        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-            y = epochs[event_name].get_data()
-            y = np.mean(y, axis=1)  # average left and right
-            y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+    if is_plotting:
+        for event_name, event_marker_id in event_ids.items():
+            if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+                y = epochs[event_name].get_data()
+                time_vector = np.linspace(tmin, tmax, y.shape[-1])
 
-            y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-            y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-            time_vector = np.linspace(tmin, tmax, y.shape[-1])
-            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-                             interpolate=True,
-                             alpha=0.5)
-            plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
-                     label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
-    plt.legend()
-    plt.title(title)
-    plt.show()
+                # y = np.mean(y, axis=1)  # average left and right
+                y = y[:, 0, :]  # get the left eye data
+                y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
 
-    # ERP Image
-    for event_name, event_marker_id in event_ids.items():
-        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-            y = epochs[event_name].get_data()
-            y = np.mean(y, axis=1)  # average left and right
-            # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-            time_vector = np.linspace(tmin, tmax, y.shape[-1])
-            plt.imshow(y)
-            plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5), ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax-tmin)/5)])
-            plt.xlabel('Time (sec)')
-            plt.ylabel('Trails')
-            plt.legend()
-            plt.title('{0}: {1}'.format(title, event_name))
-            plt.show()
+                y = np.array([mne.baseline.rescale(x, time_vector, (-0.1, 0.)) for x in y])
+                y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+                y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
+                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+                                 interpolate=True,
+                                 alpha=0.5)
+                plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
+                         label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+        plt.xlabel('Time (sec)')
+        plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
+        plt.legend()
+        plt.title(title)
+        plt.show()
+
+        # ERP Image
+        for event_name, event_marker_id in event_ids.items():
+            if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+                y = epochs[event_name].get_data()
+                y = np.mean(y, axis=1)  # average left and right
+                # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+                time_vector = np.linspace(tmin, tmax, y.shape[-1])
+                plt.imshow(y)
+                plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5), ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax-tmin)/5)])
+                plt.xlabel('Time (sec)')
+                plt.ylabel('Trails')
+                plt.legend()
+                plt.title('{0}: {1}'.format(title, event_name))
+                plt.show()
 
     # gaze epochs
-    COLORS = {
-        nslr_hmm.FIXATION: 'blue',
-        nslr_hmm.SACCADE: 'black',
-        nslr_hmm.SMOOTH_PURSUIT: 'green',
-        nslr_hmm.PSO: 'yellow',
-    }
-
-    NAMES = {
-        nslr_hmm.FIXATION: 'Fixation',
-        nslr_hmm.SACCADE: 'Saccade',
-        nslr_hmm.SMOOTH_PURSUIT: 'Smooth pursuit',
-        nslr_hmm.PSO: 'PSO',
-    }
-    epochs_gaze = Epochs(raw, events=find_events(raw), event_id=event_ids, tmin=0, tmax=tmax, baseline=(0, 0),
-                    preload=True,
-                    verbose=False, picks=['L Gaze Direction X', 'L Gaze Direction Y'])
-    # iterate over the epochs
-    for event_name, event_marker_id in event_ids.items():
-        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-            segment_class_array_dict = dict([(x, np.zeros(601)) for x in COLORS.keys()])
-            gaze_epochs_data = epochs_gaze[event_name].get_data()
-            # iterate over each epoch
-            for eye in gaze_epochs_data:
-                sample_class, segmentation, seg_class = nslr_hmm.classify_gaze(np.linspace(tmin, tmax, eye.shape[-1]), np.reshape(eye, newshape=[eye.shape[-1], -1]))
-                # iterate over the classified segments
-                for i, seg in enumerate(segmentation.segments):
-                    cls = seg_class[i]
-                    segment_class_array_dict[cls][np.array(seg.i)[0]:np.array(seg.i)[1]] += 1
-            # normalize
-            segment_array = np.array([x for x in segment_class_array_dict.values()])
-            segment_array = (segment_array - segment_array.min())/(segment_array.max() - segment_array.min())
-            for segment_class_ratio_data, segment_class_code in zip(segment_array, segment_class_array_dict.keys()):
-                plt.plot(np.linspace(tmin, tmax, eye.shape[-1]), segment_class_ratio_data, label=NAMES[segment_class_code])
-            plt.legend()
-            plt.xlabel('Time (sec)')
-            plt.ylabel('Ratio of this gaze event occurs')
-            plt.title('RSVP Gaze event ratio for participant 1 ' +event_name)
-            plt.show()
+    # COLORS = {
+    #     nslr_hmm.FIXATION: 'blue',
+    #     nslr_hmm.SACCADE: 'black',
+    #     nslr_hmm.SMOOTH_PURSUIT: 'green',
+    #     nslr_hmm.PSO: 'yellow',
+    # }
+    #
+    # NAMES = {
+    #     nslr_hmm.FIXATION: 'Fixation',
+    #     nslr_hmm.SACCADE: 'Saccade',
+    #     nslr_hmm.SMOOTH_PURSUIT: 'Smooth pursuit',
+    #     nslr_hmm.PSO: 'PSO',
+    # }
+    # epochs_gaze = Epochs(raw, events=find_events(raw), event_id=event_ids, tmin=0, tmax=tmax, baseline=(0, 0),
+    #                 preload=True,
+    #                 verbose=False, picks=['L Gaze Direction X', 'L Gaze Direction Y'])
+    # # iterate over the epochs
+    # for event_name, event_marker_id in event_ids.items():
+    #     if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+    #         segment_class_array_dict = dict([(x, np.zeros(601)) for x in COLORS.keys()])
+    #         gaze_epochs_data = epochs_gaze[event_name].get_data()
+    #         # iterate over each epoch
+    #         for eye in gaze_epochs_data:
+    #             sample_class, segmentation, seg_class = nslr_hmm.classify_gaze(np.linspace(tmin, tmax, eye.shape[-1]), np.reshape(eye, newshape=[eye.shape[-1], -1]))
+    #             # iterate over the classified segments
+    #             for i, seg in enumerate(segmentation.segments):
+    #                 cls = seg_class[i]
+    #                 segment_class_array_dict[cls][np.array(seg.i)[0]:np.array(seg.i)[1]] += 1
+    #         # normalize
+    #         segment_array = np.array([x for x in segment_class_array_dict.values()])
+    #         segment_array = (segment_array - segment_array.min())/(segment_array.max() - segment_array.min())
+    #         for segment_class_ratio_data, segment_class_code in zip(segment_array, segment_class_array_dict.keys()):
+    #             plt.plot(np.linspace(tmin, tmax, eye.shape[-1]), segment_class_ratio_data, label=NAMES[segment_class_code])
+    #         plt.legend()
+    #         plt.xlabel('Time (sec)')
+    #         plt.ylabel('Ratio of this gaze event occurs')
+    #         plt.title('RSVP Gaze event ratio for participant 1 ' +event_name)
+    #         plt.show()
     # epochs = Epochs(raw, events=find_events(raw), event_id=event_ids, tmin=0, tmax=tmax, baseline=(0, 0),
     #                 preload=True,
     #                 verbose=False,
