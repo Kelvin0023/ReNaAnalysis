@@ -23,6 +23,6 @@ COLORS = {
 # plt.plot(t, eye[:,0], '.')
 for i, seg in enumerate(segmentation.segments):
     cls = seg_class[i]
-    plt.plot(seg.t, np.array(seg.x)[:,0], color=COLORS[cls])
+    plt.plot(seg.t, np.array(seg.single_trial_df)[:, 0], color=COLORS[cls])
 
 plt.show()

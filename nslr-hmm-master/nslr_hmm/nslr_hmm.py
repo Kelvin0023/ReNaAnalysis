@@ -292,11 +292,11 @@ def reestimate_observations_viterbi_robust(
 def segment_features(segments, outliers=None):
     prev_direction = np.array([0.0, 0.0])
     if outliers is None:
-        outliers = np.zeros(segments[-1].i[-1], dtype=bool)
+        outliers = np.zeros(segments[-1].participant_index[-1], dtype=bool)
     for segment in segments:
-        if np.any(outliers[segment.i[0]:segment.i[1]]): continue
+        if np.any(outliers[segment.participant_index[0]:segment.participant_index[1]]): continue
         duration = float(np.diff(segment.t))
-        speed = np.diff(segment.x, axis=0)/duration
+        speed = np.diff(segment.single_trial_df, axis=0) / duration
         velocity = float(np.linalg.norm(speed))
         direction = speed/velocity
         cosangle = float(np.dot(direction, prev_direction.T))
@@ -330,8 +330,8 @@ def classify_gaze(ts, xs, **kwargs):
     seg_classes = classify_segments(segmentation.segments)
     sample_classes = np.zeros(len(ts))
     for c, s in zip(seg_classes, segmentation.segments):
-        start = s.i[0]
-        end = s.i[1]
+        start = s.participant_index[0]
+        end = s.participant_index[1]
         sample_classes[start:end] = c
 
     return sample_classes, segmentation, seg_classes

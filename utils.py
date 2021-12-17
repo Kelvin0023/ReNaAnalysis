@@ -18,14 +18,21 @@ def interpolate_nan(x):
     return interp(indices)
 
 
-def interpolate_nan_array(data_array):
+def interpolate_array_nan(data_array):
     """
     :param data_array: channel first, time last
     """
     return np.array([interpolate_nan(x) for x in data_array])
 
+def interpolate_epochs_nan(epoch_array):
+    """
+    :param data_array: channel first, time last
+    """
+    return np.array([[interpolate_nan(x) for x in e] for e in epoch_array])
 
-def add_event_markers_to_data_array(event_markers, event_ids, event_marker_timestamps, data_array, data_timestamps, session_log,
+
+
+def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data_array, data_timestamps, session_log,
                                     item_codes):
     block_num = None
     assert event_markers.shape[0] == 4
@@ -56,38 +63,43 @@ def add_event_markers_to_data_array(event_markers, event_ids, event_marker_times
             print('    Item event {0} is novelty with info {1}'.format(event, str(data_event_marker_array[0:4,
                                                                                   data_event_marker_index])))
 
-    return np.concatenate([data_array, data_event_marker_array], axis=0)
+    # return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
+    return np.concatenate([np.expand_dims(data_timestamps * (10**9), axis=0), data_array[1:, :], data_event_marker_array], axis=0)  # TODO because LSL cannot stream the raw nano second timestamp, we use the LSL timestamp instead. Convert the timestamps in second to nanosecond to comply with gaze detection code
 
 
-def generate_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names, session_log,
-                    item_codes, tmin, tmax, event_ids, color_dict, title='', is_plotting=True):
+def generate_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
+                    session_log,
+                    item_codes, tmin, tmax, event_ids, color_dict, title='', is_plotting=True,
+                    srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
     # interpolate nan's
-    data_array_interpolated = interpolate_nan_array(data_array)
-    # data_array_interpolated = data_array
-    srate = len(data_timestamps) / (data_timestamps[-1] - data_timestamps[0])
-    eyetracking_with_event_marker_data, event_ids = add_event_markers_to_data_array(event_markers,
-                                                                                    event_marker_timestamps,
-                                                                                    data_array_interpolated,
-                                                                                    data_timestamps, session_log,
-                                                                                    item_codes)
+    eyetracking_with_event_marker_data = add_event_markers_to_data_array(event_markers,
+                                                                         event_marker_timestamps,
+                                                                         data_array,
+                                                                         data_timestamps, session_log,
+                                                                         item_codes)
 
     info = mne.create_info(
         data_channel_names + ['EventMarker'] + ["CarouselDistance", "CarouselAngularSpeed", "CarouselIncidentAngle"],
         sfreq=srate,
-        ch_types=['misc'] * len(data_channel_names) + ['stim'] + ['misc'] * 3)  # with 3 additional info markers
+        ch_types=['misc'] * len(data_channel_names) + ['stim'] + [
+            'misc'] * 3)  # with 3 additional info markers
     raw = mne.io.RawArray(eyetracking_with_event_marker_data, info)
 
     # pupil epochs
-    epochs = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin, tmax=tmax,
-                    baseline=None,
-                    preload=True,
-                    verbose=False, picks=['L Pupil Diameter', 'R Pupil Diameter'])
+    epochs_pupil = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
+                          tmax=tmax,
+                          baseline=None,
+                          preload=True,
+                          verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
+                          # verbose=False, picks=['left_pupil_size', 'right_pupil_size', 'status', 'left_status', 'right_status'])
 
     # Average epoch data
     if is_plotting:
         for event_name, event_marker_id in event_ids.items():
             if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-                y = epochs[event_name].get_data()
+                y = epochs_pupil[event_name].get_data()
+                y = interpolate_epochs_nan(y)
+
                 time_vector = np.linspace(tmin, tmax, y.shape[-1])
 
                 # y = np.mean(y, axis=1)  # average left and right
@@ -101,7 +113,7 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
                                  interpolate=True,
                                  alpha=0.5)
                 plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
-                         label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+                         label='{0}, N={1}'.format(event_name, epochs_pupil[event_name].get_data().shape[0]))
         plt.xlabel('Time (sec)')
         plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
         plt.legend()
@@ -111,12 +123,13 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
         # ERP Image
         for event_name, event_marker_id in event_ids.items():
             if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-                y = epochs[event_name].get_data()
+                y = epochs_pupil[event_name].get_data()
                 y = np.mean(y, axis=1)  # average left and right
                 # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
                 time_vector = np.linspace(tmin, tmax, y.shape[-1])
                 plt.imshow(y)
-                plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5), ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax-tmin)/5)])
+                plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5),
+                           ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax - tmin) / 5)])
                 plt.xlabel('Time (sec)')
                 plt.ylabel('Trails')
                 plt.legend()
@@ -184,14 +197,20 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
     # 2. stitch the blocks together
     # 3. create design matrix based on the events
 
-    plt.show()
-    return epochs
+    epochs_gaze = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
+                         tmax=tmax,
+                         baseline=None,
+                         preload=True,
+                         verbose=False, picks=['raw_timestamp', 'status', 'gaze_forward_x', 'gaze_forward_y'])
+
+    return epochs_pupil, epochs_gaze
 
 
-def plot_epochs_visual_search(itemMarkers, itemMarkers_timestamps, event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
+def plot_epochs_visual_search(itemMarkers, itemMarkers_timestamps, event_markers, event_marker_timestamps, data_array,
+                              data_timestamps, data_channel_names,
                               session_log, item_codes, tmin, tmax, color_dict, title=''):
     # interpolate nan's
-    data_array = interpolate_nan_array(data_array)
+    data_array = interpolate_array_nan(data_array)
     srate = 200
     eyetracking_with_event_marker_data, event_ids = add_event_markers_to_data_array(event_markers,
                                                                                     event_marker_timestamps,
@@ -267,4 +286,3 @@ def visualize_epochs(epochs, event_ids, tmin, tmax, color_dict, title):
     plt.legend()
     plt.title(title)
     plt.show()
-
