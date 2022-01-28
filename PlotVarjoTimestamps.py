@@ -50,8 +50,9 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
     eyetracking_data = data['Unity.VarjoEyeTracking'][0]
     eyetracking_data_timestamps = data['Unity.VarjoEyeTracking'][1]
 
+    print('Plotting timestamps for participant {0}'.format_map(participant_code))
     plt.plot(eyetracking_data[0, :])
     plt.xlabel('Timestamp Index')
     plt.ylabel('Varjo Timestamp')
-    plt.title('Participant {0}'.format(participant_code))
+    plt.title('Participant code: {0}'.format(participant_code))
     plt.show()
