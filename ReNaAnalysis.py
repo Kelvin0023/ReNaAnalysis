@@ -12,7 +12,7 @@ from rena.utils.data_utils import RNStream
 # data_path = 'C:/Recordings/11_17_2021_22_56_15-Exp_myexperiment-Sbj_someone-Ssn_0.dats'
 from VarjoInterface import varjo_epochs_to_df
 from utils import interpolate_array_nan, add_event_markers_to_data_array, generate_epochs, plot_epochs_visual_search, \
-    visualize_epochs
+    visualize_epochs, generate_condition_sequence
 
 tmin = -0.1
 tmax = 3
@@ -82,6 +82,21 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
     eyetracking_data = data['Unity.VarjoEyeTracking'][0]
     eyetracking_data_timestamps = data['Unity.VarjoEyeTracking'][1]
 
+    '''
+    create blocked sequence data
+    '''
+    block_sequences_RSVP = generate_condition_sequence(
+        event_markers_rsvp, event_markers_timestamps, eyetracking_data, eyetracking_data_timestamps,
+        varjoEyetracking_channelNames,
+        session_log,
+        item_codes,
+        srate=200)
+    # Export the block sequences
+    for block_index, bs in enumerate(block_sequences_RSVP):
+        trial_export_path = os.path.join(trial_data_export_root, str(participant_index + 1), str(block_index + 1))
+        os.makedirs(trial_export_path, exist_ok=True)
+
+    '''  create the epoched adata
     epochs_pupil_rsvp_this_participant, epochs_rsvp_gaze_this_participant = generate_epochs(event_markers_rsvp,
                                                                                             event_markers_timestamps,
                                                                                             eyetracking_data,
@@ -94,7 +109,7 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
                                                                                                 title,
                                                                                                 participant_code,
                                                                                                 'RSVP'),
-                                                                                            is_plotting=True)
+                                                                                            is_plotting=False)
     epochs_carousel_this_participant, epochs_carousel_gaze_this_participant = generate_epochs(event_markers_carousel,
                                                                                               event_markers_timestamps,
                                                                                               eyetracking_data,
@@ -107,12 +122,12 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
                                                                                                   title,
                                                                                                   participant_code,
                                                                                                   'Carousel'),
-                                                                                              is_plotting=True)
-
+                                                                                              is_plotting=False)
     epochs_pupil_rsvp = epochs_pupil_rsvp_this_participant if epochs_pupil_rsvp is None else mne.concatenate_epochs(
         [epochs_pupil_rsvp, epochs_pupil_rsvp_this_participant])
     epochs_pupil_carousel = epochs_carousel_this_participant if epochs_pupil_carousel is None else mne.concatenate_epochs(
         [epochs_pupil_carousel, epochs_carousel_this_participant])
+    '''
 
     # plot_epochs_visual_search(itemMarkers, itemMarkers_timestamps, event_markers_vs, event_markers_timestamps,
     #                           eyetracking_data,
@@ -120,7 +135,7 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
     #                           varjoEyetracking_preset['ChannelNames'], session_log,
     #                           item_codes, tmin, tmax, color_dict, title=title + ' Carousel')
 
-    # export the data for gaze behavior analysis  TODO
+    ''' Export the per-trial epochs for gaze behavior analysis
     epochs_carousel_gaze_this_participant_trial_dfs = varjo_epochs_to_df(epochs_carousel_gaze_this_participant.copy())
     for trial_index, single_trial_df in enumerate(epochs_carousel_gaze_this_participant_trial_dfs):
         trial_export_path = os.path.join(trial_data_export_root, str(participant_index + 1), str(trial_index + 1))
@@ -128,6 +143,10 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
         fn = 'varjo_gaze_output_single_trial_participant_{0}_{1}.csv'.format(participant_index + 1, trial_index + 1)
         single_trial_df.reset_index()
         single_trial_df.to_csv(os.path.join(trial_export_path, fn), index=False)
+    '''
+
+
 # visualize_epochs(epochs_rsvp, event_ids, tmin, tmax, color_dict, '{0}, Averaged across Participants, Condition {
 # 1}'.format(title, 'RSVP')) visualize_epochs(epochs_carousel, event_ids, tmin, tmax, color_dict, '{0},
 # Averaged across Participants, Condition {1}'.format(title, 'Carousel'))
+

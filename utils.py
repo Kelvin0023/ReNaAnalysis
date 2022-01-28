@@ -24,12 +24,12 @@ def interpolate_array_nan(data_array):
     """
     return np.array([interpolate_nan(x) for x in data_array])
 
+
 def interpolate_epochs_nan(epoch_array):
     """
     :param data_array: channel first, time last
     """
     return np.array([[interpolate_nan(x) for x in e] for e in epoch_array])
-
 
 
 def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data_array, data_timestamps, session_log,
@@ -42,10 +42,13 @@ def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data
         event, info1, info2, info3 = event_markers[:, i]
         data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
 
-        if str(int(event)) in session_log.keys():
+        if str(int(event)) in session_log.keys():  # for start-of-block events
             print('Processing block with ID: {0}'.format(event))
             block_num = event
             data_event_marker_array[0][data_event_marker_index] = 4  # encodes start of a block
+            continue
+        elif event_markers[0, i - 1] != 0 and event == 0:  # this is the end of a block
+            data_event_marker_array[0][data_event_marker_index] = 5  # encodes start of a block
             continue
 
         if event in item_codes:  # for item events
@@ -63,8 +66,30 @@ def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data
             print('    Item event {0} is novelty with info {1}'.format(event, str(data_event_marker_array[0:4,
                                                                                   data_event_marker_index])))
 
-    # return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
-    return np.concatenate([np.expand_dims(data_timestamps * (10**9), axis=0), data_array[1:, :], data_event_marker_array], axis=0)  # TODO because LSL cannot stream the raw nano second timestamp, we use the LSL timestamp instead. Convert the timestamps in second to nanosecond to comply with gaze detection code
+    return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
+    # return np.concatenate(
+    #     [np.expand_dims(data_timestamps, axis=0), data_array[1:, :], data_event_marker_array],
+    #     axis=0)  # TODO because LSL cannot stream the raw nano second timestamp, we use the LSL timestamp instead. Convert the timestamps in second to nanosecond to comply with gaze detection code
+
+
+def extract_block_data(data_with_event_marker, data_channel_names, block_end_margin_seconds,
+                       srate):  # event markers is the third last row
+    # TODO add block end margins and use parameters block_end_margin_seconds
+    block_starts = np.argwhere(data_with_event_marker[-4, :] == 4)  # start of a block is denoted by event marker 4
+    block_ends = np.argwhere(data_with_event_marker[-4, :] == 5)  # end of a block is denoted by event marker 5
+    block_sequences = [data_with_event_marker[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]
+    # resample each block to be 100 Hz
+    for bs in block_sequences:  # don't resample the event marker sequences
+        info = mne.create_info(['LSLTimestamp'] + data_channel_names + ['EventMarker', "info1", "info2", "info3"], sfreq=srate,
+                               ch_types=['misc'] * (1 + len(data_channel_names)) + ['stim'] + ['misc'] * 3)
+        raw = mne.io.RawArray(bs, info)
+        break
+        events = mne.find_events(raw, stim_channel='EventMarker')
+        raw_resampled, events_resample = raw.resample(100, events=events)  # resample to 100 Hz
+        raw_resampled.add_events(events_resample, stim_channel='EventMarker', replace=True)
+        break
+
+    return [data_with_event_marker[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]  # a list of block sequences
 
 
 def generate_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
@@ -79,9 +104,9 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
                                                                          item_codes)
 
     info = mne.create_info(
-        data_channel_names + ['EventMarker'] + ["CarouselDistance", "CarouselAngularSpeed", "CarouselIncidentAngle"],
+        ['LSLTimestamp'] + data_channel_names + ['EventMarker'] + ["info1", "info2", "info3"],
         sfreq=srate,
-        ch_types=['misc'] * len(data_channel_names) + ['stim'] + [
+        ch_types=['misc'] * (1 + len(data_channel_names)) + ['stim'] + [
             'misc'] * 3)  # with 3 additional info markers
     raw = mne.io.RawArray(eyetracking_with_event_marker_data, info)
 
@@ -91,7 +116,7 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
                           baseline=None,
                           preload=True,
                           verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
-                          # verbose=False, picks=['left_pupil_size', 'right_pupil_size', 'status', 'left_status', 'right_status'])
+    # verbose=False, picks=['left_pupil_size', 'right_pupil_size', 'status', 'left_status', 'right_status'])
 
     # Average epoch data
     if is_plotting:
@@ -286,3 +311,17 @@ def visualize_epochs(epochs, event_ids, tmin, tmax, color_dict, title):
     plt.legend()
     plt.title(title)
     plt.show()
+
+
+def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
+                                session_log,
+                                item_codes,
+                                srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
+    # interpolate nan's
+    eyetracking_with_event_marker_data = add_event_markers_to_data_array(event_markers,
+                                                                         event_marker_timestamps,
+                                                                         data_array,
+                                                                         data_timestamps, session_log,
+                                                                         item_codes)
+    block_sequences = extract_block_data(eyetracking_with_event_marker_data, data_channel_names, 3, srate)
+    return block_sequences

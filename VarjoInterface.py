@@ -24,3 +24,6 @@ def varjo_epochs_to_df(epochs: mne.Epochs):
         df = pd.DataFrame(data=data, columns=varjo_csv_header)
         df_list.append(df)
     return df_list
+
+def varjo_block_seq_to_df(block_sequence: np.ndarray):
+    pass
