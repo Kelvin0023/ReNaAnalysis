@@ -9,12 +9,21 @@ color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
 trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/SingleTrials'
 
-participant_data_dict = {'AN': {
-    'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
-    'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
-    'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'}}
+participant_data_dict = {
+                # 'AN': {
+                #     'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
+                #     'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
+                #     'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'},
+                        'ZL': {
+                    'data_path': 'C:/Recordings/01_28_2022_22_05_02-Exp_ReNaTimestampTest-Sbj_ZL-Ssn_0.dats',
+                    'item_catalog_path': 'C:/Recordings/ReNaLogs/ReNaItemCatalog_01-28-2022-22-00-48.json',
+                    'session_log_path': 'C:/Recordings/ReNaLogs/ReNaSessionLog_01-28-2022-22-00-48.json'}
+}
 
-varjoEyetracking_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeData.json'
+
+
+# varjoEyetracking_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeData.json'  # TODO this should be arjoEyeDataComplete
+varjoEyetracking_preset_path = 'C:/Users/LLINC-Lab/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 varjoEyetracking_preset = json.load(open(varjoEyetracking_preset_path))
 varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
 
@@ -47,10 +56,10 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
     itemMarkers = data['Unity.ReNa.ItemMarkers'][0]
     itemMarkers_timestamps = data['Unity.ReNa.ItemMarkers'][1]
 
-    eyetracking_data = data['Unity.VarjoEyeTracking'][0]
-    eyetracking_data_timestamps = data['Unity.VarjoEyeTracking'][1]
+    eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0]
+    eyetracking_data_timestamps = data['Unity.VarjoEyeTrackingComplete'][1]
 
-    print('Plotting timestamps for participant {0}'.format_map(participant_code))
+    print('Plotting timestamps for participant {0}'.format(participant_code))
     plt.plot(eyetracking_data[0, :])
     plt.xlabel('Timestamp Index')
     plt.ylabel('Varjo Timestamp')
