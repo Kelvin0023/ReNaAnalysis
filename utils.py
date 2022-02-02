@@ -11,6 +11,9 @@ from mne import find_events, Epochs
 from rena.utils.data_utils import RNStream
 
 
+FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
+ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}
+
 def interpolate_nan(x):
     not_nan = np.logical_not(np.isnan(x))
     indices = np.arange(len(x))
@@ -75,7 +78,7 @@ def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data
 def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
                                          data_array, data_timestamps,
                                          session_log, item_codes):
-    block_num = None  # session log is keyed by the blocked_num
+    block_list = []
     assert event_markers.shape[0] == 4
     data_event_marker_array = np.zeros(shape=(4, data_array.shape[1]))
 
@@ -85,7 +88,7 @@ def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, 
 
         if str(int(event)) in session_log.keys():  # for start-of-block events
             print('Processing block with ID: {0}'.format(event))
-            block_num = event
+            block_list.append(event)
             data_event_marker_array[0][data_event_marker_index] = 4  # encodes start of a block
             continue
         elif event_markers[0, i - 1] != 0 and event == 0:  # this is the end of a block
@@ -98,7 +101,11 @@ def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, 
         data_event_marker_array[0, :] == 5)  # end of a block is denoted by event marker 5
 
     # iterate through blocks
-    for data_start_i, data_end_i in zip(data_block_starts_indices, data_block_ends_indices):
+    for block_i, data_start_i, data_end_i in zip(block_list, data_block_starts_indices, data_block_ends_indices):
+        targets = session_log[str(int(block_i))]['targets']
+        distractors = session_log[str(int(block_i))]['distractors']
+        novelties = session_log[str(int(block_i))]['novelties']
+
         # 1. find the event marker timestamps corresponding to the block start and end
         data_block_start_timestamp = data_timestamps[data_start_i]
         data_block_end_timestamp = data_timestamps[data_end_i]
@@ -106,29 +113,39 @@ def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, 
         item_marker_block_start_index = np.argmin(np.abs(item_markers_timestamps - data_block_start_timestamp))
         item_marker_block_end_index = np.argmin(np.abs(item_markers_timestamps - data_block_end_timestamp))
         item_markers_of_block = item_markers[:, item_marker_block_start_index:item_marker_block_end_index]
+        item_markers_timestamps_of_block = item_markers_timestamps[item_marker_block_start_index:item_marker_block_end_index]
 
         for i in range(30):
-            this_item_marker = item_markers_of_block[i * 11: i * 11 + 1]
-            # TODO finish this
+            # this_item_marker = item_markers_of_block[i * 11: (i + 1) * 11, i::30]
+            this_item_marker = item_markers_of_block[i: i + 11, i::30]
+            this_item_markers_timestamps = item_markers_timestamps_of_block[i::30]
+            # TODO finish this, now assume every 30
+            assert np.all(this_item_marker[1,:] == this_item_marker[1, 0])  # verify our assumption that item rotates around every 30 columns  # TODO why did the item marker stopped mid-experiment
+            # find if there is gaze ray intersection
+            # TODO change this index from 5 to 4 in the future
+
+            gaze_intersect_start_index = np.argwhere(np.diff(this_item_marker[5, :]) == 1)[:, 0]
+            gaze_intersect_end_index = np.argwhere(np.diff(this_item_marker[5, :]) == -1)[:, 0]
+            if len(gaze_intersect_start_index) > len(gaze_intersect_end_index): gaze_intersect_start_index = gaze_intersect_start_index[:len(gaze_intersect_end_index-1)]
+
+            # check if the intersects is long enough to warrant a fixation
+            gaze_intersected_durations = this_item_markers_timestamps[gaze_intersect_end_index] - this_item_markers_timestamps[gaze_intersect_start_index]
+            true_fixations_indices = np.argwhere(gaze_intersected_durations > FIXATION_MINIMAL_TIME)[:, 0]
+            true_fixation_timestamps = this_item_markers_timestamps[gaze_intersect_start_index[true_fixations_indices]]
+
+            # check if this item is a target/distractor/novelty
+            marker_to_insert = 1 if this_item_marker[1, 0] in distractors else 2 if this_item_marker[1, 0] in targets else 3 if this_item_marker[1, 0] in novelties else -1
+            assert marker_to_insert != -1
+
+            # find where in data marker to insert the marker
+            data_event_marker_indices = [(np.abs(data_timestamps - x)).argmin() for x in true_fixation_timestamps]
+            data_event_marker_array[0][data_event_marker_indices] = marker_to_insert
+            if len(true_fixation_timestamps) > 0: print('Found {0} fixations for item {1} of type {2}, in block {3}'.format(len(true_fixation_timestamps), this_item_marker[1, 0], ITEM_TYPE_ENCODING[marker_to_insert], block_i))
+
         # 3. get the IsGazeRay intersected stream and their timestamps (item marker) keyed by the item count in block
 
         # 4. for each of the 30 items in the block, find where the IsGazeRay is true
         # 5. insert the gazed event marker in the data_event_marker_array at the data_timestamp nearest to the corresponding item_marker_timestamp
-
-        if event in item_codes:  # for item events
-            targets = session_log[str(int(block_num))]['targets']
-            distractors = session_log[str(int(block_num))]['distractors']
-            novelties = session_log[str(int(block_num))]['novelties']
-
-            if event in distractors:
-                data_event_marker_array[0][data_event_marker_index] = 1
-            elif event in targets:
-                data_event_marker_array[0][data_event_marker_index] = 2
-            elif event in novelties:
-                data_event_marker_array[0][data_event_marker_index] = 3
-            data_event_marker_array[1:4, data_event_marker_index] = info1, info2, info3
-            print('    Item event {0} is novelty with info {1}'.format(event, str(data_event_marker_array[0:4,
-                                                                                  data_event_marker_index])))
 
     return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
 
