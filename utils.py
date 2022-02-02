@@ -72,24 +72,86 @@ def add_event_markers_to_data_array(event_markers, event_marker_timestamps, data
     #     axis=0)  # TODO because LSL cannot stream the raw nano second timestamp, we use the LSL timestamp instead. Convert the timestamps in second to nanosecond to comply with gaze detection code
 
 
+def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
+                                         data_array, data_timestamps,
+                                         session_log, item_codes):
+    block_num = None  # session log is keyed by the blocked_num
+    assert event_markers.shape[0] == 4
+    data_event_marker_array = np.zeros(shape=(4, data_array.shape[1]))
+
+    for i in range(event_markers.shape[1]):
+        event, info1, info2, info3 = event_markers[:, i]
+        data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
+
+        if str(int(event)) in session_log.keys():  # for start-of-block events
+            print('Processing block with ID: {0}'.format(event))
+            block_num = event
+            data_event_marker_array[0][data_event_marker_index] = 4  # encodes start of a block
+            continue
+        elif event_markers[0, i - 1] != 0 and event == 0:  # this is the end of a block
+            data_event_marker_array[0][data_event_marker_index] = 5  # encodes start of a block
+            continue
+
+    data_block_starts_indices = np.argwhere(
+        data_event_marker_array[0, :] == 4)  # start of a block is denoted by event marker 4
+    data_block_ends_indices = np.argwhere(
+        data_event_marker_array[0, :] == 5)  # end of a block is denoted by event marker 5
+
+    # iterate through blocks
+    for data_start_i, data_end_i in zip(data_block_starts_indices, data_block_ends_indices):
+        # 1. find the event marker timestamps corresponding to the block start and end
+        data_block_start_timestamp = data_timestamps[data_start_i]
+        data_block_end_timestamp = data_timestamps[data_end_i]
+        # 2. find the nearest timestamp of the block start and end in the item marker timestamps
+        item_marker_block_start_index = np.argmin(np.abs(item_markers_timestamps - data_block_start_timestamp))
+        item_marker_block_end_index = np.argmin(np.abs(item_markers_timestamps - data_block_end_timestamp))
+        item_markers_of_block = item_markers[:, item_marker_block_start_index:item_marker_block_end_index]
+
+        for i in range(30):
+            this_item_marker = item_markers_of_block[i * 11: i * 11 + 1]
+            # TODO finish this
+        # 3. get the IsGazeRay intersected stream and their timestamps (item marker) keyed by the item count in block
+
+        # 4. for each of the 30 items in the block, find where the IsGazeRay is true
+        # 5. insert the gazed event marker in the data_event_marker_array at the data_timestamp nearest to the corresponding item_marker_timestamp
+
+        if event in item_codes:  # for item events
+            targets = session_log[str(int(block_num))]['targets']
+            distractors = session_log[str(int(block_num))]['distractors']
+            novelties = session_log[str(int(block_num))]['novelties']
+
+            if event in distractors:
+                data_event_marker_array[0][data_event_marker_index] = 1
+            elif event in targets:
+                data_event_marker_array[0][data_event_marker_index] = 2
+            elif event in novelties:
+                data_event_marker_array[0][data_event_marker_index] = 3
+            data_event_marker_array[1:4, data_event_marker_index] = info1, info2, info3
+            print('    Item event {0} is novelty with info {1}'.format(event, str(data_event_marker_array[0:4,
+                                                                                  data_event_marker_index])))
+
+    return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
+
+
 def extract_block_data(data_with_event_marker, data_channel_names, block_end_margin_seconds,
                        srate):  # event markers is the third last row
     # TODO add block end margins and use parameters block_end_margin_seconds
     block_starts = np.argwhere(data_with_event_marker[-4, :] == 4)  # start of a block is denoted by event marker 4
     block_ends = np.argwhere(data_with_event_marker[-4, :] == 5)  # end of a block is denoted by event marker 5
     block_sequences = [data_with_event_marker[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]
-    # resample each block to be 100 Hz
-    for bs in block_sequences:  # don't resample the event marker sequences
-        info = mne.create_info(['LSLTimestamp'] + data_channel_names + ['EventMarker', "info1", "info2", "info3"], sfreq=srate,
-                               ch_types=['misc'] * (1 + len(data_channel_names)) + ['stim'] + ['misc'] * 3)
-        raw = mne.io.RawArray(bs, info)
-        break
-        events = mne.find_events(raw, stim_channel='EventMarker')
-        raw_resampled, events_resample = raw.resample(100, events=events)  # resample to 100 Hz
-        raw_resampled.add_events(events_resample, stim_channel='EventMarker', replace=True)
-        break
+    # block_sequences_resampled = []
+    # # resample each block to be 100 Hz
+    # for bs in block_sequences:  # don't resample the event marker sequences
+    #     info = mne.create_info(['LSLTimestamp'] + data_channel_names + ['EventMarker', "info1", "info2", "info3"], sfreq=srate,
+    #                            ch_types=['misc'] * (1 + len(data_channel_names)) + ['stim'] + ['misc'] * 3)
+    #     raw = mne.io.RawArray(bs, info)
+    #     raw_resampled = mne.io.RawArray(bs, info)  # resample to 100 Hz
+    #     events = mne.find_events(raw, stim_channel='EventMarker')
+    #     raw_resampled, events_resample = raw_resampled.resample(100, events=events)  # resample to 100 Hz
+    #     raw_resampled.add_events(events_resample, stim_channel='EventMarker', replace=True)
+    #     block_sequences_resampled.append(raw_resampled.get_data())
 
-    return [data_with_event_marker[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]  # a list of block sequences
+    return block_sequences  # a list of block sequences
 
 
 def generate_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
@@ -161,67 +223,6 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
                 plt.title('{0}: {1}'.format(title, event_name))
                 plt.show()
 
-    # gaze epochs
-    # COLORS = {
-    #     nslr_hmm.FIXATION: 'blue',
-    #     nslr_hmm.SACCADE: 'black',
-    #     nslr_hmm.SMOOTH_PURSUIT: 'green',
-    #     nslr_hmm.PSO: 'yellow',
-    # }
-    #
-    # NAMES = {
-    #     nslr_hmm.FIXATION: 'Fixation',
-    #     nslr_hmm.SACCADE: 'Saccade',
-    #     nslr_hmm.SMOOTH_PURSUIT: 'Smooth pursuit',
-    #     nslr_hmm.PSO: 'PSO',
-    # }
-    # epochs_gaze = Epochs(raw, events=find_events(raw), event_id=event_ids, tmin=0, tmax=tmax, baseline=(0, 0),
-    #                 preload=True,
-    #                 verbose=False, picks=['L Gaze Direction X', 'L Gaze Direction Y'])
-    # # iterate over the epochs
-    # for event_name, event_marker_id in event_ids.items():
-    #     if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-    #         segment_class_array_dict = dict([(x, np.zeros(601)) for x in COLORS.keys()])
-    #         gaze_epochs_data = epochs_gaze[event_name].get_data()
-    #         # iterate over each epoch
-    #         for eye in gaze_epochs_data:
-    #             sample_class, segmentation, seg_class = nslr_hmm.classify_gaze(np.linspace(tmin, tmax, eye.shape[-1]), np.reshape(eye, newshape=[eye.shape[-1], -1]))
-    #             # iterate over the classified segments
-    #             for i, seg in enumerate(segmentation.segments):
-    #                 cls = seg_class[i]
-    #                 segment_class_array_dict[cls][np.array(seg.i)[0]:np.array(seg.i)[1]] += 1
-    #         # normalize
-    #         segment_array = np.array([x for x in segment_class_array_dict.values()])
-    #         segment_array = (segment_array - segment_array.min())/(segment_array.max() - segment_array.min())
-    #         for segment_class_ratio_data, segment_class_code in zip(segment_array, segment_class_array_dict.keys()):
-    #             plt.plot(np.linspace(tmin, tmax, eye.shape[-1]), segment_class_ratio_data, label=NAMES[segment_class_code])
-    #         plt.legend()
-    #         plt.xlabel('Time (sec)')
-    #         plt.ylabel('Ratio of this gaze event occurs')
-    #         plt.title('RSVP Gaze event ratio for participant 1 ' +event_name)
-    #         plt.show()
-    # epochs = Epochs(raw, events=find_events(raw), event_id=event_ids, tmin=0, tmax=tmax, baseline=(0, 0),
-    #                 preload=True,
-    #                 verbose=False,
-    #                 picks=['L Gaze Direction X', 'L Gaze Direction Y', 'L Gaze Direction Z', 'R Gaze Direction X',
-    #                        'R Gaze Direction Y', 'R Gaze Direction Z', "EventMarker", "CarouselDistance",
-    #                        "CarouselAngularSpeed", "CarouselIncidentAngle"])
-    #
-    # y = epochs['Distractor'].get_data()
-    # incidnet_angles = y[:, 9, 0]
-    # sort_indices = np.argsort(incidnet_angles, axis=0)  # sort the ERP by incident angle
-    # y = y[sort_indices]
-    # y_gaze_x = np.mean(y[:, [0, 3], :], axis=1)  # take the gaze direction x and average
-    # time_vector = np.linspace(tmin, tmax, y.shape[-1])
-    # # [plt.plot(time_vector, x) for x in y_gaze_x]
-    # plt.imshow(y_gaze_x)
-    # plt.show()
-
-    #
-    # 1. grab the sequence for each block
-    # 2. stitch the blocks together
-    # 3. create design matrix based on the events
-
     epochs_gaze = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
                          tmax=tmax,
                          baseline=None,
@@ -231,17 +232,20 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
     return epochs_pupil, epochs_gaze
 
 
-def plot_epochs_visual_search(itemMarkers, itemMarkers_timestamps, event_markers, event_marker_timestamps, data_array,
-                              data_timestamps, data_channel_names,
-                              session_log, item_codes, tmin, tmax, color_dict, title=''):
+def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
+                                  data_array,
+                                  data_timestamps, data_channel_names,
+                                  session_log, item_codes, tmin, tmax, event_ids, color_dict, title=''):
     # interpolate nan's
     data_array = interpolate_array_nan(data_array)
     srate = 200
-    eyetracking_with_event_marker_data, event_ids = add_event_markers_to_data_array(event_markers,
-                                                                                    event_marker_timestamps,
-                                                                                    data_array,
-                                                                                    data_timestamps, session_log,
-                                                                                    item_codes)
+    eyetracking_with_event_marker_data = add_gaze_event_markers_to_data_array(item_markers,
+                                                                              item_markers_timestamps,
+                                                                              event_markers,
+                                                                              event_marker_timestamps,
+                                                                              data_array,
+                                                                              data_timestamps, session_log,
+                                                                              item_codes)
 
     info = mne.create_info(
         data_channel_names + ['EventMarker'] + ["", "CarouselAngularSpeed", "CarouselIncidentAngle"],

@@ -25,5 +25,8 @@ def varjo_epochs_to_df(epochs: mne.Epochs):
         df_list.append(df)
     return df_list
 
-def varjo_block_seq_to_df(block_sequence: np.ndarray):
-    pass
+def varjo_block_seq_to_df(block_sequence: np.ndarray):  # refer to add_event_markers_to_data_array, the first row is timestamp, the last four rows are event markers
+    data =block_sequence[1: -4, :]
+    df = pd.DataFrame(data=data.transpose(), columns=varjo_csv_header)
+    df.reset_index()
+    return df

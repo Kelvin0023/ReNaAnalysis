@@ -10,8 +10,9 @@ from rena.utils.data_utils import RNStream
 
 # file paths
 # data_path = 'C:/Recordings/11_17_2021_22_56_15-Exp_myexperiment-Sbj_someone-Ssn_0.dats'
-from VarjoInterface import varjo_epochs_to_df
-from utils import interpolate_array_nan, add_event_markers_to_data_array, generate_epochs, plot_epochs_visual_search, \
+from VarjoInterface import varjo_epochs_to_df, varjo_block_seq_to_df
+from utils import interpolate_array_nan, add_event_markers_to_data_array, generate_epochs, \
+    generate_epochs_visual_search, \
     visualize_epochs, generate_condition_sequence
 
 tmin = -0.1
@@ -19,8 +20,10 @@ tmax = 3
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
 trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/SingleTrials'
+block_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-Carousel'
 
-# participant_data_dict = {'AN': {
+# participant_data_dict = {
+#     'AN': {
 #     'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-13-2021/11_13_2021_11_04_11-Exp_ReNaPilot-Sbj_AN-Ssn_0.dats',
 #     'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-13-2021/ReNaItemCatalog_11-13-2021-11-03-54.json',
 #     'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-13-2021/ReNaSessionLog_11-13-2021-11-03-54.json'},
@@ -32,12 +35,17 @@ trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/Si
 #         'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-22-2021/11_22_2021_17_12_12-Exp_ReNa-Sbj_Pilot-WZ-Ssn_1.dats',
 #         'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-22-2021/ReNaItemCatalog_11-22-2021-17-10-52.json',
 #         'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-22-2021/ReNaSessionLog_11-22-2021-17-10-52.json'}}
-participant_data_dict = {'AN': {
-    'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
-    'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
-    'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'}}
+# participant_data_dict = {'AN': {
+#     'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
+#     'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
+#     'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'}}
 
-varjoEyetracking_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeData.json'
+participant_data_dict = {'AN': {
+    'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/01_31_2022_15_10_12-Exp_ReNa-Sbj_ZL-Ssn_0.dats',
+    'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/ReNaItemCatalog_01-31-2022-15-09-45.json',
+    'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/ReNaSessionLog_01-31-2022-15-09-45.json'}}
+
+varjoEyetracking_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 varjoEyetracking_preset = json.load(open(varjoEyetracking_preset_path))
 varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
 # varjoEyetracking_channelNames = ["L Pupil Diameter", "R Pupil Diameter",
@@ -50,7 +58,7 @@ varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
 #                                  "Focal Distance", "Focal Stability"
 #                                  ]
 
-title = 'ReNaPilot 2021'
+title = 'ReNaPilot 2022'
 event_ids = {'BlockBegins': 4, 'Novelty': 3, 'Target': 2, 'Distractor': 1}
 
 epochs_pupil_rsvp = None
@@ -79,22 +87,42 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
     itemMarkers = data['Unity.ReNa.ItemMarkers'][0]
     itemMarkers_timestamps = data['Unity.ReNa.ItemMarkers'][1]
 
-    eyetracking_data = data['Unity.VarjoEyeTracking'][0]
-    eyetracking_data_timestamps = data['Unity.VarjoEyeTracking'][1]
+    eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0]
+    eyetracking_data_timestamps = data['Unity.VarjoEyeTrackingComplete'][1]
 
     '''
     create blocked sequence data
-    '''
     block_sequences_RSVP = generate_condition_sequence(
         event_markers_rsvp, event_markers_timestamps, eyetracking_data, eyetracking_data_timestamps,
         varjoEyetracking_channelNames,
         session_log,
         item_codes,
         srate=200)
+    block_sequences_carousel = generate_condition_sequence(
+        event_markers_carousel, event_markers_timestamps, eyetracking_data, eyetracking_data_timestamps,
+        varjoEyetracking_channelNames,
+        session_log,
+        item_codes,
+        srate=200)
     # Export the block sequences
-    for block_index, bs in enumerate(block_sequences_RSVP):
-        trial_export_path = os.path.join(trial_data_export_root, str(participant_index + 1), str(block_index + 1))
-        os.makedirs(trial_export_path, exist_ok=True)
+    # for block_index, bs in enumerate(block_sequences_RSVP):
+    #     block_export_path = os.path.join(block_data_export_root, str(participant_index + 1), str(block_index + 1))
+    #     os.makedirs(block_export_path, exist_ok=True)
+    #     fn = 'varjo_gaze_output_single_block_RSVP_participant_{0}_block_{1}.csv'.format(participant_index + 1, block_index + 1)
+    #     df = varjo_block_seq_to_df(bs)
+    #     df.reset_index()
+    #     df.to_csv(os.path.join(block_export_path, fn), index=False)
+
+    for block_index, bs in enumerate(block_sequences_carousel):
+        block_export_path = os.path.join(block_data_export_root, str(participant_index + 1), str(block_index + 1))
+        os.makedirs(block_export_path, exist_ok=True)
+        fn = 'varjo_gaze_output_single_block_Carousel_participant_{0}_block_{1}.csv'.format(participant_index + 1,
+                                                                                            block_index + 1)
+        df = varjo_block_seq_to_df(bs)
+        df.reset_index()
+        df.to_csv(os.path.join(block_export_path, fn), index=False)
+
+    '''
 
     '''  create the epoched adata
     epochs_pupil_rsvp_this_participant, epochs_rsvp_gaze_this_participant = generate_epochs(event_markers_rsvp,
@@ -128,6 +156,16 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
     epochs_pupil_carousel = epochs_carousel_this_participant if epochs_pupil_carousel is None else mne.concatenate_epochs(
         [epochs_pupil_carousel, epochs_carousel_this_participant])
     '''
+    epochs_VS_this_participant, epochs_VS_gaze_this_participant = generate_epochs_visual_search(itemMarkers,
+                                                                                                itemMarkers_timestamps,
+                                                                                                event_markers_vs,
+                                                                                                event_markers_timestamps,
+                                                                                                eyetracking_data,
+                                                                                                eyetracking_data_timestamps,
+                                                                                                varjoEyetracking_channelNames,
+                                                                                                session_log,
+                                                                                                item_codes, tmin, tmax,
+                                                                                                event_ids, color_dict)
 
     # plot_epochs_visual_search(itemMarkers, itemMarkers_timestamps, event_markers_vs, event_markers_timestamps,
     #                           eyetracking_data,
@@ -145,8 +183,6 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
         single_trial_df.to_csv(os.path.join(trial_export_path, fn), index=False)
     '''
 
-
 # visualize_epochs(epochs_rsvp, event_ids, tmin, tmax, color_dict, '{0}, Averaged across Participants, Condition {
 # 1}'.format(title, 'RSVP')) visualize_epochs(epochs_carousel, event_ids, tmin, tmax, color_dict, '{0},
 # Averaged across Participants, Condition {1}'.format(title, 'Carousel'))
-
