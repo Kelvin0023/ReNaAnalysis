@@ -119,6 +119,9 @@ def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, 
             # this_item_marker = item_markers_of_block[i * 11: (i + 1) * 11, i::30]
             this_item_marker = item_markers_of_block[i: i + 11, i::30]
             this_item_markers_timestamps = item_markers_timestamps_of_block[i::30]
+            if len(item_markers_timestamps_of_block) == 0:
+                print('Block ID {0} is missing item markers, ignoring this block'.format(block_i))
+                continue
             # TODO finish this, now assume every 30
             assert np.all(this_item_marker[1,:] == this_item_marker[1, 0])  # verify our assumption that item rotates around every 30 columns  # TODO why did the item marker stopped mid-experiment
             # find if there is gaze ray intersection
@@ -252,7 +255,7 @@ def generate_epochs(event_markers, event_marker_timestamps, data_array, data_tim
 def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
                                   data_array,
                                   data_timestamps, data_channel_names,
-                                  session_log, item_codes, tmin, tmax, event_ids, color_dict, title=''):
+                                  session_log, item_codes, tmin, tmax, event_ids, color_dict, title='', is_plotting=True):
     # interpolate nan's
     data_array = interpolate_array_nan(data_array)
     srate = 200
@@ -265,51 +268,75 @@ def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_m
                                                                               item_codes)
 
     info = mne.create_info(
-        data_channel_names + ['EventMarker'] + ["", "CarouselAngularSpeed", "CarouselIncidentAngle"],
+        ['LSLTimestamp'] + data_channel_names + ['EventMarker'] + ["info1", "info2", "info3"],
         sfreq=srate,
-        ch_types=['misc'] * len(data_channel_names) + ['stim'] + ['misc'] * 3)  # with 3 additional info markers
+        ch_types=['misc'] * (1 + len(data_channel_names)) + ['stim'] + [
+            'misc'] * 3)  # with 3 additional info markers
     raw = mne.io.RawArray(eyetracking_with_event_marker_data, info)
 
     # pupil epochs
-    epochs = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin, tmax=tmax,
-                    baseline=(0, 0),
-                    preload=True,
-                    verbose=False, picks=['L Pupil Diameter', 'R Pupil Diameter'])
+    epochs_pupil = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
+                          tmax=tmax,
+                          baseline=None,
+                          preload=True,
+                          verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
 
-    for event_name, event_marker_id in event_ids.items():
-        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-            y = epochs[event_name].get_data()
-            y = np.mean(y, axis=1)  # average left and right
-            y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+    # Average epoch data
+    if is_plotting:
+        y_all = np.empty(shape=(0, epochs_pupil.get_data().shape[-1]))
+        event_count_dict = {}
+        for event_name, event_marker_id in event_ids.items():
+            if event_name == 'Target' or event_name == 'Distractor':
+            # if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+                y = epochs_pupil[event_name].get_data()
+                # y = interpolate_epochs_nan(y)
+                # y = np.mean(y, axis=1)  # average left and right
+                y = y[:, 0, :]  # get the left eye data
+                y_all = np.concatenate([y_all, y])
+                event_count_dict[event_name] = len(y)
+        y_all = scipy.stats.zscore(np.array(y_all), axis=1, ddof=0, nan_policy='propagate')
 
+        previous_count = 0
+        for event_name, event_count in event_count_dict.items():
+            time_vector = np.linspace(tmin, tmax, y_all.shape[-1])
+            y = np.array([mne.baseline.rescale(x, time_vector, (-0.1, 0.)) for x in y_all[previous_count:(event_count + previous_count)]])
+            previous_count = event_count
             y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
             y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-            time_vector = np.linspace(tmin, tmax, y.shape[-1])
             plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
                              interpolate=True,
                              alpha=0.5)
             plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
-                     label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
-    plt.legend()
-    plt.title(title)
-    plt.show()
+                     label='{0}, N={1}'.format(event_name, epochs_pupil[event_name].get_data().shape[0]))
+        plt.xlabel('Time (sec)')
+        plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
+        plt.legend()
+        plt.title(title)
+        plt.show()
 
-    # gaze epochs
-    # epochs = Epochs(raw, events=find_events(raw), event_id=event_ids, tmin=0, tmax=tmax, baseline=(0, 0),
-    #                 preload=True,
-    #                 verbose=False, picks=['L Gaze Direction X', 'L Gaze Direction Y', 'L Gaze Direction Z', 'R Gaze Direction X', 'R Gaze Direction Y', 'R Gaze Direction Z', "EventMarker", "CarouselDistance", "CarouselAngularSpeed", "CarouselIncidentAngle"])
-    # y = epochs['Distractor'].get_data()
-    # incidnet_angles = y[:, 9, 0]
-    # sort_indices = np.argsort(incidnet_angles, axis=0)  # sort the ERP by incident angle
-    # y = y[sort_indices]
-    # y_gaze_x = np.mean(y[:, [0, 3], :], axis=1)  # take the gaze direction x and average
-    # time_vector = np.linspace(tmin, tmax, y.shape[-1])
-    # # [plt.plot(time_vector, x) for x in y_gaze_x]
-    # plt.imshow(y_gaze_x)
-    # plt.show()
-    return epochs
+        # ERP Image
+        for event_name, event_marker_id in event_ids.items():
+            if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
+                y = epochs_pupil[event_name].get_data()
+                y = np.mean(y, axis=1)  # average left and right
+                # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+                time_vector = np.linspace(tmin, tmax, y.shape[-1])
+                plt.imshow(y)
+                plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5),
+                           ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax - tmin) / 5)])
+                plt.xlabel('Time (sec)')
+                plt.ylabel('Trails')
+                plt.legend()
+                plt.title('{0}: {1}'.format(title, event_name))
+                plt.show()
+
+    epochs_gaze = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
+                         tmax=tmax,
+                         baseline=None,
+                         preload=True,
+                         verbose=False, picks=['raw_timestamp', 'status', 'gaze_forward_x', 'gaze_forward_y'])
+
+    return epochs_pupil, epochs_gaze
 
 
 def visualize_epochs(epochs, event_ids, tmin, tmax, color_dict, title):
