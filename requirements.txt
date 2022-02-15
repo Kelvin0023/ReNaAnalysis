@@ -3,4 +3,5 @@ scipy~=1.7.2
 mne
 matplotlib~=3.5.0
 renalabapp
-pyxdf~=1.16.3
+pyxdf~=1.16.3'
+pandas

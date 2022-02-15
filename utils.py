@@ -174,10 +174,10 @@ def extract_block_data(data_with_event_marker, data_channel_names, block_end_mar
     return block_sequences  # a list of block sequences
 
 
-def generate_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
-                    session_log,
-                    item_codes, tmin, tmax, event_ids, color_dict, title='', is_plotting=True,
-                    srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
+def generate_event_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
+                          session_log,
+                          item_codes, tmin, tmax, event_ids, color_dict, title='', is_plotting=True,
+                          srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
     # interpolate nan's
     eyetracking_with_event_marker_data = add_event_markers_to_data_array(event_markers,
                                                                          event_marker_timestamps,
