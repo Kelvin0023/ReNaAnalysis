@@ -340,8 +340,9 @@ def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_m
 
 def visualize_epochs(epochs, event_ids, tmin, tmax, color_dict, title):
     for event_name, event_marker_id in event_ids.items():
-        if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
             y = epochs[event_name].get_data()
+            y = interpolate_epochs_nan( y)  # remove nan
+            assert np.sum(np.isnan(y)) == 0
             y = np.mean(y, axis=1)  # average left and right
             y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
 

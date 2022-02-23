@@ -51,17 +51,15 @@ participant_data_dict = {
         'item_catalog_path': 'ReNaPilot-2022Spring/02-15-2022/ReNaItemCatalog_02-15-2022-17-23-25.json',
         'session_log_path': 'ReNaPilot-2022Spring/02-15-2022/ReNaSessionLog_02-15-2022-17-23-25.json'},
 
-    # 'ZL': {  # 1/31/2022
-    # 'data_path': 'ReNaPilot-2022Spring/01-31-2022/01_31_2022_15_10_12-Exp_ReNa-Sbj_ZL-Ssn_0.dats',
-    # 'item_catalog_path': 'ReNaPilot-2022Spring/01-31-2022/ReNaItemCatalog_01-31-2022-15-09-45.json',
-    # 'session_log_path': 'ReNaPilot-2022Spring/01-31-2022/ReNaSessionLog_01-31-2022-15-09-45.json'},
-    #
-    #
-    #
-    # 'AN': {  # 12/16/2022
-    #     'data_path': 'ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
-    #     'item_catalog_path': 'ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
-    #     'session_log_path': 'ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'}
+    'ZL': {  # 1/31/2022
+    'data_path': 'ReNaPilot-2022Spring/01-31-2022/01_31_2022_15_10_12-Exp_ReNa-Sbj_ZL-Ssn_0.dats',
+    'item_catalog_path': 'ReNaPilot-2022Spring/01-31-2022/ReNaItemCatalog_01-31-2022-15-09-45.json',
+    'session_log_path': 'ReNaPilot-2022Spring/01-31-2022/ReNaSessionLog_01-31-2022-15-09-45.json'},
+
+    'AN': {  # 12/16/2022
+        'data_path': 'ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
+        'item_catalog_path': 'ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
+        'session_log_path': 'ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'}
 }
 
 # newest eyetracking data channel format
@@ -81,7 +79,7 @@ condition_event_label_dict = dict([(c, np.empty(0)) for c in event_marker_condit
 
 for participant_index, participant_code_data_path_dict in enumerate(participant_data_dict.items()):
     participant_code, participant_data_path_dict = participant_code_data_path_dict
-    print("Working on participant {0} of {1}".format(participant_code, participant_index))
+    print("Working on participant {0}, {1} of {2}".format(participant_code, participant_index, len(participant_data_dict)))
     data_path = participant_data_path_dict['data_path']
     item_catalog_path = participant_data_path_dict['item_catalog_path']
     session_log_path = participant_data_path_dict['session_log_path']
@@ -96,20 +94,21 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
     itemMarkers_timestamps = data['Unity.ReNa.ItemMarkers'][1]
 
     # check whether the data has the new or old eye data format
-    if 'Unity.VarjoEyeTrackingComplete' in data.keys():
-        eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0]
-        eyetracking_data_timestamps = data['Unity.VarjoEyeTrackingComplete'][1]
+    # if 'Unity.VarjoEyeTrackingComplete' in data.keys():
+    eyetracking_data_timestamps = data['Unity.VarjoEyeTrackingComplete'] if 'Unity.VarjoEyeTrackingComplete' in data.keys() else data['Unity.VarjoEyeTracking']
+    eyetracking_data = eyetracking_data_timestamps[0]
+    eyetracking_timestamps = eyetracking_data_timestamps[1]
+    if len(eyetracking_data_timestamps[0]) == 34:
         varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
         varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
-    else:
-        eyetracking_data = data['Unity.VarjoEyeTracking'][0]
-        eyetracking_data_timestamps = data['Unity.VarjoEyeTracking'][1]
+    elif len(eyetracking_data_timestamps[0]) == 22:
         # if we are using the old eye data channels, change the name of pupil channels to the new
         varjoEyetracking_preset = json.load(open(varjoEyetracking_preset_path))
         varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
         varjoEyetracking_channelNames[varjoEyetracking_channelNames.index('L Pupil Diameter')] = 'left_pupil_size'
         varjoEyetracking_channelNames[varjoEyetracking_channelNames.index('R Pupil Diameter')] = 'right_pupil_size'
-
+    else:
+        raise Exception("Invalid eye data")
     # process data
     for condition_name, condition_event_marker_index in event_marker_condition_index_dict.items():
         print("Processing Condition {0} for participant {1}".format(condition_name, participant_code))
@@ -136,7 +135,7 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
         _epochs_pupil, _event_labels = generate_event_epochs(event_markers,
                                                              event_markers_timestamps,
                                                              eyetracking_data,
-                                                             eyetracking_data_timestamps,
+                                                             eyetracking_timestamps,
                                                              varjoEyetracking_channelNames,
                                                              session_log,
                                                              item_codes, tmin, tmax,
@@ -145,7 +144,7 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
                                                                  title,
                                                                  participant_code,
                                                                  condition_name),
-                                                             is_plotting=False)
+                                                             is_plotting=True)
 
         condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[
                                                                            condition_name] is None else mne.concatenate_epochs(
@@ -161,14 +160,14 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
         single_trial_df.reset_index()
         single_trial_df.to_csv(os.path.join(trial_export_path, fn), index=False)
     '''
-''' Export per-condition pupil epochs '''
-pass
+''' Export per-condition pupil epochs 
 for condition_name in event_marker_condition_index_dict.keys():
     trial_x_export_path = os.path.join(trial_data_export_root, "epochs_pupil_raw_condition_{0}.npy".format(condition_name))
     trial_y_export_path = os.path.join(trial_data_export_root, "epoch_labels_pupil_raw_condition_{0}".format(condition_name))
     np.save(trial_x_export_path, condition_epochs_pupil_dict[condition_name].get_data())
     np.save(trial_y_export_path, condition_event_label_dict[condition_name])
+'''
 
 
-visualize_epochs(condition_epochs_pupil_dict[condition_name], event_ids, tmin, tmax, color_dict,
-                 '{0}, Averaged across Participants, Condition {1}'.format(title, 'RSVP'))
+visualize_epochs(condition_epochs_pupil_dict['Carousel'], event_ids, tmin, tmax, color_dict,
+                 '{0}, Averaged across Participants, Condition {1}'.format(title, 'Carousel'))

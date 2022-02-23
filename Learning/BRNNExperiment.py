@@ -14,17 +14,22 @@ data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/
 label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/epoch_labels_pupil_raw_condition_RSVP.npy'
 batch_size = 16
 train_test_split_ratio = 0.8
-num_layers = 3
-hidden_size = 8
+num_layers = 5
+hidden_size = 16
 
 learning_rate = 1e-3
 num_epochs = 10
 device = "cuda"
+torch.manual_seed(42)
 
 epoch_dataset = EpochDatset(data_path, label_path)
 val_N = math.ceil(len(epoch_dataset) * train_test_split_ratio)
 train_N = len(epoch_dataset) - val_N
 val, train = random_split(epoch_dataset, [train_N, val_N])
+
+# export the dataset
+# np.save('C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/epochs_pupil_raw_condition_RSVP_DL.npy', epoch_dataset.X.cpu().data)
+# np.save('C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/epochs_pupil_raw_condition_RSVP_DL_labels.npy', epoch_dataset.y.cpu().data)
 
 train_loader = DataLoader(dataset=train, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(dataset=val, batch_size=batch_size, shuffle=True)
@@ -39,8 +44,10 @@ loss_function = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(BRNN_model.parameters(), lr=learning_rate)
 
 # Train Network
+print("Training started, train on {0} samples, validate on {1} samples".format(len(train), len(val)))
 for epoch in range(num_epochs):
-    print("Epoch {0} of {1}".format(epoch + 1, num_epochs))
+
+    print("Epoch {0} of {1}  #############################".format(epoch + 1, num_epochs))
     for batch_idx, (batch, y_expected) in enumerate(train_loader):
         print("On {0} of {1} batch".format(batch_idx, batch_size), end='\r', flush=True)
         # Get data to cuda if possible
