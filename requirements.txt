@@ -7,3 +7,4 @@ pyxdf~=1.16.3'
 pandas
 torchsummary==1.5.1
 imbalanced-learn
+seaborn
