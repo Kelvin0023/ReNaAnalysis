@@ -11,8 +11,8 @@ varjo_csv_header = ['raw_timestamp', 'log_time', 'focus_distance', 'frame_number
                     'right_origin_z', 'right_pupil_size', 'right_status']
 
 
-def varjo_epochs_to_df(epochs: mne.Epochs):
-    epochs_resampled = epochs.resample(100)  # resample 100 Hz
+def varjo_epochs_to_df(epochs: mne.Epochs, resample=100):
+    if resample: epochs_resampled = epochs.resample(resample)  # resample 100 Hz
     epochs_data = epochs_resampled.get_data()
     df_list = []
     for e in epochs_data:

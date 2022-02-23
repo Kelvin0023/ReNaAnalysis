@@ -1,5 +1,6 @@
 import json
 import os
+from collections import defaultdict
 
 import mne
 import numpy as np
@@ -15,70 +16,72 @@ from utils import interpolate_array_nan, add_event_markers_to_data_array, genera
     generate_epochs_visual_search, \
     visualize_epochs, generate_condition_sequence
 
-tmin = -0.1
-tmax = 3
-color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
+data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data"
 
-trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/SingleTrials'
+'''#################################################################################################
+Path to store the full block data
 
+'''
+trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials'
 block_data_export_root = {'RSVP': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-RSVP',
                           'Carousel': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-Carousel',
                           'VS': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-VS',
                           'TS': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-TS'}
+#################################################################################################
 
+# Only put interested conditions here
 event_marker_condition_index_dict = {'RSVP': slice(0, 4),
-                               'Carousel': slice(4, 8),
-                               # 'VS': slice(8, 12),
-                               # 'TS': slice(12, 16)
+                                     'Carousel': slice(4, 8),
+                                     # 'VS': slice(8, 12),
+                                     # 'TS': slice(12, 16)
                                      }
-# event_marker_condition_index_dict = {'Carousel': slice(4, 8)}
+tmin = -0.1
+tmax = 3
+color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
-# participant_data_dict = {
-#     'AN': {
-#     'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-13-2021/11_13_2021_11_04_11-Exp_ReNaPilot-Sbj_AN-Ssn_0.dats',
-#     'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-13-2021/ReNaItemCatalog_11-13-2021-11-03-54.json',
-#     'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-13-2021/ReNaSessionLog_11-13-2021-11-03-54.json'},
-#     'ZL': {
-#         'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/11_10_2021_12_06_17-Exp_ReNaPilot-Sbj_ZL-Ssn_0.dats',
-#         'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/ReNaItemCatalog_11-10-2021-12-04-46.json',
-#         'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-10-2021/ReNaSessionLog_11-10-2021-12-04-46.json'},
-#     'WZ': {
-#         'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-22-2021/11_22_2021_17_12_12-Exp_ReNa-Sbj_Pilot-WZ-Ssn_1.dats',
-#         'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-22-2021/ReNaItemCatalog_11-22-2021-17-10-52.json',
-#         'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/11-22-2021/ReNaSessionLog_11-22-2021-17-10-52.json'}}
-# participant_data_dict = {'AN': {  # 12/16/2022
-#     'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
-#     'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
-#     'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'}}
+participant_data_dict = {
 
-# participant_data_dict = {'ZL': {  # 1/31/2022
-#     'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/01_31_2022_15_10_12-Exp_ReNa-Sbj_ZL-Ssn_0.dats',
-#     'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/ReNaItemCatalog_01-31-2022-15-09-45.json',
-#     'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/ReNaSessionLog_01-31-2022-15-09-45.json'}}
+    'WZ': {
+        'data_path': 'ReNaPilot-2021Fall/11-22-2021/11_22_2021_17_12_12-Exp_ReNa-Sbj_Pilot-WZ-Ssn_1.dats',
+        'item_catalog_path': 'ReNaPilot-2021Fall/11-22-2021/ReNaItemCatalog_11-22-2021-17-10-52.json',
+        'session_log_path': 'ReNaPilot-2021Fall/11-22-2021/ReNaSessionLog_11-22-2021-17-10-52.json'},
 
-participant_data_dict = {'JP': {  # 1/31/2022
-    'data_path': 'C:/Users/LLINC-Lab/Dropbox/ReNa/Data/ReNaPilot-2022Spring/02-15-2022/02_15_2022_17_23_57-Exp_ReNaPilot-Sbj_js-Ssn_0.dats',
-    'item_catalog_path': 'C:/Users/LLINC-Lab/Dropbox/ReNa/Data/ReNaPilot-2022Spring/02-15-2022/ReNaItemCatalog_02-15-2022-17-23-25.json',
-    'session_log_path': 'C:/Users/LLINC-Lab/Dropbox/ReNa/Data/ReNaPilot-2022Spring/02-15-2022/ReNaSessionLog_02-15-2022-17-23-25.json'}}
+    'JP': {  # 1/31/2022
+        'data_path': 'ReNaPilot-2022Spring/02-15-2022/02_15_2022_17_23_57-Exp_ReNaPilot-Sbj_js-Ssn_0.dats',
+        'item_catalog_path': 'ReNaPilot-2022Spring/02-15-2022/ReNaItemCatalog_02-15-2022-17-23-25.json',
+        'session_log_path': 'ReNaPilot-2022Spring/02-15-2022/ReNaSessionLog_02-15-2022-17-23-25.json'},
 
-varjoEyetracking_preset_path = 'C:/Users/LLINC-Lab/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
-varjoEyetracking_preset = json.load(open(varjoEyetracking_preset_path))
-varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
+    # 'ZL': {  # 1/31/2022
+    # 'data_path': 'ReNaPilot-2022Spring/01-31-2022/01_31_2022_15_10_12-Exp_ReNa-Sbj_ZL-Ssn_0.dats',
+    # 'item_catalog_path': 'ReNaPilot-2022Spring/01-31-2022/ReNaItemCatalog_01-31-2022-15-09-45.json',
+    # 'session_log_path': 'ReNaPilot-2022Spring/01-31-2022/ReNaSessionLog_01-31-2022-15-09-45.json'},
+    #
+    #
+    #
+    # 'AN': {  # 12/16/2022
+    #     'data_path': 'ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
+    #     'item_catalog_path': 'ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
+    #     'session_log_path': 'ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'}
+}
+
+# newest eyetracking data channel format
+varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
+# old eyetracking data channel format
+varjoEyetracking_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeData.json'
 
 title = 'ReNaPilot 2022'
-event_ids = {'BlockBegins': 4, 'Novelty': 3, 'Target': 2, 'Distractor': 1}
+# event_ids = {'BlockBegins': 4, 'Novelty': 3, 'Target': 2, 'Distractor': 1}
+event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1}  # event_ids_for_interested_epochs
 
-condition_epochs_pupil_dict = {'RSVP': None,
-                               'Carousel': None,
-                               'VS': None,
-                               'TS': None}
-event_marker_condition_dict = {'RSVP': None,
-                               'Carousel': None,
-                               'VS': None,
-                               'TS': None}
+# end of setup parameters, start of the main block ######################################################
+participant_data_dict = dict(
+    [(p, dict([(x, os.path.join(data_root, y)) for x, y in d.items()])) for p, d in participant_data_dict.items()])
+condition_epochs_pupil_dict = dict([(c, None) for c in event_marker_condition_index_dict.keys()])
+condition_event_label_dict = dict([(c, np.empty(0)) for c in event_marker_condition_index_dict.keys()])
+
 for participant_index, participant_code_data_path_dict in enumerate(participant_data_dict.items()):
     participant_code, participant_data_path_dict = participant_code_data_path_dict
-
+    print("Working on participant {0} of {1}".format(participant_code, participant_index))
     data_path = participant_data_path_dict['data_path']
     item_catalog_path = participant_data_path_dict['item_catalog_path']
     session_log_path = participant_data_path_dict['session_log_path']
@@ -92,13 +95,24 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
     itemMarkers = data['Unity.ReNa.ItemMarkers'][0]
     itemMarkers_timestamps = data['Unity.ReNa.ItemMarkers'][1]
 
-    eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0]
-    eyetracking_data_timestamps = data['Unity.VarjoEyeTrackingComplete'][1]
-    # eyetracking_data = data['Unity.VarjoEyeTracking'][0]
-    # eyetracking_data_timestamps = data['Unity.VarjoEyeTracking'][1]
+    # check whether the data has the new or old eye data format
+    if 'Unity.VarjoEyeTrackingComplete' in data.keys():
+        eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0]
+        eyetracking_data_timestamps = data['Unity.VarjoEyeTrackingComplete'][1]
+        varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
+        varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
+    else:
+        eyetracking_data = data['Unity.VarjoEyeTracking'][0]
+        eyetracking_data_timestamps = data['Unity.VarjoEyeTracking'][1]
+        # if we are using the old eye data channels, change the name of pupil channels to the new
+        varjoEyetracking_preset = json.load(open(varjoEyetracking_preset_path))
+        varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
+        varjoEyetracking_channelNames[varjoEyetracking_channelNames.index('L Pupil Diameter')] = 'left_pupil_size'
+        varjoEyetracking_channelNames[varjoEyetracking_channelNames.index('R Pupil Diameter')] = 'right_pupil_size'
 
     # process data
     for condition_name, condition_event_marker_index in event_marker_condition_index_dict.items():
+        print("Processing Condition {0} for participant {1}".format(condition_name, participant_code))
         event_markers = data['Unity.ReNa.EventMarkers'][0][condition_event_marker_index]
 
         ''' create whole block sequences
@@ -119,24 +133,25 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
         '''
 
         '''  create the epoched adata'''
-        epochs_pupil_this_participant, epochs_gaz_this_participant = generate_event_epochs(event_markers,
-                                                                                          event_markers_timestamps,
-                                                                                          eyetracking_data,
-                                                                                          eyetracking_data_timestamps,
-                                                                                          varjoEyetracking_channelNames,
-                                                                                          session_log,
-                                                                                          item_codes, tmin, tmax,
-                                                                                          event_ids, color_dict,
-                                                                                          title='{0}, Participant {1}, Condition {2}'.format(
-                                                                                            title,
-                                                                                            participant_code,
-                                                                                            condition_name),
-                                                                                              is_plotting=False)
+        _epochs_pupil, _event_labels = generate_event_epochs(event_markers,
+                                                             event_markers_timestamps,
+                                                             eyetracking_data,
+                                                             eyetracking_data_timestamps,
+                                                             varjoEyetracking_channelNames,
+                                                             session_log,
+                                                             item_codes, tmin, tmax,
+                                                             event_ids, color_dict,
+                                                             title='{0}, Participant {1}, Condition {2}'.format(
+                                                                 title,
+                                                                 participant_code,
+                                                                 condition_name),
+                                                             is_plotting=False)
 
-        condition_epochs_pupil_dict[condition_name] = epochs_pupil_this_participant if condition_epochs_pupil_dict[condition_name] is None else mne.concatenate_epochs(
-            [condition_epochs_pupil_dict[condition_name], epochs_pupil_this_participant])
-
-
+        condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[
+                                                                           condition_name] is None else mne.concatenate_epochs(
+            [condition_epochs_pupil_dict[condition_name], _epochs_pupil])
+        condition_event_label_dict[condition_name] = np.concatenate([condition_event_label_dict[condition_name], _event_labels])
+        pass
     ''' Export the per-trial epochs for gaze behavior analysis
     epochs_carousel_gaze_this_participant_trial_dfs = varjo_epochs_to_df(epochs_carousel_gaze_this_participant.copy())
     for trial_index, single_trial_df in enumerate(epochs_carousel_gaze_this_participant_trial_dfs):
@@ -146,5 +161,14 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
         single_trial_df.reset_index()
         single_trial_df.to_csv(os.path.join(trial_export_path, fn), index=False)
     '''
+''' Export per-condition pupil epochs '''
+pass
+for condition_name in event_marker_condition_index_dict.keys():
+    trial_x_export_path = os.path.join(trial_data_export_root, "epochs_pupil_raw_condition_{0}.npy".format(condition_name))
+    trial_y_export_path = os.path.join(trial_data_export_root, "epoch_labels_pupil_raw_condition_{0}".format(condition_name))
+    np.save(trial_x_export_path, condition_epochs_pupil_dict[condition_name].get_data())
+    np.save(trial_y_export_path, condition_event_label_dict[condition_name])
 
-    visualize_epochs(condition_epochs_pupil_dict[condition_name], event_ids, tmin, tmax, color_dict, '{0}, Averaged across Participants, Condition {1}'.format(title, 'RSVP'))
+
+visualize_epochs(condition_epochs_pupil_dict[condition_name], event_ids, tmin, tmax, color_dict,
+                 '{0}, Averaged across Participants, Condition {1}'.format(title, 'RSVP'))

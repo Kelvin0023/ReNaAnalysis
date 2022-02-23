@@ -242,14 +242,13 @@ def generate_event_epochs(event_markers, event_marker_timestamps, data_array, da
                 plt.legend()
                 plt.title('{0}: {1}'.format(title, event_name))
                 plt.show()
-
-    epochs_gaze = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
-                         tmax=tmax,
-                         baseline=None,
-                         preload=True,
-                         verbose=False, picks=['raw_timestamp', 'status', 'gaze_forward_x', 'gaze_forward_y'])
-
-    return epochs_pupil, epochs_gaze
+    # epochs_gaze = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
+    #                      tmax=tmax,
+    #                      baseline=None,
+    #                      preload=True,
+    #                      verbose=False, picks=['raw_timestamp', 'status', 'gaze_forward_x', 'gaze_forward_y'])
+    labels_array = epochs_pupil.events[:, 2]
+    return epochs_pupil, labels_array
 
 
 def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
