@@ -17,7 +17,7 @@ ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}
 def interpolate_nan(x):
     not_nan = np.logical_not(np.isnan(x))
     indices = np.arange(len(x))
-    interp = interp1d(indices[not_nan], x[not_nan])
+    interp = interp1d(indices[not_nan], x[not_nan], fill_value="extrapolate")
     return interp(indices)
 
 

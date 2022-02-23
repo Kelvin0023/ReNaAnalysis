@@ -5,3 +5,4 @@ matplotlib~=3.5.0
 renalabapp
 pyxdf~=1.16.3'
 pandas
+torchsummary==1.5.1
