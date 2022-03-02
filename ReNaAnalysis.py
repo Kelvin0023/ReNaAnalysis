@@ -12,9 +12,9 @@ from rena.utils.data_utils import RNStream
 # file paths
 # data_path = 'C:/Recordings/11_17_2021_22_56_15-Exp_myexperiment-Sbj_someone-Ssn_0.dats'
 from VarjoInterface import varjo_epochs_to_df, varjo_block_seq_to_df
-from utils import interpolate_array_nan, add_event_markers_to_data_array, generate_event_epochs, \
+from utils import interpolate_array_nan, add_eventMarkers_LSLTimestamp_to_data, generate_pupil_event_epochs, \
     generate_epochs_visual_search, \
-    visualize_epochs, generate_condition_sequence
+    visualize_pupil_epochs, generate_condition_sequence
 
 data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data"
 
@@ -132,19 +132,19 @@ for participant_index, participant_code_data_path_dict in enumerate(participant_
         '''
 
         '''  create the epoched adata'''
-        _epochs_pupil, _event_labels = generate_event_epochs(event_markers,
-                                                             event_markers_timestamps,
-                                                             eyetracking_data,
-                                                             eyetracking_timestamps,
-                                                             varjoEyetracking_channelNames,
-                                                             session_log,
-                                                             item_codes, tmin, tmax,
-                                                             event_ids, color_dict,
-                                                             title='{0}, Participant {1}, Condition {2}'.format(
+        _epochs_pupil, _event_labels = generate_pupil_event_epochs(event_markers,
+                                                                   event_markers_timestamps,
+                                                                   eyetracking_data,
+                                                                   eyetracking_timestamps,
+                                                                   varjoEyetracking_channelNames,
+                                                                   session_log,
+                                                                   item_codes, tmin, tmax,
+                                                                   event_ids, color_dict,
+                                                                   title='{0}, Participant {1}, Condition {2}'.format(
                                                                  title,
                                                                  participant_code,
                                                                  condition_name),
-                                                             is_plotting=True)
+                                                                   is_plotting=True)
 
         condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[
                                                                            condition_name] is None else mne.concatenate_epochs(
@@ -169,5 +169,5 @@ for condition_name in event_marker_condition_index_dict.keys():
 '''
 
 
-visualize_epochs(condition_epochs_pupil_dict['Carousel'], event_ids, tmin, tmax, color_dict,
+visualize_pupil_epochs(condition_epochs_pupil_dict['Carousel'], event_ids, tmin, tmax, color_dict,
                  '{0}, Averaged across Participants, Condition {1}'.format(title, 'Carousel'))
