@@ -1,16 +1,18 @@
 import json
 import os
+import pickle
+import time
 from collections import defaultdict
-
+import numpy as np
 import mne
 from rena.utils.data_utils import RNStream
 
 from utils import generate_pupil_event_epochs, \
-    flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs
+    flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs
 
 #################################################################################################
 
-data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
+data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-test"
 eventMarker_conditionIndex_dict = {'RSVP': slice(0, 4),
                                    'Carousel': slice(4, 8),
                                    # 'VS': slice(8, 12),
@@ -20,15 +22,17 @@ tmin_pupil = -0.1
 tmax_pupil = 3.
 tmin_eeg = -0.1
 tmax_eeg = 1.
+eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
+
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
 # newest eyetracking data channel format
 varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
-title = 'ReNaPilot 2022'
 event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1}  # event_ids_for_interested_epochs
 
 # end of setup parameters, start of the main block ######################################################
+start_time = time.time()
 participant_list = os.listdir(data_root)
 participant_directory_list = [os.path.join(data_root, x) for x in participant_list]
 
@@ -46,11 +50,25 @@ for participant, participant_directory in zip(participant_list, participant_dire
                                                                                     '{0}_ReNaSessionLog.json'.format(
                                                                                         i)]]
 
+# preload all the .dats
+# TODO parallelize loading of .dats
+print("Preloading .dats")
 for participant_index, session_dict in participant_session_dict.items():
-    print("Working on participant {0} of {1}".format(participant_index, len(participant_session_dict)))
+    print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
     for session_index, session_files in session_dict.items():
+        print("Session {0} of {1}".format(session_index + 1, len(session_dict)))
         data_path, item_catalog_path, session_log_path = session_files
         data = RNStream(data_path).stream_in(ignore_stream=('monitor1'), jitter_removal=False)
+        participant_session_dict[participant_index][session_index][0] = data
+dats_loading_end_time = time.time()
+# save the preloaded .dats
+pickle.dump(participant_session_dict, open('participant_session_dict.p', 'wb'))
+print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
+
+for participant_index, session_dict in participant_session_dict.items():
+    print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
+    for session_index, session_files in session_dict.items():
+        data, item_catalog_path, session_log_path = session_files
         item_catalog = json.load(open(item_catalog_path))
         session_log = json.load(open(session_log_path))
         item_codes = list(item_catalog.values())
@@ -93,17 +111,28 @@ for participant_index, session_dict in participant_session_dict.items():
                                                                    event_ids)
 
             if condition_name not in participant_condition_epoch_dict[participant_index].keys():
-                participant_condition_epoch_dict[participant_index][condition_name] = _epochs_pupil
+                participant_condition_epoch_dict[participant_index][condition_name] = (_epochs_pupil, _epochs_eeg)
             else:
-                participant_condition_epoch_dict[participant_index][condition_name] = mne.concatenate_epochs(
-                    [participant_condition_epoch_dict[participant_index][condition_name], _epochs_pupil])
+                participant_condition_epoch_dict[participant_index][condition_name] = (
+                    mne.concatenate_epochs(
+                    [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
+                    mne.concatenate_epochs(
+                        [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_eeg])
+                )
+
 
 # get all the epochs for condition RSVP
 for condition_name in eventMarker_conditionIndex_dict.keys():
     condition_epoch_list = flatten_list([x.items() for x in participant_condition_epoch_dict.values()])
-    condition_epochs = mne.concatenate_epochs([e for c, e in condition_epoch_list if c == condition_name])
-    visualize_pupil_epochs(condition_epochs, event_ids, tmin_pupil, tmax_pupil, color_dict,
-                 '{0}, Averaged across Participants, Condition {1}'.format(title, condition_name))
+    condition_epochs = [e for c, e in condition_epoch_list if c == condition_name]
+    condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, eeg in condition_epochs])
+    condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg in condition_epochs])
+    title = 'Averaged across Participants, Condition {0}'.format(condition_name)
+    visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
+    visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title, resample_srate=50)
+
+end_time = time.time()
+print("Took {0} seconds".format(end_time - start_time))
 #
 #
 # condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[

@@ -53,7 +53,7 @@ def add_eventMarkers_LSLTimestamp_to_data(event_markers, event_marker_timestamps
         data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
 
         if str(int(event)) in session_log.keys():  # for start-of-block events
-            print('Processing block with ID: {0}'.format(event))
+            # print('Processing block with ID: {0}'.format(event))
             block_num = event
             data_event_marker_array[0][data_event_marker_index] = 4  # encodes start of a block
             continue
@@ -271,7 +271,7 @@ def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_arr
 def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps,
                               session_log,
                               item_codes, tmin, tmax, event_ids, lowcut=0.5, highcut=50., notch_band_demoninator=200,
-                              EEG_fresample=50,
+
                               srate=2048):  # use a fixed sampling rate for the sampling rate to match between recordings
     # interpolate nan's
     eeg_with_event_marker_data = add_eventMarkers_LSLTimestamp_to_data(event_markers,
@@ -293,12 +293,13 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
     raw = raw.filter(l_freq=lowcut, h_freq=highcut)  # bandpass filter
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto')
 
-    reject = dict(eeg=600.)
+    reject = dict(eeg=600.)  # DO NOT reject or we will have a mismatch between EEG and pupil
     epochs = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
                     tmax=tmax,
                     baseline=None,
                     preload=True,
-                    verbose=False, reject=reject)
+                    verbose=False,
+                    reject=reject)
     # verbose=False, picks=['left_pupil_size', 'right_pupil_size', 'status', 'left_status', 'right_status'])
 
     labels_array = epochs.events[:, 2]
@@ -419,6 +420,51 @@ def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, sra
     plt.legend()
     plt.title(title)
     plt.show()
+
+def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title, resample_srate=50):
+    for ch in picks:
+        for event_name, event_marker_id in event_ids.items():
+            y = epochs[event_name].resample(sfreq=resample_srate).pick_channels([ch]).get_data().squeeze(1)
+            y = np.mean(y, axis=0)
+            y1 = y + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+            y2 = y - scipy.stats.sem(y, axis=0)
+
+            time_vector = np.linspace(tmin, tmax, y.shape[-1])
+            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+                             interpolate=True,
+                             alpha=0.5)
+            plt.plot(time_vector, y, c=color_dict[event_name],
+                     label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+        plt.xlabel('Time (sec)')
+        plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
+        plt.legend()
+        plt.title('{0}, Channel {1}'.format(title, ch))
+        plt.show()
+
+
+    #     y = interpolate_epoch_zeros(y)  # remove nan
+    #     y = interpolate_epochs_nan(y)  # remove nan
+    #     assert np.sum(np.isnan(y)) == 0
+    #     y = np.mean(y, axis=1)  # average left and right
+    #     # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+    #
+    #     y = np.mean(y, axis=0)
+    #     y = y - y[int(abs(tmin) * srate)]  # baseline correct
+    #     y1 = y + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+    #     y2 = y - scipy.stats.sem(y, axis=0)  # this is the lower envelope
+    #
+    #     time_vector = np.linspace(tmin, tmax, y.shape[-1])
+    #     plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+    #                      interpolate=True,
+    #                      alpha=0.5)
+    #     plt.plot(time_vector, y, c=color_dict[event_name],
+    #              label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+    # plt.xlabel('Time (sec)')
+    # plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
+    # plt.legend()
+    # plt.title(title)
+    # plt.show()
+
 
 
 def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
