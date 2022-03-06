@@ -2,6 +2,7 @@ import numpy as np
 import scipy
 from scipy.interpolate import interp1d
 import json
+import imageio
 
 import mne
 import numpy as np
@@ -16,6 +17,8 @@ ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}
 
 def interpolate_nan(x):
     not_nan = np.logical_not(np.isnan(x))
+    if np.sum(np.logical_not(not_nan)) / len(x) > 0.5:  # if more than half are nan
+        raise ValueError("More than half of the given data array is nan")
     indices = np.arange(len(x))
     interp = interp1d(indices[not_nan], x[not_nan], fill_value="extrapolate")
     return interp(indices)
@@ -32,7 +35,19 @@ def interpolate_epochs_nan(epoch_array):
     """
     :param data_array: channel first, time last
     """
-    return np.array([[interpolate_nan(x) for x in e] for e in epoch_array])
+    rtn = []
+    rejected_count = 0
+    for e in epoch_array:
+        temp = []
+        try:
+            for x in e:
+                temp.append(interpolate_nan(x))
+        except ValueError:  # something wrong with this epoch, maybe more than half are nan
+            rejected_count += 1
+            continue  # reject this epoch
+        rtn.append(temp)
+    print("Rejected {0} epochs of {1} total".format(rejected_count, len(epoch_array)))
+    return np.array(rtn)
 
 
 def interpolate_epoch_zeros(e):
@@ -296,7 +311,7 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
     reject = dict(eeg=600.)  # DO NOT reject or we will have a mismatch between EEG and pupil
     epochs = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
                     tmax=tmax,
-                    baseline=None,
+                    baseline=(-0.1, 0.0),
                     preload=True,
                     verbose=False,
                     reject=reject)
@@ -440,31 +455,17 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
         plt.legend()
         plt.title('{0}, Channel {1}'.format(title, ch))
         plt.show()
+        pass
+    # get the min and max for plotting the topomap
+    biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
+    data_channel_names = biosemi_64_montage.ch_names
 
+    evoked = epochs.resample(sfreq=resample_srate).average()
+    vmax_EEG = np.max(evoked.get_data())
+    vmin_EEG = np.min(evoked.get_data())
 
-    #     y = interpolate_epoch_zeros(y)  # remove nan
-    #     y = interpolate_epochs_nan(y)  # remove nan
-    #     assert np.sum(np.isnan(y)) == 0
-    #     y = np.mean(y, axis=1)  # average left and right
-    #     # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-    #
-    #     y = np.mean(y, axis=0)
-    #     y = y - y[int(abs(tmin) * srate)]  # baseline correct
-    #     y1 = y + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-    #     y2 = y - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-    #
-    #     time_vector = np.linspace(tmin, tmax, y.shape[-1])
-    #     plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-    #                      interpolate=True,
-    #                      alpha=0.5)
-    #     plt.plot(time_vector, y, c=color_dict[event_name],
-    #              label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
-    # plt.xlabel('Time (sec)')
-    # plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
-    # plt.legend()
-    # plt.title(title)
-    # plt.show()
-
+    for event_name, event_marker_id in event_ids.items():
+        epochs[event_name].resample(sfreq=resample_srate).average().plot_topomap(times=np.linspace(evoked.tmin, evoked.tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
 
 
 def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,

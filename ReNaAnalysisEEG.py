@@ -11,8 +11,10 @@ from utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs
 
 #################################################################################################
+is_dats_preloaded = True
+is_epochs_prelaoded = True
 
-data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-test"
+data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
 eventMarker_conditionIndex_dict = {'RSVP': slice(0, 4),
                                    'Carousel': slice(4, 8),
                                    # 'VS': slice(8, 12),
@@ -51,74 +53,85 @@ for participant, participant_directory in zip(participant_list, participant_dire
                                                                                         i)]]
 
 # preload all the .dats
-# TODO parallelize loading of .dats
-print("Preloading .dats")
-for participant_index, session_dict in participant_session_dict.items():
-    print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
-    for session_index, session_files in session_dict.items():
-        print("Session {0} of {1}".format(session_index + 1, len(session_dict)))
-        data_path, item_catalog_path, session_log_path = session_files
-        data = RNStream(data_path).stream_in(ignore_stream=('monitor1'), jitter_removal=False)
-        participant_session_dict[participant_index][session_index][0] = data
-dats_loading_end_time = time.time()
-# save the preloaded .dats
-pickle.dump(participant_session_dict, open('participant_session_dict.p', 'wb'))
-print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
 
-for participant_index, session_dict in participant_session_dict.items():
-    print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
-    for session_index, session_files in session_dict.items():
-        data, item_catalog_path, session_log_path = session_files
-        item_catalog = json.load(open(item_catalog_path))
-        session_log = json.load(open(session_log_path))
-        item_codes = list(item_catalog.values())
+if not is_epochs_prelaoded:
+    if not is_dats_preloaded:
+        print("Preloading .dats")  # TODO parallelize loading of .dats
+        for participant_index, session_dict in participant_session_dict.items():
+            print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
+            for session_index, session_files in session_dict.items():
+                print("Session {0} of {1}".format(session_index + 1, len(session_dict)))
+                data_path, item_catalog_path, session_log_path = session_files
+                data = RNStream(data_path).stream_in(ignore_stream=('monitor1'), jitter_removal=False)
+                participant_session_dict[participant_index][session_index][0] = data
+        # save the preloaded .dats
+        pickle.dump(participant_session_dict, open('participant_session_dict.p', 'wb'))
+    else:
+        print("Loading preloaded sessions...")
+        participant_session_dict = pickle.load(open('participant_session_dict.p', 'rb'))
 
-        # markers
-        event_markers_timestamps = data['Unity.ReNa.EventMarkers'][1]
-        # itemMarkers = data['Unity.ReNa.ItemMarkers'][0]
-        # itemMarkers_timestamps = data['Unity.ReNa.ItemMarkers'][1]
+    dats_loading_end_time = time.time()
+    print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
 
-        # data
-        varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
-        varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
+    for participant_index, session_dict in participant_session_dict.items():
+        print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
+        for session_index, session_files in session_dict.items():
+            data, item_catalog_path, session_log_path = session_files
+            item_catalog = json.load(open(item_catalog_path))
+            session_log = json.load(open(session_log_path))
+            item_codes = list(item_catalog.values())
 
-        eyetracking_timestamps = data['Unity.VarjoEyeTrackingComplete'][1]
-        eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0]
+            # markers
+            event_markers_timestamps = data['Unity.ReNa.EventMarkers'][1]
+            # itemMarkers = data['Unity.ReNa.ItemMarkers'][0]
+            # itemMarkers_timestamps = data['Unity.ReNa.ItemMarkers'][1]
 
-        eeg_timestamps = data['BioSemi'][1]
-        eeg_data = data['BioSemi'][0][1:65, :]  # take only the EEG channels
+            # data
+            varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
+            varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
 
-        for condition_name, condition_event_marker_index in eventMarker_conditionIndex_dict.items():
-            print("Processing Condition {0} for participant {1}".format(condition_name, participant_index))
-            event_markers = data['Unity.ReNa.EventMarkers'][0][condition_event_marker_index]
+            eyetracking_timestamps = data['Unity.VarjoEyeTrackingComplete'][1]
+            eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0]
 
-            _epochs_pupil, _event_labels = generate_pupil_event_epochs(event_markers,
+            eeg_timestamps = data['BioSemi'][1]
+            eeg_data = data['BioSemi'][0][1:65, :]  # take only the EEG channels
+
+            for condition_name, condition_event_marker_index in eventMarker_conditionIndex_dict.items():
+                print("Processing Condition {0} for participant {1}".format(condition_name, participant_index))
+                event_markers = data['Unity.ReNa.EventMarkers'][0][condition_event_marker_index]
+
+                _epochs_pupil, _event_labels = generate_pupil_event_epochs(event_markers,
+                                                                           event_markers_timestamps,
+                                                                           eyetracking_data,
+                                                                           eyetracking_timestamps,
+                                                                           varjoEyetracking_channelNames,
+                                                                           session_log,
+                                                                           item_codes, tmin_pupil, tmax_pupil,
+                                                                           event_ids, color_dict,
+                                                                           is_plotting=False)
+
+                _epochs_eeg, _event_labels = generate_eeg_event_epochs(event_markers,
                                                                        event_markers_timestamps,
-                                                                       eyetracking_data,
-                                                                       eyetracking_timestamps,
-                                                                       varjoEyetracking_channelNames,
+                                                                       eeg_data,
+                                                                       eeg_timestamps,
                                                                        session_log,
-                                                                       item_codes, tmin_pupil, tmax_pupil,
-                                                                       event_ids, color_dict,
-                                                                       is_plotting=False)
+                                                                       item_codes, tmin_eeg, tmax_eeg,
+                                                                       event_ids)
 
-            _epochs_eeg, _event_labels = generate_eeg_event_epochs(event_markers,
-                                                                   event_markers_timestamps,
-                                                                   eeg_data,
-                                                                   eeg_timestamps,
-                                                                   session_log,
-                                                                   item_codes, tmin_eeg, tmax_eeg,
-                                                                   event_ids)
+                if condition_name not in participant_condition_epoch_dict[participant_index].keys():
+                    participant_condition_epoch_dict[participant_index][condition_name] = (_epochs_pupil, _epochs_eeg)
+                else:
+                    participant_condition_epoch_dict[participant_index][condition_name] = (
+                        mne.concatenate_epochs(
+                        [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
+                        mne.concatenate_epochs(
+                            [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_eeg])
+                    )
 
-            if condition_name not in participant_condition_epoch_dict[participant_index].keys():
-                participant_condition_epoch_dict[participant_index][condition_name] = (_epochs_pupil, _epochs_eeg)
-            else:
-                participant_condition_epoch_dict[participant_index][condition_name] = (
-                    mne.concatenate_epochs(
-                    [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
-                    mne.concatenate_epochs(
-                        [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_eeg])
-                )
+    pickle.dump(participant_condition_epoch_dict, open('participant_condition_epoch_dict.p', 'wb'))
+else:  # if epochs are preloaded and saved
+    print("Loading preloaded epochs")
+    participant_condition_epoch_dict = pickle.load(open('participant_condition_epoch_dict.p', 'rb'))
 
 
 # get all the epochs for condition RSVP
