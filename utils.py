@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import scipy
 from scipy.interpolate import interp1d
@@ -411,51 +413,71 @@ def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_m
 
 
 def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, srate=200):
+    # epochs = epochs.apply_baseline((0.0, 0.0))
     for event_name, event_marker_id in event_ids.items():
         y = epochs[event_name].get_data()
         y = interpolate_epoch_zeros(y)  # remove nan
         y = interpolate_epochs_nan(y)  # remove nan
         assert np.sum(np.isnan(y)) == 0
+        if len(y) == 0:
+            print("visualize_pupil_epochs: all epochs bad, skipping {0}".format(event_name))
+            continue
         y = np.mean(y, axis=1)  # average left and right
-        # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+        y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+        #
+        # # y = y - y[int(abs(tmin) * srate)]  # baseline correct
+        # y_mean = np.mean(y, axis=0)
+        # y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+        # y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
+        #
+        # time_vector = np.linspace(tmin, tmax, y.shape[-1])
+        # plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+        #                  interpolate=True,
+        #                  alpha=0.5)
+        # plt.plot(time_vector, y_mean, c=color_dict[event_name],
+        #          label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
 
-        y = np.mean(y, axis=0)
-        y = y - y[int(abs(tmin) * srate)]  # baseline correct
-        y1 = y + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-        y2 = y - scipy.stats.sem(y, axis=0)  # this is the lower envelope
+        y_mean = np.mean(y, axis=0)
+        y_mean = y_mean - y_mean[int(abs(tmin) * srate)]  # baseline correct
+        y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+        y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
 
         time_vector = np.linspace(tmin, tmax, y.shape[-1])
         plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
                          interpolate=True,
                          alpha=0.5)
-        plt.plot(time_vector, y, c=color_dict[event_name],
-                 label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+        plt.plot(time_vector, y_mean, c=color_dict[event_name],label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
     plt.legend()
     plt.title(title)
     plt.show()
 
-def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title, resample_srate=50):
+
+def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title, resample_srate=50, out_dir=None):
     for ch in picks:
         for event_name, event_marker_id in event_ids.items():
             y = epochs[event_name].resample(sfreq=resample_srate).pick_channels([ch]).get_data().squeeze(1)
-            y = np.mean(y, axis=0)
-            y1 = y + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-            y2 = y - scipy.stats.sem(y, axis=0)
+            y_mean = np.mean(y, axis=0)
+            y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+            y2 = y_mean - scipy.stats.sem(y, axis=0)
 
             time_vector = np.linspace(tmin, tmax, y.shape[-1])
             plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
                              interpolate=True,
                              alpha=0.5)
-            plt.plot(time_vector, y, c=color_dict[event_name],
+            plt.plot(time_vector, y_mean, c=color_dict[event_name],
                      label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
         plt.xlabel('Time (sec)')
         plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
         plt.legend()
-        plt.title('{0}, Channel {1}'.format(title, ch))
-        plt.show()
-        pass
+        plt.title('{0} - Channel {1}'.format(title, ch))
+        if out_dir:
+            plt.savefig(os.path.join(out_dir, '{0} - Channel {1}.png'.format(title, ch)))
+            plt.clf()
+        else: plt.show()
+
     # get the min and max for plotting the topomap
     biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
     data_channel_names = biosemi_64_montage.ch_names
@@ -464,8 +486,8 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
     vmax_EEG = np.max(evoked.get_data())
     vmin_EEG = np.min(evoked.get_data())
 
-    for event_name, event_marker_id in event_ids.items():
-        epochs[event_name].resample(sfreq=resample_srate).average().plot_topomap(times=np.linspace(evoked.tmin, evoked.tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
+    # for event_name, event_marker_id in event_ids.items():
+    #     epochs[event_name].resample(sfreq=resample_srate).average().plot_topomap(times=np.linspace(evoked.tmin, evoked.tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
 
 
 def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,

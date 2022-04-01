@@ -21,9 +21,9 @@ y = np.load('C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/
 x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=3, shuffle=True)
 
 # test the ANN
-# history_ann = build_train_ann(x_train, x_test, y_train, y_test)
-# plot_train_history(history_ann, note=str(scn) + ' ANN')
-# eval = history_ann.model.evaluate(x=x_test, y=y_test)
+history_ann = build_train_ann(x_train, x_test, y_train, y_test)
+plot_train_history(history_ann, note=str(scn) + ' ANN')
+eval = history_ann.model.evaluate(x=x_test, y=y_test)
 
 # # test the RNN
 # history_rnn = build_train_rnn(x_train, x_test, y_train, y_test)
@@ -36,9 +36,9 @@ x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random
 # eval = history_cnn.model.evaluate(x=x_test, y=y_test)
 
 # test the BIRNN_attention
-history_brnn = build_train_birnn_with_attention(x_train, x_test, y_train, y_test)
-plot_train_history(history_brnn, note=str(scn) + ' BIRNN_attention')
-eval = history_brnn.model.evaluate(x=x_test, y=y_test)
+# history_brnn = build_train_birnn_with_attention(x_train, x_test, y_train, y_test)
+# plot_train_history(history_brnn, note=str(scn) + ' BIRNN_attention')
+# eval = history_brnn.model.evaluate(x=x_test, y=y_test)
 
 
 

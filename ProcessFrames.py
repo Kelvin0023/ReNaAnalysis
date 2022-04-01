@@ -50,8 +50,8 @@ for i, image in enumerate(images):
     img = add_bounding_box(img, gaze_x, gaze_y, 100, 70, peripheri_color)
 
     video.write(img)
-    # if i == 200:
-    #     break
+    if i == 3000:
+        break
 
 cv2.destroyAllWindows()
 video.release()
