@@ -11,11 +11,12 @@ from utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs
 
 #################################################################################################
-is_dats_preloaded = True
-is_epochs_prelaoded = True
-is_save_data = False
+is_data_preloaded = True
+is_epochs_preloaded = False
+is_save_loaded_data = False
 
-data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Test"
+preloaded_dats_path = 'participant_session_dict.p'
+data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
 eventMarker_conditionIndex_dict = {'RSVP': slice(0, 4),
                                    'Carousel': slice(4, 8),
                                    # 'VS': slice(8, 12),
@@ -40,33 +41,39 @@ participant_list = os.listdir(data_root)
 participant_directory_list = [os.path.join(data_root, x) for x in participant_list]
 
 participant_session_dict = defaultdict(dict)  # create a dict that holds participant -> sessions -> list of sessionFiles
-participant_condition_epoch_dict = defaultdict(dict)  # create a dict that holds participant -> condition epochs
+participant_condition_epoch_dict = defaultdict(dict)
+# create a dict that holds participant -> condition epochs
 for participant, participant_directory in zip(participant_list, participant_directory_list):
     file_names = os.listdir(participant_directory)
-    assert len(file_names) % 3 == 0
+    # assert len(file_names) % 3 == 0
     # must have #files divisible by 3. That is, we have a itemCatalog, SessionLog and data file for each experiment session.
-    num_sessions = int(len(file_names) / 3)
-    for i in range(num_sessions): participant_session_dict[participant][i] = [os.path.join(participant_directory, x) for
-                                                                              x in ['{0}.dats'.format(i),
-                                                                                    '{0}_ReNaItemCatalog.json'.format(
-                                                                                        i),
-                                                                                    '{0}_ReNaSessionLog.json'.format(
-                                                                                        i)]]
+    num_sessions = flatten_list([[int(s) for s in txt if s.isdigit()] for txt in file_names])
+    num_sessions = len(np.unique(num_sessions))
+    for i in range(num_sessions):
+        participant_session_dict[participant][i] = [os.path.join(participant_directory, x) for
+                                                    x in ['{0}.dats'.format(i),
+                                                          '{0}_ReNaItemCatalog.json'.format(i),
+                                                          '{0}_ReNaSessionLog.json'.format(i),
+                                                          '{0}_ParticipantSessionICA'.format(i)]]  # file path for ICA solution and
 
 # preload all the .dats
-
-if not is_epochs_prelaoded:
-    if not is_dats_preloaded:
+if not is_epochs_preloaded:
+    if not is_data_preloaded:
         print("Preloading .dats")  # TODO parallelize loading of .dats
         for participant_index, session_dict in participant_session_dict.items():
             print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
             for session_index, session_files in session_dict.items():
                 print("Session {0} of {1}".format(session_index + 1, len(session_dict)))
-                data_path, item_catalog_path, session_log_path = session_files
-                data = RNStream(data_path).stream_in(ignore_stream=('monitor1'), jitter_removal=False)
+                data_path, item_catalog_path, session_log_path, session_ICA_path = session_files
+                if os.path.exists(
+                        data_path.replace('dats', 'p')):  # load pickle if it's available as it is faster than dats
+                    data = pickle.load(open(data_path.replace('dats', 'p'), 'rb'))
+                else:
+                    data = RNStream(data_path).stream_in(ignore_stream=('monitor1'), jitter_removal=False)
                 participant_session_dict[participant_index][session_index][0] = data
         # save the preloaded .dats
-        if is_save_data: pickle.dump(participant_session_dict, open('participant_session_dict.p', 'wb'))
+        print("Saving preloaded sessions...")
+        if is_save_loaded_data: pickle.dump(participant_session_dict, open(preloaded_dats_path, 'wb'))
     else:
         print("Loading preloaded sessions...")
         participant_session_dict = pickle.load(open('participant_session_dict.p', 'rb'))
@@ -77,7 +84,7 @@ if not is_epochs_prelaoded:
     for participant_index, session_dict in participant_session_dict.items():
         print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
         for session_index, session_files in session_dict.items():
-            data, item_catalog_path, session_log_path = session_files
+            data, item_catalog_path, session_log_path, session_ICA_path = session_files
             item_catalog = json.load(open(item_catalog_path))
             session_log = json.load(open(session_log_path))
             item_codes = list(item_catalog.values())
@@ -96,6 +103,7 @@ if not is_epochs_prelaoded:
 
             eeg_timestamps = data['BioSemi'][1]
             eeg_data = data['BioSemi'][0][1:65, :]  # take only the EEG channels
+            ecg_data = data['BioSemi'][0][65:67, :]  # take only the EEG channels
 
             for condition_name, condition_event_marker_index in eventMarker_conditionIndex_dict.items():
                 print("Processing Condition {0} for participant {1}".format(condition_name, participant_index))
@@ -111,50 +119,54 @@ if not is_epochs_prelaoded:
                                                                            event_ids, color_dict,
                                                                            is_plotting=False)
 
-                _epochs_eeg, _event_labels = generate_eeg_event_epochs(event_markers,
+                _epochs_eeg, _epochs_eeg_ICA_cleaned, _event_labels = generate_eeg_event_epochs(event_markers,
                                                                        event_markers_timestamps,
                                                                        eeg_data,
+                                                                       ecg_data,
                                                                        eeg_timestamps,
                                                                        session_log,
-                                                                       item_codes, tmin_eeg, tmax_eeg,
+                                                                       item_codes,
+                                                                       session_ICA_path,
+                                                                       tmin_eeg, tmax_eeg,
                                                                        event_ids)
 
                 if condition_name not in participant_condition_epoch_dict[participant_index].keys():
-                    participant_condition_epoch_dict[participant_index][condition_name] = (_epochs_pupil, _epochs_eeg)
+                    participant_condition_epoch_dict[participant_index][condition_name] = (_epochs_pupil, _epochs_eeg, _epochs_eeg_ICA_cleaned)
                 else:
                     participant_condition_epoch_dict[participant_index][condition_name] = (
                         mne.concatenate_epochs(
-                        [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
+                            [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
                         mne.concatenate_epochs(
-                            [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_eeg])
+                            [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_eeg]),
+                        mne.concatenate_epochs(
+                        [participant_condition_epoch_dict[participant_index][condition_name][2], _epochs_eeg_ICA_cleaned])
                     )
 
-    if is_save_data: pickle.dump(participant_condition_epoch_dict, open('participant_condition_epoch_dict.p', 'wb'))
+    if is_save_loaded_data: pickle.dump(participant_condition_epoch_dict, open('participant_condition_epoch_dict.p', 'wb'))
 else:  # if epochs are preloaded and saved
     print("Loading preloaded epochs")
     participant_condition_epoch_dict = pickle.load(open('participant_condition_epoch_dict.p', 'rb'))
 
-
 # get all the epochs for conditions and plots per condition
-# for condition_name in eventMarker_conditionIndex_dict.keys():
-#     condition_epoch_list = flatten_list([x.items() for x in participant_condition_epoch_dict.values()])
-#     condition_epochs = [e for c, e in condition_epoch_list if c == condition_name]
-#     condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, eeg in condition_epochs])
-#     condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg in condition_epochs])
-#     title = 'Averaged across Participants, Condition {0}'.format(condition_name)
-#     visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
-#     visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title, resample_srate=50)
+for condition_name in eventMarker_conditionIndex_dict.keys():
+    condition_epoch_list = flatten_list([x.items() for x in participant_condition_epoch_dict.values()])
+    condition_epochs = [e for c, e in condition_epoch_list if c == condition_name]
+    condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, eeg in condition_epochs])
+    condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg in condition_epochs])
+    title = 'Averaged across Participants, Condition {0}'.format(condition_name)
+    visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
+    visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title, resample_srate=50)
 
 
 # get all the epochs and plots per participant
-for participant_index, condition_epoch_dict in participant_condition_epoch_dict.items():
-    for condition_name, condition_epochs in condition_epoch_dict.items():
-        condition_epochs_pupil = condition_epochs[0]
-        condition_epochs_eeg = condition_epochs[1]
-        title = 'Participants {0} - Condition {1}'.format(participant_index, condition_name)
-        visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
-        visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title, resample_srate=50, out_dir='out')
-
+# for participant_index, condition_epoch_dict in participant_condition_epoch_dict.items():
+#     for condition_name, condition_epochs in condition_epoch_dict.items():
+#         condition_epochs_pupil = condition_epochs[0]
+#         condition_epochs_eeg = condition_epochs[1]
+#         title = 'Participants {0} - Condition {1}'.format(participant_index, condition_name)
+#         visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
+#         visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title,
+#                              resample_srate=50, out_dir='out')
 
 end_time = time.time()
 print("Took {0} seconds".format(end_time - start_time))

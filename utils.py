@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import scipy
+from mne.preprocessing import create_ecg_epochs
 from scipy.interpolate import interp1d
 import json
 import imageio
@@ -285,11 +286,14 @@ def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_arr
     return epochs_pupil, labels_array
 
 
-def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps,
-                              session_log,
-                              item_codes, tmin, tmax, event_ids, lowcut=0.5, highcut=50., notch_band_demoninator=200,
-
-                              srate=2048):  # use a fixed sampling rate for the sampling rate to match between recordings
+def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array_EEG, data_array_ECG, data_timestamps,
+                              session_log, item_codes, ica_path, tmin, tmax, event_ids, lowcut=1, highcut=50., notch_band_demoninator=200,
+                              srate=2048, ecg_ch_name= 'ECG00'):  # use a fixed sampling rate for the sampling rate to match between recordings
+    # scale data array to use Volts, the data array from LSL is in uV
+    data_array_EEG = data_array_EEG * 1e-6
+    data_array_ECG = data_array_ECG * 1e-6
+    data_array_ECG = (data_array_ECG[0] - data_array_ECG[1])[None, :]
+    data_array = np.concatenate([data_array_EEG, data_array_ECG])
     # interpolate nan's
     eeg_with_event_marker_data = add_eventMarkers_LSLTimestamp_to_data(event_markers,
                                                                        event_marker_timestamps,
@@ -299,9 +303,9 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
     biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
     data_channel_names = biosemi_64_montage.ch_names
     info = mne.create_info(
-        ['LSLTimestamp'] + data_channel_names + ['EventMarker'] + ["info1", "info2", "info3"],
+        ['LSLTimestamp'] + data_channel_names + [ecg_ch_name] + ['EventMarker'] + ["info1", "info2", "info3"],
         sfreq=srate,
-        ch_types=['misc'] + ['eeg'] * len(data_channel_names) + ['stim'] + [
+        ch_types=['misc'] + ['eeg'] * len(data_channel_names) + ['ecg'] + ['stim'] + [
             'misc'] * 3)  # with 3 additional info markers
     raw = mne.io.RawArray(eeg_with_event_marker_data, info)
     raw.set_montage(biosemi_64_montage)
@@ -317,10 +321,50 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
                     preload=True,
                     verbose=False,
                     reject=reject)
-    # verbose=False, picks=['left_pupil_size', 'right_pupil_size', 'status', 'left_status', 'right_status'])
+    # check if ica for this participant and session exists, create one if not
+
+    if os.path.exists(ica_path + '.txt') and os.path.exists(ica_path + '-ica.fif'):
+        ica = mne.preprocessing.read_ica(ica_path + '-ica.fif')
+        with open(ica_path + '.txt', 'r') as filehandle:
+            ica.exclude = [int(line.rstrip()) for line in filehandle.readlines()]
+
+        print('Found and loaded existing ICA file', end='')
+    else:
+        ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
+        ica.fit(raw, picks='eeg')
+        ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name=ecg_ch_name, method='correlation',
+                                                    threshold='auto')
+        # ica.plot_scores(ecg_scores)
+        if len(ecg_indices) > 0:
+            [print('Found ECG component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, ecg_scores[x])) for x in ecg_indices]
+            ica.exclude += ecg_indices
+        else:
+            print('No channel found to be significantly correlated with ECG, skipping auto ECG artifact removal')
+        ica.plot_sources(raw)
+        ica.plot_components()
+        ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
+        ica.exclude += [int(x) for x in ica_excludes.split(' ')]
+        f = open(ica_path + '.txt', "w")
+        f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
+        f.close()
+        ica.save(ica_path + '-ica.fif')
+
+        print('Saving ICA components', end='')
+    print(': ICA exlucde component {0}'.format(str(ica.exclude)))
+    reconst_raw = raw.copy()
+    ica.apply(reconst_raw)
+    # raw.plot(scalings='auto')
+    # reconst_raw.plot(show_scrollbars=False, scalings='auto')
+
+    epochs_ICA_cleaned = Epochs(reconst_raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
+                    tmax=tmax,
+                    baseline=(-0.1, 0.0),
+                    preload=True,
+                    verbose=False,
+                    reject=reject)
 
     labels_array = epochs.events[:, 2]
-    return epochs, labels_array
+    return epochs, epochs_ICA_cleaned, labels_array
 
 
 def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
