@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import scipy
+from mne.io import RawArray
 from mne.preprocessing import create_ecg_epochs
 from scipy.interpolate import interp1d
 import json
@@ -61,11 +62,11 @@ def interpolate_epoch_zeros(e):
 
 def add_eventMarkers_LSLTimestamp_to_data(event_markers, event_marker_timestamps, data_array, data_timestamps,
                                           session_log,
-                                          item_codes):
+                                          item_codes, srate, pre_block_time=1, post_block_time=1):
     block_num = None
     assert event_markers.shape[0] == 4
     data_event_marker_array = np.zeros(shape=(4, data_array.shape[1]))
-
+    first_block_start_index = None
     for i in range(event_markers.shape[1]):
         event, info1, info2, info3 = event_markers[:, i]
         data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
@@ -74,9 +75,11 @@ def add_eventMarkers_LSLTimestamp_to_data(event_markers, event_marker_timestamps
             # print('Processing block with ID: {0}'.format(event))
             block_num = event
             data_event_marker_array[0][data_event_marker_index] = 4  # encodes start of a block
+            if first_block_start_index is None: first_block_start_index = data_event_marker_index
             continue
         elif event_markers[0, i - 1] != 0 and event == 0:  # this is the end of a block
             data_event_marker_array[0][data_event_marker_index] = 5  # encodes start of a block
+            final_block_end_index = data_event_marker_index
             continue
 
         if event in item_codes:  # for item events
@@ -91,13 +94,37 @@ def add_eventMarkers_LSLTimestamp_to_data(event_markers, event_marker_timestamps
             elif event in novelties:
                 data_event_marker_array[0][data_event_marker_index] = 3
             data_event_marker_array[1:4, data_event_marker_index] = info1, info2, info3
-            # print('    Item event {0} is novelty with info {1}'.format(event, str(data_event_marker_array[0:4,
-            #                                                                       data_event_marker_index])))
 
-    return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
+    # remove the data before and after the last event
+    out = np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
+    out = out[:, first_block_start_index - srate * pre_block_time:final_block_end_index + srate * post_block_time]
+    return out
     # return np.concatenate(
     #     [np.expand_dims(data_timestamps, axis=0), data_array[1:, :], data_event_marker_array],
     #     axis=0)  # TODO because LSL cannot stream the raw nano second timestamp, we use the LSL timestamp instead. Convert the timestamps in second to nanosecond to comply with gaze detection code
+
+
+def add_design_matrix_to_data(data_array, event_marker_index, srate, erp_window, event_type_of_interest=(1, 2, 3)):
+    '''
+    expect data_array to have be of shape [time, LSLTimestamp(x 1)+data(x n)+event_markers(x n)]
+    :param data_eventMarker_array_:
+    :param event_type_of_interest: 1, 2, 3 only interested in targets distrctors and novelties
+    :return:
+    '''
+    # get the event marker array
+    eventMarker_array = data_array[event_marker_index]
+    num_samples_erp_window = int(srate * (erp_window[1] - erp_window[0]))
+    design_matrix = np.zeros((len(event_type_of_interest) * num_samples_erp_window, data_array.shape[1]))
+    event_indices = [((flatten_list(np.argwhere(eventMarker_array == event_type)))) for event_type in event_type_of_interest]
+    event_indices = flatten_list([[(e, event_type) for e in events] for event_type, events in zip(event_type_of_interest, event_indices)])
+    for event_index, event_type in event_indices:
+        dm_time_start_index = event_index
+        dm_erpTime_start_index = (event_type - 1) * num_samples_erp_window
+        for i in range(num_samples_erp_window):
+            assert design_matrix[dm_erpTime_start_index+i, dm_time_start_index+i] == 0  # there cannot be overlapping events in the design matrix
+            design_matrix[dm_erpTime_start_index+i, dm_time_start_index+i] = 1
+    design_matrix_channel_names = flatten_list([['DM_E{0}_T{1}'.format(e_type, i) for i in range(num_samples_erp_window)] for e_type in event_type_of_interest])
+    return np.concatenate([data_array, design_matrix], axis=0), design_matrix, design_matrix_channel_names
 
 
 def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
@@ -189,11 +216,10 @@ def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, 
     return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
 
 
-def extract_block_data(data_with_event_marker, data_channel_names, block_end_margin_seconds,
-                       srate):  # event markers is the third last row
+def extract_block_data(data_with_event_marker, srate, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
     # TODO add block end margins and use parameters block_end_margin_seconds
-    block_starts = np.argwhere(data_with_event_marker[-4, :] == 4)  # start of a block is denoted by event marker 4
-    block_ends = np.argwhere(data_with_event_marker[-4, :] == 5)  # end of a block is denoted by event marker 5
+    block_starts = np.argwhere(data_with_event_marker[-4, :] == 4) - int(pre_block_time * srate)# start of a block is denoted by event marker 4
+    block_ends = np.argwhere(data_with_event_marker[-4, :] == 5) + int( pre_block_time * srate)  # end of a block is denoted by event marker 5
     block_sequences = [data_with_event_marker[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]
     # block_sequences_resampled = []
     # # resample each block to be 100 Hz
@@ -213,12 +239,14 @@ def extract_block_data(data_with_event_marker, data_channel_names, block_end_mar
 def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
                                 session_log,
                                 item_codes, tmin, tmax, event_ids, color_dict, title='', is_plotting=True,
-                                srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
+                                srate=200,
+                                verbose='WARNING'):  # use a fixed sampling rate for the sampling rate to match between recordings
+    mne.set_log_level(verbose=verbose)
     eyetracking_with_event_marker_data = add_eventMarkers_LSLTimestamp_to_data(event_markers,
                                                                                event_marker_timestamps,
                                                                                data_array,
                                                                                data_timestamps, session_log,
-                                                                               item_codes)
+                                                                               item_codes, srate)
 
     info = mne.create_info(
         ['LSLTimestamp'] + data_channel_names + ['EventMarker'] + ["info1", "info2", "info3"],
@@ -287,32 +315,88 @@ def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_arr
 
 
 def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array_EEG, data_array_ECG, data_timestamps,
-                              session_log, item_codes, ica_path, tmin, tmax, event_ids, lowcut=1, highcut=50., notch_band_demoninator=200,
-                              srate=2048, ecg_ch_name= 'ECG00'):  # use a fixed sampling rate for the sampling rate to match between recordings
+                              session_log, item_codes, ica_path, tmin, tmax, event_ids, is_regenerate_ica, lowcut=1,
+                              highcut=50., notch_band_demoninator=200,
+                              srate=2048, resample_srate=128, erp_window=(.0, .8), verbose='WARNING',
+                              ecg_ch_name='ECG00'):  # use a fixed sampling rate for the sampling rate to match between recordings
+    mne.set_log_level(verbose=verbose)
     # scale data array to use Volts, the data array from LSL is in uV
     data_array_EEG = data_array_EEG * 1e-6
     data_array_ECG = data_array_ECG * 1e-6
     data_array_ECG = (data_array_ECG[0] - data_array_ECG[1])[None, :]
     data_array = np.concatenate([data_array_EEG, data_array_ECG])
     # interpolate nan's
-    eeg_with_event_marker_data = add_eventMarkers_LSLTimestamp_to_data(event_markers,
+    data_eeg_eventMarker = add_eventMarkers_LSLTimestamp_to_data(event_markers,
                                                                        event_marker_timestamps,
                                                                        data_array,
                                                                        data_timestamps, session_log,
-                                                                       item_codes)
+                                                                       item_codes, srate)
+
     biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
     data_channel_names = biosemi_64_montage.ch_names
     info = mne.create_info(
         ['LSLTimestamp'] + data_channel_names + [ecg_ch_name] + ['EventMarker'] + ["info1", "info2", "info3"],
         sfreq=srate,
-        ch_types=['misc'] + ['eeg'] * len(data_channel_names) + ['ecg'] + ['stim'] + [
-            'misc'] * 3)  # with 3 additional info markers
-    raw = mne.io.RawArray(eeg_with_event_marker_data, info)
+        ch_types=['misc'] + ['eeg'] * len(data_channel_names) + ['ecg'] + ['stim'] + ['stim'] * 3)  # with 3 additional info markers and design matrix
+    raw = mne.io.RawArray(data_eeg_eventMarker, info)
     raw.set_montage(biosemi_64_montage)
     raw, _ = mne.set_eeg_reference(raw, 'average',
                                    projection=False)
     raw = raw.filter(l_freq=lowcut, h_freq=highcut)  # bandpass filter
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto')
+    raw = raw.resample(resample_srate)
+
+    # recreate raw with design matrix
+    data_array_with_dm, design_matrix, dm_ch_names = add_design_matrix_to_data(raw.get_data(), -4, resample_srate, erp_window=erp_window)
+
+    info = mne.create_info(
+        ['LSLTimestamp'] + data_channel_names + [ecg_ch_name] + ['EventMarker'] + ["info1", "info2", "info3"] + dm_ch_names,
+        sfreq=resample_srate,
+        ch_types=['misc'] + ['eeg'] * len(data_channel_names) + ['ecg'] + ['stim'] + ['stim'] * 3 + len(dm_ch_names) * ['stim'])  # with 3 additional info markers and design matrix
+    raw = mne.io.RawArray(data_array_with_dm, info)
+    raw.set_montage(biosemi_64_montage)
+
+    # import matplotlib as mpl
+    # import matplotlib.pyplot as plt
+    # mpl.use('Qt5Agg')
+    # raw.plot(scalings='auto')
+
+    # check if ica for this participant and session exists, create one if not
+    if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
+        ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
+        ica.fit(raw, picks='eeg')
+        ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name=ecg_ch_name, method='correlation',
+                                                    threshold='auto')
+        # ica.plot_scores(ecg_scores)
+        if len(ecg_indices) > 0:
+            [print(
+                'Found ECG component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, ecg_scores[x]))
+             for x in ecg_indices]
+            ica.exclude += ecg_indices
+        else:
+            print('No channel found to be significantly correlated with ECG, skipping auto ECG artifact removal')
+        ica.plot_sources(raw)
+        ica.plot_components()
+        ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
+        if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ')]
+        f = open(ica_path + '.txt', "w")
+        f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
+        f.close()
+        ica.save(ica_path + '-ica.fif', overwrite=True)
+
+        print('Saving ICA components', end='')
+    else:
+        ica = mne.preprocessing.read_ica(ica_path + '-ica.fif')
+        with open(ica_path + '.txt', 'r') as filehandle:
+            ica.exclude = [int(line.rstrip()) for line in filehandle.readlines()]
+
+        print('Found and loaded existing ICA file', end='')
+
+    print(': ICA exlucde component {0}'.format(str(ica.exclude)))
+    raw_ica_recon = raw.copy()
+    ica.apply(raw_ica_recon)
+    # raw.plot(scalings='auto')
+    # reconst_raw.plot(show_scrollbars=False, scalings='auto')
 
     reject = dict(eeg=600.)  # DO NOT reject or we will have a mismatch between EEG and pupil
     epochs = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
@@ -321,50 +405,17 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
                     preload=True,
                     verbose=False,
                     reject=reject)
-    # check if ica for this participant and session exists, create one if not
 
-    if os.path.exists(ica_path + '.txt') and os.path.exists(ica_path + '-ica.fif'):
-        ica = mne.preprocessing.read_ica(ica_path + '-ica.fif')
-        with open(ica_path + '.txt', 'r') as filehandle:
-            ica.exclude = [int(line.rstrip()) for line in filehandle.readlines()]
-
-        print('Found and loaded existing ICA file', end='')
-    else:
-        ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
-        ica.fit(raw, picks='eeg')
-        ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name=ecg_ch_name, method='correlation',
-                                                    threshold='auto')
-        # ica.plot_scores(ecg_scores)
-        if len(ecg_indices) > 0:
-            [print('Found ECG component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, ecg_scores[x])) for x in ecg_indices]
-            ica.exclude += ecg_indices
-        else:
-            print('No channel found to be significantly correlated with ECG, skipping auto ECG artifact removal')
-        ica.plot_sources(raw)
-        ica.plot_components()
-        ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
-        ica.exclude += [int(x) for x in ica_excludes.split(' ')]
-        f = open(ica_path + '.txt', "w")
-        f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
-        f.close()
-        ica.save(ica_path + '-ica.fif')
-
-        print('Saving ICA components', end='')
-    print(': ICA exlucde component {0}'.format(str(ica.exclude)))
-    reconst_raw = raw.copy()
-    ica.apply(reconst_raw)
-    # raw.plot(scalings='auto')
-    # reconst_raw.plot(show_scrollbars=False, scalings='auto')
-
-    epochs_ICA_cleaned = Epochs(reconst_raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
-                    tmax=tmax,
-                    baseline=(-0.1, 0.0),
-                    preload=True,
-                    verbose=False,
-                    reject=reject)
+    epochs_ICA_cleaned = Epochs(raw_ica_recon, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids,
+                                tmin=tmin,
+                                tmax=tmax,
+                                baseline=(-0.1, 0.0),
+                                preload=True,
+                                verbose=False,
+                                reject=reject)
 
     labels_array = epochs.events[:, 2]
-    return epochs, epochs_ICA_cleaned, labels_array
+    return epochs, epochs_ICA_cleaned, labels_array, raw, raw_ica_recon
 
 
 def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
@@ -490,7 +541,8 @@ def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, sra
         plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
                          interpolate=True,
                          alpha=0.5)
-        plt.plot(time_vector, y_mean, c=color_dict[event_name],label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+        plt.plot(time_vector, y_mean, c=color_dict[event_name],
+                 label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
 
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
@@ -520,7 +572,8 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
         if out_dir:
             plt.savefig(os.path.join(out_dir, '{0} - Channel {1}.png'.format(title, ch)))
             plt.clf()
-        else: plt.show()
+        else:
+            plt.show()
 
     # get the min and max for plotting the topomap
     biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
@@ -539,14 +592,16 @@ def generate_condition_sequence(event_markers, event_marker_timestamps, data_arr
                                 item_codes,
                                 srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
     # interpolate nan's
-    eyetracking_with_event_marker_data = add_eventMarkers_LSLTimestamp_to_data(event_markers,
-                                                                               event_marker_timestamps,
-                                                                               data_array,
-                                                                               data_timestamps, session_log,
-                                                                               item_codes)
-    block_sequences = extract_block_data(eyetracking_with_event_marker_data, data_channel_names, 3, srate)
+    data_event_marker_array = add_eventMarkers_LSLTimestamp_to_data(event_markers,
+                                                                    event_marker_timestamps,
+                                                                    data_array,
+                                                                    data_timestamps, session_log,
+                                                                    item_codes, srate)
+    block_sequences = extract_block_data(data_event_marker_array, srate)
     return block_sequences
 
 
 def flatten_list(l):
     return [item for sublist in l for item in sublist]
+
+
