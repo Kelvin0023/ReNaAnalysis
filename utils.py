@@ -317,8 +317,8 @@ def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_arr
 def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array_EEG, data_array_ECG, data_timestamps,
                               session_log, item_codes, ica_path, tmin, tmax, event_ids, is_regenerate_ica, lowcut=1,
                               highcut=50., notch_band_demoninator=200,
-                              srate=2048, resample_srate=128, erp_window=(.0, .8), verbose='WARNING',
-                              ecg_ch_name='ECG00'):  # use a fixed sampling rate for the sampling rate to match between recordings
+                              srate=2048, resample_srate=128, erp_window=(.0, .8), ecg_ch_name='ECG00', bad_channels=None, verbose='CRITICAL',
+                              ):  # use a fixed sampling rate for the sampling rate to match between recordings
     mne.set_log_level(verbose=verbose)
     # scale data array to use Volts, the data array from LSL is in uV
     data_array_EEG = data_array_EEG * 1e-6
@@ -342,6 +342,14 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
     raw.set_montage(biosemi_64_montage)
     raw, _ = mne.set_eeg_reference(raw, 'average',
                                    projection=False)
+    # import matplotlib as mpl
+    # import matplotlib.pyplot as plt
+    # mpl.use('Qt5Agg')
+    # raw.plot(scalings='auto')
+    if bad_channels:
+        raw.info['bads'] = bad_channels
+        raw.interpolate_bads(method={'eeg': 'MNE'}, verbose='INFO')
+
     raw = raw.filter(l_freq=lowcut, h_freq=highcut)  # bandpass filter
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto')
     raw = raw.resample(resample_srate)
@@ -355,11 +363,6 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
         ch_types=['misc'] + ['eeg'] * len(data_channel_names) + ['ecg'] + ['stim'] + ['stim'] * 3 + len(dm_ch_names) * ['stim'])  # with 3 additional info markers and design matrix
     raw = mne.io.RawArray(data_array_with_dm, info)
     raw.set_montage(biosemi_64_montage)
-
-    # import matplotlib as mpl
-    # import matplotlib.pyplot as plt
-    # mpl.use('Qt5Agg')
-    # raw.plot(scalings='auto')
 
     # check if ica for this participant and session exists, create one if not
     if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
@@ -507,7 +510,8 @@ def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_m
     return epochs_pupil, epochs_gaze
 
 
-def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, srate=200):
+def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, srate=200, verbose='INFO'):
+    mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
     for event_name, event_marker_id in event_ids.items():
         y = epochs[event_name].get_data()
@@ -551,40 +555,41 @@ def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, sra
     plt.show()
 
 
-def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title, resample_srate=50, out_dir=None):
-    for ch in picks:
-        for event_name, event_marker_id in event_ids.items():
-            y = epochs[event_name].resample(sfreq=resample_srate).pick_channels([ch]).get_data().squeeze(1)
-            y_mean = np.mean(y, axis=0)
-            y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-            y2 = y_mean - scipy.stats.sem(y, axis=0)
+def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title, out_dir=None, verbose='INFO', is_plot_timeseries=True, is_plot_topo_map=True):
+    mne.set_log_level(verbose=verbose)
 
-            time_vector = np.linspace(tmin, tmax, y.shape[-1])
-            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-                             interpolate=True,
-                             alpha=0.5)
-            plt.plot(time_vector, y_mean, c=color_dict[event_name],
-                     label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
-        plt.xlabel('Time (sec)')
-        plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
-        plt.legend()
-        plt.title('{0} - Channel {1}'.format(title, ch))
-        if out_dir:
-            plt.savefig(os.path.join(out_dir, '{0} - Channel {1}.png'.format(title, ch)))
-            plt.clf()
-        else:
-            plt.show()
+    if is_plot_timeseries:
+        for ch in picks:
+            for event_name, event_marker_id in event_ids.items():
+                y = epochs[event_name].pick_channels([ch]).get_data().squeeze(1)
+                y_mean = np.mean(y, axis=0)
+                y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+                y2 = y_mean - scipy.stats.sem(y, axis=0)
+
+                time_vector = np.linspace(tmin, tmax, y.shape[-1])
+                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+                                 interpolate=True,
+                                 alpha=0.5)
+                plt.plot(time_vector, y_mean, c=color_dict[event_name],
+                         label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+            plt.xlabel('Time (sec)')
+            plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
+            plt.legend()
+            plt.title('{0} - Channel {1}'.format(title, ch))
+            if out_dir:
+                plt.savefig(os.path.join(out_dir, '{0} - Channel {1}.png'.format(title, ch)))
+                plt.clf()
+            else:
+                plt.show()
 
     # get the min and max for plotting the topomap
-    biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
-    data_channel_names = biosemi_64_montage.ch_names
+    if is_plot_topo_map:
+        evoked = epochs.average()
+        vmax_EEG = np.max(evoked.get_data())
+        vmin_EEG = np.min(evoked.get_data())
 
-    evoked = epochs.resample(sfreq=resample_srate).average()
-    vmax_EEG = np.max(evoked.get_data())
-    vmin_EEG = np.min(evoked.get_data())
-
-    # for event_name, event_marker_id in event_ids.items():
-    #     epochs[event_name].resample(sfreq=resample_srate).average().plot_topomap(times=np.linspace(evoked.tmin, evoked.tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
+        for event_name, event_marker_id in event_ids.items():
+            epochs[event_name].average().plot_topomap(times=np.linspace(evoked.tmin, evoked.tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
 
 
 def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
@@ -604,4 +609,7 @@ def generate_condition_sequence(event_markers, event_marker_timestamps, data_arr
 def flatten_list(l):
     return [item for sublist in l for item in sublist]
 
-
+def read_file_lines_as_list(path):
+    with open(path, 'r') as filehandle:
+        out = [line.rstrip() for line in filehandle.readlines()]
+    return out
