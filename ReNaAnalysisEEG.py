@@ -13,19 +13,23 @@ from utils import generate_pupil_event_epochs, \
 
 #################################################################################################
 is_data_preloaded = True
-is_epochs_preloaded = True
+is_epochs_preloaded = False
 is_regenerate_ica = False
-is_save_loaded_data = False
+is_save_loaded_data = True
 
-preloaded_dats_path = 'participant_session_dict.p'
+preloaded_dats_path = 'Data/participant_session_dict.p'
+# preloaded_epoch_path = 'participant_condition_epoch_dict_RSVPCarousel.p'
+preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarousel_GazeLocked.p'
 data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
 epoch_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs'
 eventMarker_conditionIndex_dict = {
     'RSVP': slice(0, 4),
-    # 'Carousel': slice(4, 8),
+    'Carousel': slice(4, 8),
     # 'VS': slice(8, 12),
     # 'TS': slice(12, 16)
 }  # Only put interested conditions here
+free_viewing_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
+
 tmin_pupil = -0.1
 tmax_pupil = 3.
 tmin_eeg = -1.2
@@ -89,7 +93,7 @@ if not is_epochs_preloaded:
             pickle.dump(participant_session_dict, open(preloaded_dats_path, 'wb'))
     else:
         print("Loading preloaded sessions...")
-        participant_session_dict = pickle.load(open('participant_session_dict.p', 'rb'))
+        participant_session_dict = pickle.load(open(preloaded_dats_path, 'rb'))
 
     dats_loading_end_time = time.time()
     print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
@@ -104,8 +108,8 @@ if not is_epochs_preloaded:
 
             # markers
             event_markers_timestamps = data['Unity.ReNa.EventMarkers'][1]
-            # itemMarkers = data['Unity.ReNa.ItemMarkers'][0]
-            # itemMarkers_timestamps = data['Unity.ReNa.ItemMarkers'][1]
+            itemMarkers = data['Unity.ReNa.ItemMarkers'][0]
+            itemMarkers_timestamps = data['Unity.ReNa.ItemMarkers'][1]
 
             # data
             varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
@@ -134,8 +138,10 @@ if not is_epochs_preloaded:
                                                                varjoEyetracking_channelNames,
                                                                session_log,
                                                                item_codes, tmin_pupil, tmax_pupil,
-                                                               event_ids, color_dict,
-                                                               is_plotting=False)
+                                                               event_ids,
+                                                               is_free_viewing=condition_name in free_viewing_conditions,
+                                                               item_markers=itemMarkers,
+                                                               item_markers_timestamps=itemMarkers_timestamps)
 
                 _epochs_eeg, _epochs_eeg_ICA_cleaned, _, _, _ = generate_eeg_event_epochs(
                     event_markers,
@@ -148,7 +154,10 @@ if not is_epochs_preloaded:
                     session_ICA_path,
                     tmin_eeg, tmax_eeg,
                     event_ids,
-                    is_regenerate_ica,
+                    is_free_viewing=condition_name in free_viewing_conditions,
+                    item_markers=itemMarkers,
+                    item_markers_timestamps=itemMarkers_timestamps,
+                    is_regenerate_ica=is_regenerate_ica,
                     bad_channels=participant_badchannel_dict[
                         participant_index] if participant_index in participant_badchannel_dict.keys() else None)
 
@@ -167,10 +176,10 @@ if not is_epochs_preloaded:
                     )
 
     if is_save_loaded_data: pickle.dump(participant_condition_epoch_dict,
-                                        open('participant_condition_epoch_dict.p', 'wb'))
+                                        open(preloaded_epoch_path, 'wb'))
 else:  # if epochs are preloaded and saved
     print("Loading preloaded epochs ...")
-    participant_condition_epoch_dict = pickle.load(open('participant_condition_epoch_dict.p', 'rb'))
+    participant_condition_epoch_dict = pickle.load(open(preloaded_epoch_path, 'rb'))
     dats_loading_end_time = time.time()
     print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
 

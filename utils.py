@@ -59,10 +59,37 @@ def interpolate_epoch_zeros(e):
     copy[copy == 0] = np.nan
     return interpolate_epochs_nan(copy)
 
+def find_value_thresholding_interval(array, timestamps, value_threshold, time_threshold, time_tolerance=0.25):
+    # change all zeros before the first non-zero entry to be nan
+    array[:np.argwhere(array != 0)[0][0]] = np.nan
+    below_threshold_index = np.argwhere(array < value_threshold)
+    out = []
+    for i in below_threshold_index[:, 0]:
+        i_end = np.argmin(np.abs(timestamps-(timestamps[i] + time_threshold)))
+        if np.all(array[i:i_end] < value_threshold):
+            if (time_threshold - (timestamps[i_end] - timestamps[i])) / time_threshold < time_tolerance:
+                i_peak = np.argmin(array[i:i_end])
+                out.append((i, i_end, i + i_peak))
+            else:
+                print('exceed time tolerance ignoring interval')
+    return out
 
-def add_eventMarkers_LSLTimestamp_to_data(event_markers, event_marker_timestamps, data_array, data_timestamps,
-                                          session_log,
-                                          item_codes, srate, pre_block_time=1, post_block_time=1):
+def add_em_ts_to_data(event_markers, event_marker_timestamps, data_array, data_timestamps,
+                      session_log,
+                      item_codes, srate, pre_first_block_time=1, post_final_block_time=1):
+    """
+    add LSL timestamps, event markers based on the session log to the data array
+    :param event_markers:
+    :param event_marker_timestamps:
+    :param data_array:
+    :param data_timestamps:
+    :param session_log:
+    :param item_codes:
+    :param srate:
+    :param pre_first_block_time:
+    :param post_final_block_time:
+    :return:
+    """
     block_num = None
     assert event_markers.shape[0] == 4
     data_event_marker_array = np.zeros(shape=(4, data_array.shape[1]))
@@ -97,12 +124,8 @@ def add_eventMarkers_LSLTimestamp_to_data(event_markers, event_marker_timestamps
 
     # remove the data before and after the last event
     out = np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
-    out = out[:, first_block_start_index - srate * pre_block_time:final_block_end_index + srate * post_block_time]
+    out = out[:, first_block_start_index - srate * pre_first_block_time:final_block_end_index + srate * post_final_block_time]
     return out
-    # return np.concatenate(
-    #     [np.expand_dims(data_timestamps, axis=0), data_array[1:, :], data_event_marker_array],
-    #     axis=0)  # TODO because LSL cannot stream the raw nano second timestamp, we use the LSL timestamp instead. Convert the timestamps in second to nanosecond to comply with gaze detection code
-
 
 def add_design_matrix_to_data(data_array, event_marker_index, srate, erp_window, event_type_of_interest=(1, 2, 3)):
     '''
@@ -127,9 +150,9 @@ def add_design_matrix_to_data(data_array, event_marker_index, srate, erp_window,
     return np.concatenate([data_array, design_matrix], axis=0), design_matrix, design_matrix_channel_names
 
 
-def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
-                                         data_array, data_timestamps,
-                                         session_log, item_codes):
+def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
+                        data_array, data_timestamps,
+                        session_log, item_codes, srate, verbose, pre_block_time=1, post_block_time=1, foveate_value_threshold=15, foveate_duration_threshold=FIXATION_MINIMAL_TIME):
     block_list = []
     assert event_markers.shape[0] == 4
     data_event_marker_array = np.zeros(shape=(4, data_array.shape[1]))
@@ -139,7 +162,7 @@ def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, 
         data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
 
         if str(int(event)) in session_log.keys():  # for start-of-block events
-            print('Processing block with ID: {0}'.format(event))
+            # print('Processing block with ID: {0}'.format(event))
             block_list.append(event)
             data_event_marker_array[0][data_event_marker_index] = 4  # encodes start of a block
             continue
@@ -153,6 +176,9 @@ def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, 
         data_event_marker_array[0, :] == 5)  # end of a block is denoted by event marker 5
 
     # iterate through blocks
+    total_distractor_count = 0
+    total_target_count = 0
+    total_novelty_count = 0
     for block_i, data_start_i, data_end_i in zip(block_list, data_block_starts_indices, data_block_ends_indices):
         targets = session_log[str(int(block_i))]['targets']
         distractors = session_log[str(int(block_i))]['distractors']
@@ -168,51 +194,61 @@ def add_gaze_event_markers_to_data_array(item_markers, item_markers_timestamps, 
         item_markers_timestamps_of_block = item_markers_timestamps[
                                            item_marker_block_start_index:item_marker_block_end_index]
 
-        for i in range(30):
+        for i in range(30):  # the item marker hold up to 30 items
             # this_item_marker = item_markers_of_block[i * 11: (i + 1) * 11, i::30]
-            this_item_marker = item_markers_of_block[i: i + 11, i::30]
-            this_item_markers_timestamps = item_markers_timestamps_of_block[i::30]
-            if len(item_markers_timestamps_of_block) == 0:
-                print('Block ID {0} is missing item markers, ignoring this block'.format(block_i))
+            this_item_marker = item_markers_of_block[i * 11 : (i+1) * 11]
+            this_item_code = this_item_marker[1, -1]  # TODO: change this to  np.max(this_item_marker[1, :]) after the 'reset item marker' update
+            assert len(np.unique(this_item_marker[1, :])) == 2 or len(np.unique(this_item_marker[1, :])) == 1  # can only be either the item code or 0 if item is not active during that interval
+            # check the item type
+            if this_item_code in distractors:
+                total_distractor_count += 1
+                event_code = 1
+            elif this_item_code in targets:
+                total_target_count += 1
+                event_code = 2
+            elif this_item_code in novelties:
+                total_novelty_count += 1
+                event_code = 3
+            else:
+                # TODO: put the exception back after the 'reset item marker' update
+                # raise Exception("Unknown item code {0} in block. This should NEVER happen!".format(this_item_code, block_i))
+                if verbose: print('Out of block item found')
                 continue
-            # TODO finish this, now assume every 30
-            assert np.all(this_item_marker[1, :] == this_item_marker[
-                1, 0])  # verify our assumption that item rotates around every 30 columns  # TODO why did the item marker stopped mid-experiment
             # find if there is gaze ray intersection
-            # TODO change this index from 5 to 4 in the future
-
-            gaze_intersect_start_index = np.argwhere(np.diff(this_item_marker[5, :]) == 1)[:, 0]
-            gaze_intersect_end_index = np.argwhere(np.diff(this_item_marker[5, :]) == -1)[:, 0]
-            if len(gaze_intersect_start_index) > len(
-                    gaze_intersect_end_index): gaze_intersect_start_index = gaze_intersect_start_index[
-                                                                            :len(gaze_intersect_end_index - 1)]
+            # TODO: find saccade before fixations
+            # foveate_indices = find_value_thresholding_interval(this_item_marker[2, :], item_markers_timestamps_of_block, foveate_value_threshold, foveate_duration_threshold)
+            # force the first last to be not-intersected
+            this_item_marker[4, 0] = 0
+            this_item_marker[4, -1] = 0
+            gaze_intersect_start_index = np.argwhere(np.diff(this_item_marker[4, :]) == 1)[:, 0]
+            gaze_intersect_end_index = np.argwhere(np.diff(this_item_marker[4, :]) == -1)[:, 0]
+            assert len(gaze_intersect_end_index) == len(gaze_intersect_start_index)
 
             # check if the intersects is long enough to warrant a fixation
-            gaze_intersected_durations = this_item_markers_timestamps[gaze_intersect_end_index] - \
-                                         this_item_markers_timestamps[gaze_intersect_start_index]
-            true_fixations_indices = np.argwhere(gaze_intersected_durations > FIXATION_MINIMAL_TIME)[:, 0]
-            true_fixation_timestamps = this_item_markers_timestamps[gaze_intersect_start_index[true_fixations_indices]]
+            gaze_intersected_durations = item_markers_timestamps_of_block[gaze_intersect_end_index] - \
+                                         item_markers_timestamps_of_block[gaze_intersect_start_index]
+            append_list_lines_to_file(gaze_intersected_durations, 'Data/FixationDurations')  # TODO: check this after we collect more data using the 'reset item marker' fix
 
-            # check if this item is a target/distractor/novelty
-            marker_to_insert = 1 if this_item_marker[1, 0] in distractors else 2 if this_item_marker[
-                                                                                        1, 0] in targets else 3 if \
-                this_item_marker[1, 0] in novelties else -1
-            assert marker_to_insert != -1
+            true_fixations_indices = np.argwhere(gaze_intersected_durations > foveate_duration_threshold)[:, 0]
+            true_fixation_timestamps = item_markers_timestamps_of_block[gaze_intersect_start_index[true_fixations_indices]]
 
             # find where in data marker to insert the marker
+            assert np.all(np.array([(np.abs(data_timestamps - x)).min() for x in true_fixation_timestamps]) < 1e-2) # the item marker's timestamp does not deviate to much from that of the data's
             data_event_marker_indices = [(np.abs(data_timestamps - x)).argmin() for x in true_fixation_timestamps]
-            data_event_marker_array[0][data_event_marker_indices] = marker_to_insert
-            if len(true_fixation_timestamps) > 0: print(
-                'Found {0} fixations for item {1} of type {2}, in block {3}'.format(len(true_fixation_timestamps),
-                                                                                    this_item_marker[1, 0],
-                                                                                    ITEM_TYPE_ENCODING[
-                                                                                        marker_to_insert], block_i))
+            data_event_marker_array[0][data_event_marker_indices] = event_code
+            # if len(true_fixation_timestamps) > 0: print(
+            #     'Found {0} fixations for item {1} of type {2}, in block {3}'.format(len(true_fixation_timestamps),
+            #                                                                         this_item_marker[1, 0],
+            #                                                                         ITEM_TYPE_ENCODING[
+            #                                                                             event_code], block_i))
 
         # 3. get the IsGazeRay intersected stream and their timestamps (item marker) keyed by the item count in block
-
         # 4. for each of the 30 items in the block, find where the IsGazeRay is true
         # 5. insert the gazed event marker in the data_event_marker_array at the data_timestamp nearest to the corresponding item_marker_timestamp
-
+    if verbose: print("found fixations: %d distractors, %d targets, %d novelties" % (np.sum(data_event_marker_array[0]==1), np.sum(data_event_marker_array[0]==2), np.sum(data_event_marker_array[0]==3)))
+    total_item_count = total_distractor_count + total_target_count + total_novelty_count
+    prevalence = np.array((np.sum(data_event_marker_array[0]==1) / total_distractor_count, np.sum(data_event_marker_array[0]==2) / total_target_count, np.sum(data_event_marker_array[0]==3) / total_novelty_count))
+    # prevalence = prevalence - np.mean(prevalence)
     return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
 
 
@@ -236,24 +272,32 @@ def extract_block_data(data_with_event_marker, srate, pre_block_time=.5, post_bl
     return block_sequences  # a list of block sequences
 
 
-def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
-                                session_log,
-                                item_codes, tmin, tmax, event_ids, color_dict, title='', is_plotting=True,
+def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_et, data_timestamps, data_channel_names,
+                                session_log, item_codes, tmin, tmax, event_ids, is_free_viewing,
+                                item_markers=None, item_markers_timestamps=None, erp_window=(.0, .8),
                                 srate=200,
                                 verbose='WARNING'):  # use a fixed sampling rate for the sampling rate to match between recordings
     mne.set_log_level(verbose=verbose)
-    eyetracking_with_event_marker_data = add_eventMarkers_LSLTimestamp_to_data(event_markers,
-                                                                               event_marker_timestamps,
-                                                                               data_array,
-                                                                               data_timestamps, session_log,
-                                                                               item_codes, srate)
+    if is_free_viewing:
+        assert item_markers is not None and item_markers_timestamps is not None
+        data_ = add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers,
+                                    event_marker_timestamps,
+                                    data_et,
+                                    data_timestamps, session_log,
+                                    item_codes, srate, verbose=0)
+    else:
+        data_ = add_em_ts_to_data(event_markers,
+                                  event_marker_timestamps,
+                                  data_et,
+                                  data_timestamps, session_log,
+                                  item_codes, srate)
 
     info = mne.create_info(
         ['LSLTimestamp'] + data_channel_names + ['EventMarker'] + ["info1", "info2", "info3"],
         sfreq=srate,
         ch_types=['misc'] * (1 + len(data_channel_names)) + ['stim'] + [
             'misc'] * 3)  # with 3 additional info markers
-    raw = mne.io.RawArray(eyetracking_with_event_marker_data, info)
+    raw = mne.io.RawArray(data_, info)
 
     # pupil epochs
     epochs_pupil = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
@@ -261,64 +305,14 @@ def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_arr
                           baseline=(-0.1, 0.0),
                           preload=True,
                           verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
-    # verbose=False, picks=['left_pupil_size', 'right_pupil_size', 'status', 'left_status', 'right_status'])
-
-    # Average epoch data
-    if is_plotting:
-        for event_name, event_marker_id in event_ids.items():
-            if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-                y = epochs_pupil[event_name].get_data()
-                y = interpolate_epochs_nan(y)
-
-                time_vector = np.linspace(tmin, tmax, y.shape[-1])
-
-                # y = np.mean(y, axis=1)  # average left and right
-                y = y[:, 0, :]  # get the left eye data
-                y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-
-                y = np.array([mne.baseline.rescale(x, time_vector, (-0.1, 0.)) for x in y])
-                y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-                y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-                                 interpolate=True,
-                                 alpha=0.5)
-                plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
-                         label='{0}, N={1}'.format(event_name, epochs_pupil[event_name].get_data().shape[0]))
-        plt.xlabel('Time (sec)')
-        plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
-        plt.legend()
-        plt.title(title)
-        plt.show()
-
-        # ERP Image
-        for event_name, event_marker_id in event_ids.items():
-            if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-                y = epochs_pupil[event_name].get_data()
-                y = np.mean(y, axis=1)  # average left and right
-                # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-                time_vector = np.linspace(tmin, tmax, y.shape[-1])
-                plt.imshow(y)
-                plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5),
-                           ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax - tmin) / 5)])
-                plt.xlabel('Time (sec)')
-                plt.ylabel('Trails')
-                plt.legend()
-                plt.title('{0}: {1}'.format(title, event_name))
-                plt.show()
-    # epochs_gaze = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
-    #                      tmax=tmax,
-    #                      baseline=None,
-    #                      preload=True,
-    #                      verbose=False, picks=['raw_timestamp', 'status', 'gaze_forward_x', 'gaze_forward_y'])
     labels_array = epochs_pupil.events[:, 2]
     return epochs_pupil, labels_array
 
 
 def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array_EEG, data_array_ECG, data_timestamps,
-                              session_log, item_codes, ica_path, tmin, tmax, event_ids, is_regenerate_ica, lowcut=1,
-                              highcut=50., notch_band_demoninator=200,
-                              srate=2048, resample_srate=128, erp_window=(.0, .8), ecg_ch_name='ECG00', bad_channels=None, verbose='CRITICAL',
-                              ):  # use a fixed sampling rate for the sampling rate to match between recordings
+                              session_log, item_codes, ica_path, tmin, tmax, event_ids, is_free_viewing,
+                              item_markers=None, item_markers_timestamps=None, erp_window=(.0, .8), srate=2048, verbose='CRITICAL',
+                              is_regenerate_ica=False, lowcut=1, highcut=50., resample_srate=128, ecg_ch_name='ECG00', bad_channels=None):
     mne.set_log_level(verbose=verbose)
     # scale data array to use Volts, the data array from LSL is in uV
     data_array_EEG = data_array_EEG * 1e-6
@@ -326,11 +320,19 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
     data_array_ECG = (data_array_ECG[0] - data_array_ECG[1])[None, :]
     data_array = np.concatenate([data_array_EEG, data_array_ECG])
     # interpolate nan's
-    data_eeg_eventMarker = add_eventMarkers_LSLTimestamp_to_data(event_markers,
-                                                                       event_marker_timestamps,
-                                                                       data_array,
-                                                                       data_timestamps, session_log,
-                                                                       item_codes, srate)
+    if is_free_viewing:
+        assert item_markers is not None and item_markers_timestamps is not None
+        data_eeg_eventMarker = add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers,
+                                                 event_marker_timestamps,
+                                                 data_array,
+                                                 data_timestamps, session_log,
+                                                 item_codes, srate, verbose=1)
+    else:
+        data_eeg_eventMarker = add_em_ts_to_data(event_markers,
+                                                 event_marker_timestamps,
+                                                 data_array,
+                                                 data_timestamps, session_log,
+                                                 item_codes, srate)
 
     biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
     data_channel_names = biosemi_64_montage.ch_names
@@ -421,95 +423,6 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
     return epochs, epochs_ICA_cleaned, labels_array, raw, raw_ica_recon
 
 
-def generate_epochs_visual_search(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
-                                  data_array,
-                                  data_timestamps, data_channel_names,
-                                  session_log, item_codes, tmin, tmax, event_ids, color_dict, title='',
-                                  is_plotting=True):
-    # interpolate nan's
-    data_array = interpolate_array_nan(data_array)
-    srate = 200
-    eyetracking_with_event_marker_data = add_gaze_event_markers_to_data_array(item_markers,
-                                                                              item_markers_timestamps,
-                                                                              event_markers,
-                                                                              event_marker_timestamps,
-                                                                              data_array,
-                                                                              data_timestamps, session_log,
-                                                                              item_codes)
-
-    info = mne.create_info(
-        ['LSLTimestamp'] + data_channel_names + ['EventMarker'] + ["info1", "info2", "info3"],
-        sfreq=srate,
-        ch_types=['misc'] * (1 + len(data_channel_names)) + ['stim'] + [
-            'misc'] * 3)  # with 3 additional info markers
-    raw = mne.io.RawArray(eyetracking_with_event_marker_data, info)
-
-    # pupil epochs
-    epochs_pupil = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
-                          tmax=tmax,
-                          baseline=None,
-                          preload=True,
-                          verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
-
-    # Average epoch data
-    if is_plotting:
-        y_all = np.empty(shape=(0, epochs_pupil.get_data().shape[-1]))
-        event_count_dict = {}
-        for event_name, event_marker_id in event_ids.items():
-            if event_name == 'Target' or event_name == 'Distractor':
-                # if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-                y = epochs_pupil[event_name].get_data()
-                # y = interpolate_epochs_nan(y)
-                # y = np.mean(y, axis=1)  # average left and right
-                y = y[:, 0, :]  # get the left eye data
-                y_all = np.concatenate([y_all, y])
-                event_count_dict[event_name] = len(y)
-        y_all = scipy.stats.zscore(np.array(y_all), axis=1, ddof=0, nan_policy='propagate')
-
-        previous_count = 0
-        for event_name, event_count in event_count_dict.items():
-            time_vector = np.linspace(tmin, tmax, y_all.shape[-1])
-            y = np.array([mne.baseline.rescale(x, time_vector, (-0.1, 0.)) for x in
-                          y_all[previous_count:(event_count + previous_count)]])
-            previous_count = event_count
-            y1 = np.mean(y, axis=0) + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-            y2 = np.mean(y, axis=0) - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-                             interpolate=True,
-                             alpha=0.5)
-            plt.plot(time_vector, np.mean(y, axis=0), c=color_dict[event_name],
-                     label='{0}, N={1}'.format(event_name, epochs_pupil[event_name].get_data().shape[0]))
-        plt.xlabel('Time (sec)')
-        plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
-        plt.legend()
-        plt.title(title)
-        plt.show()
-
-        # ERP Image
-        for event_name, event_marker_id in event_ids.items():
-            if event_name == 'Novelty' or event_name == 'Target' or event_name == 'Distractor':
-                y = epochs_pupil[event_name].get_data()
-                y = np.mean(y, axis=1)  # average left and right
-                # y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-                time_vector = np.linspace(tmin, tmax, y.shape[-1])
-                plt.imshow(y)
-                plt.xticks(np.arange(0, y.shape[1], y.shape[1] / 5),
-                           ["{:6.2f}".format(x) for x in np.arange(tmin, tmax, (tmax - tmin) / 5)])
-                plt.xlabel('Time (sec)')
-                plt.ylabel('Trails')
-                plt.legend()
-                plt.title('{0}: {1}'.format(title, event_name))
-                plt.show()
-
-    epochs_gaze = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
-                         tmax=tmax,
-                         baseline=None,
-                         preload=True,
-                         verbose=False, picks=['raw_timestamp', 'status', 'gaze_forward_x', 'gaze_forward_y'])
-
-    return epochs_pupil, epochs_gaze
-
-
 def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, srate=200, verbose='INFO'):
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
@@ -523,18 +436,6 @@ def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, sra
             continue
         y = np.mean(y, axis=1)  # average left and right
         y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-        #
-        # # y = y - y[int(abs(tmin) * srate)]  # baseline correct
-        # y_mean = np.mean(y, axis=0)
-        # y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-        # y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-        #
-        # time_vector = np.linspace(tmin, tmax, y.shape[-1])
-        # plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
-        #                  interpolate=True,
-        #                  alpha=0.5)
-        # plt.plot(time_vector, y_mean, c=color_dict[event_name],
-        #          label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
 
         y_mean = np.mean(y, axis=0)
         y_mean = y_mean - y_mean[int(abs(tmin) * srate)]  # baseline correct
@@ -597,11 +498,11 @@ def generate_condition_sequence(event_markers, event_marker_timestamps, data_arr
                                 item_codes,
                                 srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
     # interpolate nan's
-    data_event_marker_array = add_eventMarkers_LSLTimestamp_to_data(event_markers,
-                                                                    event_marker_timestamps,
-                                                                    data_array,
-                                                                    data_timestamps, session_log,
-                                                                    item_codes, srate)
+    data_event_marker_array = add_em_ts_to_data(event_markers,
+                                                event_marker_timestamps,
+                                                data_array,
+                                                data_timestamps, session_log,
+                                                item_codes, srate)
     block_sequences = extract_block_data(data_event_marker_array, srate)
     return block_sequences
 
@@ -613,3 +514,8 @@ def read_file_lines_as_list(path):
     with open(path, 'r') as filehandle:
         out = [line.rstrip() for line in filehandle.readlines()]
     return out
+
+def append_list_lines_to_file(l, path):
+    with open(path, 'a') as filehandle:
+        filehandle.writelines("%s\n" % x for x in l)
+

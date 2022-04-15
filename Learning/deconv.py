@@ -98,7 +98,7 @@ torch.manual_seed(manual_seed)
 data = np.load(epoch_data_export_root)
 dms = np.load(epoch_label_export_root)
 
-plot_design_matrix(dms, deconv_window)
+# plot_design_matrix(dms, deconv_window)
 
 dms = np.swapaxes(dms, 1, 2)
 data = np.swapaxes(data, 1, 2)
