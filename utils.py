@@ -299,6 +299,7 @@ def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_et,
             'misc'] * 3)  # with 3 additional info markers
     raw = mne.io.RawArray(data_, info)
 
+    event_ids = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in np.unique(mne.find_events(raw)[:, 2])])
     # pupil epochs
     epochs_pupil = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
                           tmax=tmax,
@@ -404,6 +405,7 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
     # reconst_raw.plot(show_scrollbars=False, scalings='auto')
 
     reject = dict(eeg=600.)  # DO NOT reject or we will have a mismatch between EEG and pupil
+    event_ids = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in np.unique(mne.find_events(raw)[:, 2])])  # we may not have all target, distractor and novelty, especially in free-viewing
     epochs = Epochs(raw, events=find_events(raw, stim_channel='EventMarker'), event_id=event_ids, tmin=tmin,
                     tmax=tmax,
                     baseline=(-0.1, 0.0),

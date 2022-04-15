@@ -77,7 +77,7 @@ if not is_epochs_preloaded:
         print("Preloading .dats")  # TODO parallelize loading of .dats
         for p_i, (participant_index, session_dict) in enumerate(participant_session_dict.items()):
             print("Working on participant-code[{0}]: {2} of {1}".format(int(participant_index),
-                                                                   len(participant_session_dict) - 1, p_i))
+                                                                   len(participant_session_dict), p_i+1))
             for session_index, session_files in session_dict.items():
                 print("Session {0} of {1}".format(session_index + 1, len(session_dict)))
                 data_path, item_catalog_path, session_log_path, session_ICA_path = session_files
@@ -128,7 +128,7 @@ if not is_epochs_preloaded:
                     int(participant_index),
                     len(participant_session_dict),
                     session_index + 1,
-                    len(session_dict), p_i))
+                    len(session_dict), p_i + 1))
                 event_markers = data['Unity.ReNa.EventMarkers'][0][condition_event_marker_index]
 
                 _epochs_pupil, _ = generate_pupil_event_epochs(event_markers,
