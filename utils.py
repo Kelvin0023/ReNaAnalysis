@@ -157,6 +157,9 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
     assert event_markers.shape[0] == 4
     data_event_marker_array = np.zeros(shape=(4, data_array.shape[1]))
 
+    item_block_start_indices = []
+    item_block_end_indices = []
+
     for i in range(event_markers.shape[1]):
         event, info1, info2, info3 = event_markers[:, i]
         data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
@@ -165,9 +168,11 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             # print('Processing block with ID: {0}'.format(event))
             block_list.append(event)
             data_event_marker_array[0][data_event_marker_index] = 4  # encodes start of a block
+            item_block_start_indices.append(np.argmin(np.abs(item_markers_timestamps - event_marker_timestamps[i])))
             continue
         elif event_markers[0, i - 1] != 0 and event == 0:  # this is the end of a block
             data_event_marker_array[0][data_event_marker_index] = 5  # encodes start of a block
+            item_block_end_indices.append(np.argmin(np.abs(item_markers_timestamps - event_marker_timestamps[i])))
             continue
 
     data_block_starts_indices = np.argwhere(
@@ -179,20 +184,19 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
     total_distractor_count = 0
     total_target_count = 0
     total_novelty_count = 0
-    for block_i, data_start_i, data_end_i in zip(block_list, data_block_starts_indices, data_block_ends_indices):
+
+    for block_i, item_marker_block_start_index, item_marker_block_end_index in zip(block_list, item_block_start_indices, item_block_end_indices):
         targets = session_log[str(int(block_i))]['targets']
         distractors = session_log[str(int(block_i))]['distractors']
         novelties = session_log[str(int(block_i))]['novelties']
 
-        # 1. find the event marker timestamps corresponding to the block start and end
-        data_block_start_timestamp = data_timestamps[data_start_i]
-        data_block_end_timestamp = data_timestamps[data_end_i]
         # 2. find the nearest timestamp of the block start and end in the item marker timestamps
-        item_marker_block_start_index = np.argmin(np.abs(item_markers_timestamps - data_block_start_timestamp))
-        item_marker_block_end_index = np.argmin(np.abs(item_markers_timestamps - data_block_end_timestamp))
         item_markers_of_block = item_markers[:, item_marker_block_start_index:item_marker_block_end_index]
         item_markers_timestamps_of_block = item_markers_timestamps[
                                            item_marker_block_start_index:item_marker_block_end_index]
+
+        item_block_start_indices.append(item_marker_block_start_index)
+        item_block_end_indices.append(item_marker_block_end_index)
 
         for i in range(30):  # the item marker hold up to 30 items
             # this_item_marker = item_markers_of_block[i * 11: (i + 1) * 11, i::30]
@@ -212,7 +216,7 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             else:
                 # TODO: put the exception back after the 'reset item marker' update
                 # raise Exception("Unknown item code {0} in block. This should NEVER happen!".format(this_item_code, block_i))
-                if verbose: print('Out of block item found')
+                if verbose: print('Out of block item found: should NOT happen again after RESET FIX')
                 continue
             # find if there is gaze ray intersection
             # TODO: find saccade before fixations
@@ -233,7 +237,8 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             true_fixation_timestamps = item_markers_timestamps_of_block[gaze_intersect_start_index[true_fixations_indices]]
 
             # find where in data marker to insert the marker
-            assert np.all(np.array([(np.abs(data_timestamps - x)).min() for x in true_fixation_timestamps]) < 1e-2) # the item marker's timestamp does not deviate to much from that of the data's
+            if np.all(np.array([(np.abs(data_timestamps - x)).min() for x in true_fixation_timestamps]) < 1):
+                print("data timestamp deviates too much from fixation timestamp".format(str(np.array([(np.abs(data_timestamps - x)).min() for x in true_fixation_timestamps]))))# the item marker's timestamps does not deviate to much from that of the data's
             data_event_marker_indices = [(np.abs(data_timestamps - x)).argmin() for x in true_fixation_timestamps]
             data_event_marker_array[0][data_event_marker_indices] = event_code
             # if len(true_fixation_timestamps) > 0: print(
@@ -245,9 +250,14 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
         # 3. get the IsGazeRay intersected stream and their timestamps (item marker) keyed by the item count in block
         # 4. for each of the 30 items in the block, find where the IsGazeRay is true
         # 5. insert the gazed event marker in the data_event_marker_array at the data_timestamp nearest to the corresponding item_marker_timestamp
+
+    # plt.plot(item_markers[1])
+    # [plt.axvline(x=x, color='blue') for x in item_block_start_indices]
+    # [plt.axvline(x=x, color='red') for x in item_block_end_indices]
+    # plt.show()
     if verbose: print("found fixations: %d distractors, %d targets, %d novelties" % (np.sum(data_event_marker_array[0]==1), np.sum(data_event_marker_array[0]==2), np.sum(data_event_marker_array[0]==3)))
     total_item_count = total_distractor_count + total_target_count + total_novelty_count
-    prevalence = np.array((np.sum(data_event_marker_array[0]==1) / total_distractor_count, np.sum(data_event_marker_array[0]==2) / total_target_count, np.sum(data_event_marker_array[0]==3) / total_novelty_count))
+    fixation_count_relative = np.array((np.sum(data_event_marker_array[0]==1) / total_distractor_count, np.sum(data_event_marker_array[0]==2) / total_target_count, np.sum(data_event_marker_array[0]==3) / total_novelty_count))
     # prevalence = prevalence - np.mean(prevalence)
     return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
 
@@ -464,7 +474,7 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
     if is_plot_timeseries:
         for ch in picks:
             for event_name, event_marker_id in event_ids.items():
-                y = epochs[event_name].pick_channels([ch]).get_data().squeeze(1)
+                y = epochs.copy().crop(tmin, tmax)[event_name].pick_channels([ch]).get_data().squeeze(1)
                 y_mean = np.mean(y, axis=0)
                 y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
                 y2 = y_mean - scipy.stats.sem(y, axis=0)

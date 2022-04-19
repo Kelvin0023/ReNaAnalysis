@@ -76,11 +76,12 @@ def ridge_regression_gd(X, Y, X_test, Y_test, lamb, learning_rate=1., iterations
 
 
 # path to data and design matrix
-covariates = ['Distractor', 'Target', 'Novelty']
+covariates = {'Distractor':1, 'Target':2, 'Novelty':3}
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
-epoch_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_eeg_ica_condition_RSVP_data.npy'
-epoch_label_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_eeg_ica_condition_RSVP_DM.npy'
+epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_eeg_ica_condition_VS_data.npy'
+epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_eeg_ica_condition_VS_DM.npy'
+epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_eeg_ica_condition_VS_labels.npy'
 
 srate = 128
 deconv_window = (-1.2, 2.4)
@@ -95,23 +96,25 @@ deconv_index_window = [int(srate * (-deconv_window[0] + erp_window[0])), int(sra
 
 torch.manual_seed(manual_seed)
 
-data = np.load(epoch_data_export_root)
-dms = np.load(epoch_label_export_root)
-
-# plot_design_matrix(dms, deconv_window)
-
+# load data and change axes
+data = np.load(epoch_data_path)
+dms = np.load(epoch_dm_path)
+labels = np.load(epoch_label_path)
 dms = np.swapaxes(dms, 1, 2)
 data = np.swapaxes(data, 1, 2)
 
-# obtain label array from dm
 tau = int(dms.shape[-1] /  len(covariates))
-labels = []
-for i in range(len(dms)):
-    _temp = [np.sum([dms[i, deconv_index_window[0]+1, tau*j:tau*(j+1)]]) for j, label in enumerate(covariates)]  # find the center event of each dm sample
-    assert sum(_temp) == 1
-    labels.append( _temp.index(1))
-labels = np.array(labels)
-print('Distractor, Target, Novelty prevalence: %f, %f, %f' % (np.sum(labels==0)/len(labels), np.sum(labels==1)/len(labels), np.sum(labels==2)/len(labels)))
+
+# plot_design_matrix(dms, deconv_window, tau, covariates)
+
+# obtain label array from dm
+# labels = []
+# for i in range(len(dms)):
+#     _temp = [np.sum([dms[i, deconv_index_window[0]+1, tau*j:tau*(j+1)]]) for j, label in enumerate(covariates)]  # find the center event of each dm sample
+#     # assert sum(_temp) == 1
+#     labels.append( _temp.index(1))
+# labels = np.array(labels)
+print('Distractor, Target, Novelty prevalence: %f, %f, %f' % (np.sum(labels==1)/len(labels), np.sum(labels==2)/len(labels), np.sum(labels==3)/len(labels)))
 
 # z normalize data along channel
 # A = stats.zscore(data, axis=2)
@@ -149,8 +152,8 @@ plt.show()
 # data_recon = data_recon[:, viz_deconv_index_window[0]:viz_deconv_index_window[1], eeg_index]
 # data_recon = scalars[eeg_index].inverse_transform(data_recon)
 
-for i, cov in enumerate(covariates):
-    dm_cov =  create_dm_for_cov(dms, tau, i, deconv_window, srate)
+for cov, cov_code in covariates.items():
+    dm_cov =  create_dm_for_cov(dms, tau, cov_code-1, deconv_window, srate)  # cov_code - 1 because distractor starts at 1
     data_recon = torch.matmul(torch.tensor(dm_cov, device='cuda', dtype=torch.float64), beta) + error.expand(data.shape[1], data.shape[2])
     data_recon = data_recon.cpu().detach().numpy()
     data_recon = data_recon[:, viz_deconv_index_window[0]:viz_deconv_index_window[1], eeg_index]
@@ -158,16 +161,17 @@ for i, cov in enumerate(covariates):
 
     time_vector = np.linspace(viz_erp_window[0], viz_erp_window[1], data_recon.shape[0])
     plt.plot(time_vector, data_recon, label='Deconv Reconstructed Data')
+    plt.twinx()
 
     data_orig = data[:, viz_deconv_index_window[0]:viz_deconv_index_window[1], eeg_index]
-    data_orig = data_orig[labels==i]
+    data_orig = data_orig[labels == cov_code]
     data_orig_mean = np.mean(data_orig, axis=0)
     data_orig_upper = data_orig_mean + scipy.stats.sem(data_orig, axis=0)  # this is the upper envelope
     data_orig_lower = data_orig_mean - scipy.stats.sem(data_orig, axis=0)  # this is the lower envelope
     plt.fill_between(time_vector, data_orig_upper, data_orig_lower, where=data_orig_lower <= data_orig_upper, facecolor='red',
                      interpolate=True,
                      alpha=0.5)
-    plt.plot(time_vector, data_orig_mean, label='Original Data')
+    plt.plot(time_vector, data_orig_mean, label='Original Data', color='red')
     plt.legend()
     plt.title('{0} on Channel {1}'.format(cov, eeg_ch))
     plt.show()
