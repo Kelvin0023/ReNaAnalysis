@@ -39,25 +39,29 @@ def create_dm_for_cov(dms, tau, cov_index, deconv_window, srate):
         out[dm_start_index[0] + i, dm_start_index[1] + i] = 1
     return out[None, :]
 
-def ridge_regression_gd(X, Y, X_test, Y_test, lamb, learning_rate=1., iterations=3000, device='cuda'):
-    X = torch.tensor(X, device=device, dtype=torch.float64)
-    Y = torch.tensor(Y, device=device, dtype=torch.float64)
-    X_test = torch.tensor(X_test, device=device, dtype=torch.float64)
-    Y_test = torch.tensor(Y_test, device=device, dtype=torch.float64)
+def ridge_regression_gd(X, Y, X_test, Y_test, lamb, learning_rate=1., iterations=400, device='cuda', dtype=torch.float32):
+    X = torch.tensor(X, device=device, dtype=dtype)
+    Y = torch.tensor(Y, device=device, dtype=dtype)
+    X_test = torch.tensor(X_test, device=device, dtype=dtype)
+    Y_test = torch.tensor(Y_test, device=device, dtype=dtype)
 
-    weights = torch.randn((X.shape[2], Y.shape[2]), device=device, dtype=torch.float64, requires_grad=True)
-    bias = torch.randn((Y.shape[1], 1), device=device, dtype=torch.float64, requires_grad=True)
+    weights = torch.randn((X.shape[2], Y.shape[2]), device=device, dtype=dtype, requires_grad=True)
+    bias = torch.randn(Y.shape[1:], device=device, dtype=dtype, requires_grad=True)
     losses_train = []
     losses_test = []
 
     loss_func = torch.nn.L1Loss()
     optimizer = torch.optim.SGD(params=[weights, bias], lr=learning_rate, momentum=0.9)
+    # optimizer = torch.optim.SGD(params=[weights], lr=learning_rate, momentum=0.9)
 
     # main training loop
     for k in range(iterations):
         optimizer.zero_grad()
-        Y_pred = (torch.matmul(X, weights) + bias.expand(Y.shape[1], Y.shape[2]))
+        # Y_pred = (torch.matmul(X, weights))
+        Y_pred = (torch.matmul(X, weights) + bias)
         loss = loss_func(Y, Y_pred)
+        l2_norm = sum(p.pow(2.0).sum() for p in weights) + sum(b.pow(2.0).sum() for b in bias)
+        loss = loss + lamb * l2_norm
         if np.isnan(loss.item()):
             print("Warning: GD diverged on iteration %i" % k)
             break
@@ -67,32 +71,43 @@ def ridge_regression_gd(X, Y, X_test, Y_test, lamb, learning_rate=1., iterations
 
         with torch.no_grad():
             Y_test_pred = (torch.matmul(X_test, weights) + bias)
+            # Y_test_pred = (torch.matmul(X_test, weights))
             loss_test = loss_func(Y_test, Y_test_pred)
             losses_test.append(loss_test.item())
 
         print("Iteration %d, training loss: %.6f, test loss: %.6f"% (k, loss.item(), loss_test.item()))
 
     return weights, bias, losses_train, losses_test
+    # return weights, [], losses_train, losses_test
 
 
 # path to data and design matrix
 covariates = {'Distractor':1, 'Target':2, 'Novelty':3}
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
-epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_eeg_ica_condition_VS_data.npy'
-epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_eeg_ica_condition_VS_DM.npy'
-epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_eeg_ica_condition_VS_labels.npy'
+# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_data.npy'
+# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_DM.npy'
+# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_labels.npy'
+
+# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_data.npy'
+# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_DM.npy'
+# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_labels.npy'
+
+epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_data.npy'
+epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_DM.npy'
+epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_labels.npy'
+
 
 srate = 128
 deconv_window = (-1.2, 2.4)
-erp_window=(0., .8)
-viz_erp_window=(-.1, .8)
+frp_window=(0., .8)
+viz_window=(0., .8)
 
 manual_seed = 42
 
-viz_deconv_index_window = [int(srate * (-deconv_window[0] + viz_erp_window[0])), int(srate * (-deconv_window[0] + viz_erp_window[1]))]
-# viz_deconv_index_window = [0, int(srate * (-deconv_window[0] + deconv_window[1]))]
-deconv_index_window = [int(srate * (-deconv_window[0] + erp_window[0])), int(srate * (-deconv_window[0] + erp_window[1]))]
+viz_index_window = [int(srate * (-deconv_window[0] + viz_window[0])), int(srate * (-deconv_window[0] + viz_window[1]))]
+# viz_index_window = [0, int(srate * (-deconv_window[0] + deconv_window[1]))]
+frp_index_window = [int(srate * (-deconv_window[0] + frp_window[0])), int(srate * (-deconv_window[0] + frp_window[1]))]
 
 torch.manual_seed(manual_seed)
 
@@ -107,40 +122,18 @@ tau = int(dms.shape[-1] /  len(covariates))
 
 # plot_design_matrix(dms, deconv_window, tau, covariates)
 
-# obtain label array from dm
-# labels = []
-# for i in range(len(dms)):
-#     _temp = [np.sum([dms[i, deconv_index_window[0]+1, tau*j:tau*(j+1)]]) for j, label in enumerate(covariates)]  # find the center event of each dm sample
-#     # assert sum(_temp) == 1
-#     labels.append( _temp.index(1))
-# labels = np.array(labels)
 print('Distractor, Target, Novelty prevalence: %f, %f, %f' % (np.sum(labels==1)/len(labels), np.sum(labels==2)/len(labels), np.sum(labels==3)/len(labels)))
 
 # z normalize data along channel
-# A = stats.zscore(data, axis=2)
-
 data_znormed, scalars = z_norm_by_channel(data)
-
 dms_train, dms_test, data_znormed_train, data_znormed_test = train_test_split(dms, data_znormed, test_size=0.01, random_state=manual_seed)
 
-# beta, error, losses = ridge_regression_gd(X=dms, Y=data, X_test=dms_test, Y_test=data_znormed_test, lamb=1e-3)
-beta, error, losses_train, losses_test = ridge_regression_gd(X=dms_train, Y=data_znormed_train, X_test=dms_test, Y_test=data_znormed_test, lamb=1e-3)
+beta, error, losses_train, losses_test = ridge_regression_gd(X=dms_train, Y=data_znormed_train, X_test=dms_test, Y_test=data_znormed_test, lamb=1e-1)
 
 eeg_chs = mne.channels.make_standard_montage('biosemi64').ch_names
 eeg_ch = 'CPz'
 eeg_index = eeg_chs.index(eeg_ch)
 
-# visualize the betas
-# beta_np = beta.cpu().detach().numpy()
-# error_np = error.cpu().detach().numpy()
-# tau = int(dms.shape[-1] /  len(covariates))
-
-#
-# for i, cov in enumerate(covariates):
-#     plt.plot(beta_np[i * tau:(i+1)*tau, eeg_index] + error_np, label='{0} Beta'.format(cov))
-#     plt.legend()
-#     plt.show()
-#
 plt.plot(losses_train)
 plt.plot(losses_test)
 plt.xlabel("Epoch")
@@ -152,18 +145,21 @@ plt.show()
 # data_recon = data_recon[:, viz_deconv_index_window[0]:viz_deconv_index_window[1], eeg_index]
 # data_recon = scalars[eeg_index].inverse_transform(data_recon)
 
+# plotting covariate betas
 for cov, cov_code in covariates.items():
     dm_cov =  create_dm_for_cov(dms, tau, cov_code-1, deconv_window, srate)  # cov_code - 1 because distractor starts at 1
-    data_recon = torch.matmul(torch.tensor(dm_cov, device='cuda', dtype=torch.float64), beta) + error.expand(data.shape[1], data.shape[2])
-    data_recon = data_recon.cpu().detach().numpy()
-    data_recon = data_recon[:, viz_deconv_index_window[0]:viz_deconv_index_window[1], eeg_index]
-    data_recon = scalars[eeg_index].inverse_transform(data_recon)[0]
+    # cov_beta = torch.matmul(torch.tensor(dm_cov, device='cuda', dtype=torch.float32), beta) + error.expand(data.shape[0], -1, -1)
+    cov_beta = torch.matmul(torch.tensor(dm_cov, device='cuda', dtype=torch.float32), beta)
+    cov_beta = cov_beta.cpu().detach().numpy()
+    cov_beta = cov_beta[:, viz_index_window[0]:viz_index_window[1], eeg_index]
+    cov_beta = scalars[eeg_index].inverse_transform(cov_beta)[0]
 
-    time_vector = np.linspace(viz_erp_window[0], viz_erp_window[1], data_recon.shape[0])
-    plt.plot(time_vector, data_recon, label='Deconv Reconstructed Data')
+    time_vector = np.linspace(viz_window[0], viz_window[1], cov_beta.shape[0])
+    plt.plot(time_vector, cov_beta, label='Estimated Beta Coefficient for Cov {0}'.format(cov))
+    plt.legend()
     plt.twinx()
 
-    data_orig = data[:, viz_deconv_index_window[0]:viz_deconv_index_window[1], eeg_index]
+    data_orig = data[:, viz_index_window[0]:viz_index_window[1], eeg_index]
     data_orig = data_orig[labels == cov_code]
     data_orig_mean = np.mean(data_orig, axis=0)
     data_orig_upper = data_orig_mean + scipy.stats.sem(data_orig, axis=0)  # this is the upper envelope
@@ -171,7 +167,48 @@ for cov, cov_code in covariates.items():
     plt.fill_between(time_vector, data_orig_upper, data_orig_lower, where=data_orig_lower <= data_orig_upper, facecolor='red',
                      interpolate=True,
                      alpha=0.5)
-    plt.plot(time_vector, data_orig_mean, label='Original Data', color='red')
+    plt.plot(time_vector, data_orig_mean, label='Original Data for Cov {0}'.format(cov), color='red')
     plt.legend()
     plt.title('{0} on Channel {1}'.format(cov, eeg_ch))
     plt.show()
+
+# plot deconv corrected FRP
+for cov, cov_code in covariates.items():
+    data_orig = data[:, viz_index_window[0]:viz_index_window[1], eeg_index][labels == cov_code]
+    dm_orig = dms[:, viz_index_window[0]:viz_index_window[1], :][labels == cov_code]
+
+    data_corrected = []
+    for d, dm in zip(data_orig, dm_orig):  # remove the other overlapping signals
+        dm_other = dm.copy()
+        dm_other[frp_index_window[0]:frp_index_window[1]] = 0
+        weights_other = torch.matmul(torch.tensor(dm_other, device='cuda', dtype=torch.float32), beta[:, eeg_index]) + error[viz_index_window[0]:viz_index_window[1], eeg_index]
+        weights_other = weights_other.cpu().detach().numpy()
+        weights_other_rescaled = scalars[eeg_index].inverse_transform(weights_other.reshape(1, -1))[0]
+        data_corrected.append(d - weights_other_rescaled)
+    time_vector = np.linspace(viz_window[0], viz_window[1], weights_other.shape[0])
+    data_corrected = np.array(data_corrected)
+    data_corrected_mean = np.mean(data_corrected, axis=0)
+    data_corrected_upper = data_corrected_mean + scipy.stats.sem(data_corrected, axis=0)  # this is the upper envelope
+    data_corrected_lower = data_corrected_mean - scipy.stats.sem(data_corrected, axis=0)  # this is the lower envelope
+    plt.fill_between(time_vector, data_corrected_upper, data_corrected_lower, where=data_corrected_lower <= data_corrected_upper, facecolor='blue',
+                     interpolate=True,
+                     alpha=0.5)
+    plt.plot(time_vector, data_corrected_mean, label='Deconv corrected Data for Cov {0}'.format(cov), color='blue')
+
+    data_orig_mean = np.mean(data_orig, axis=0)
+    data_orig_upper = data_orig_mean + scipy.stats.sem(data_orig, axis=0)  # this is the upper envelope
+    data_orig_lower = data_orig_mean - scipy.stats.sem(data_orig, axis=0)  # this is the lower envelope
+    plt.fill_between(time_vector, data_orig_upper, data_orig_lower, where=data_orig_lower <= data_orig_upper, facecolor='red',
+                     interpolate=True,
+                     alpha=0.5)
+    plt.plot(time_vector, data_orig_mean, label='Original Data for Cov {0}'.format(cov), color='red')
+
+    plt.legend()
+    plt.title('{0} on Channel {1}'.format(cov, eeg_ch))
+    plt.show()
+
+
+dm_copy = dm.copy()
+dm_copy[frp_index_window[0]:frp_index_window[1]] = 0
+plt.imshow(dm_copy)
+plt.show()

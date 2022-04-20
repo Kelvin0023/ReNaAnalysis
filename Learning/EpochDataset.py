@@ -4,7 +4,7 @@ from imblearn.over_sampling import SMOTE
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 
-from utils import interpolate_epochs_nan
+from learning_utils import interpolate_epochs_nan
 
 
 class EpochDatset(Dataset):

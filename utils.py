@@ -19,6 +19,7 @@ FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
 ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}
 
 
+
 def interpolate_nan(x):
     not_nan = np.logical_not(np.isnan(x))
     if np.sum(np.logical_not(not_nan)) / len(x) > 0.5:  # if more than half are nan
@@ -184,6 +185,7 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
     total_distractor_count = 0
     total_target_count = 0
     total_novelty_count = 0
+    fixation_durations = {'distractor': [], 'target': [], 'novelty': []}
 
     for block_i, item_marker_block_start_index, item_marker_block_end_index in zip(block_list, item_block_start_indices, item_block_end_indices):
         targets = session_log[str(int(block_i))]['targets']
@@ -206,12 +208,15 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             # check the item type
             if this_item_code in distractors:
                 total_distractor_count += 1
+                item_type = 'distractor'
                 event_code = 1
             elif this_item_code in targets:
                 total_target_count += 1
+                item_type = 'target'
                 event_code = 2
             elif this_item_code in novelties:
                 total_novelty_count += 1
+                item_type = 'novelty'
                 event_code = 3
             else:
                 # TODO: put the exception back after the 'reset item marker' update
@@ -231,14 +236,13 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             # check if the intersects is long enough to warrant a fixation
             gaze_intersected_durations = item_markers_timestamps_of_block[gaze_intersect_end_index] - \
                                          item_markers_timestamps_of_block[gaze_intersect_start_index]
-            append_list_lines_to_file(gaze_intersected_durations, 'Data/FixationDurations')  # TODO: check this after we collect more data using the 'reset item marker' fix
+            # append_list_lines_to_file(gaze_intersected_durations, 'Data/FixationDurations')  # TODO: check this after we collect more data using the 'reset item marker' fix
+            fixation_durations[item_type] += list(gaze_intersected_durations)
 
             true_fixations_indices = np.argwhere(gaze_intersected_durations > foveate_duration_threshold)[:, 0]
             true_fixation_timestamps = item_markers_timestamps_of_block[gaze_intersect_start_index[true_fixations_indices]]
 
             # find where in data marker to insert the marker
-            if np.all(np.array([(np.abs(data_timestamps - x)).min() for x in true_fixation_timestamps]) < 1):
-                print("data timestamp deviates too much from fixation timestamp".format(str(np.array([(np.abs(data_timestamps - x)).min() for x in true_fixation_timestamps]))))# the item marker's timestamps does not deviate to much from that of the data's
             data_event_marker_indices = [(np.abs(data_timestamps - x)).argmin() for x in true_fixation_timestamps]
             data_event_marker_array[0][data_event_marker_indices] = event_code
             # if len(true_fixation_timestamps) > 0: print(
@@ -257,9 +261,10 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
     # plt.show()
     if verbose: print("found fixations: %d distractors, %d targets, %d novelties" % (np.sum(data_event_marker_array[0]==1), np.sum(data_event_marker_array[0]==2), np.sum(data_event_marker_array[0]==3)))
     total_item_count = total_distractor_count + total_target_count + total_novelty_count
-    fixation_count_relative = np.array((np.sum(data_event_marker_array[0]==1) / total_distractor_count, np.sum(data_event_marker_array[0]==2) / total_target_count, np.sum(data_event_marker_array[0]==3) / total_novelty_count))
-    # prevalence = prevalence - np.mean(prevalence)
-    return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
+    normalized_fixation_count = {'distractor': np.sum(data_event_marker_array[0]==1) / total_distractor_count,
+                        'target': np.sum(data_event_marker_array[0]==2) / total_target_count,
+                        'novelty': np.sum(data_event_marker_array[0]==3) / total_novelty_count}
+    return np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0), fixation_durations, normalized_fixation_count,
 
 
 def extract_block_data(data_with_event_marker, srate, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
@@ -290,7 +295,7 @@ def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_et,
     mne.set_log_level(verbose=verbose)
     if is_free_viewing:
         assert item_markers is not None and item_markers_timestamps is not None
-        data_ = add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers,
+        data_, _, _ = add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers,
                                     event_marker_timestamps,
                                     data_et,
                                     data_timestamps, session_log,
@@ -333,7 +338,7 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
     # interpolate nan's
     if is_free_viewing:
         assert item_markers is not None and item_markers_timestamps is not None
-        data_eeg_eventMarker = add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers,
+        data_eeg_eventMarker, fixation_durations, normalized_fixation_count = add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers,
                                                  event_marker_timestamps,
                                                  data_array,
                                                  data_timestamps, session_log,
@@ -344,6 +349,7 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
                                                  data_array,
                                                  data_timestamps, session_log,
                                                  item_codes, srate)
+        fixation_durations = normalized_fixation_count = None
 
     biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
     data_channel_names = biosemi_64_montage.ch_names
@@ -432,7 +438,7 @@ def generate_eeg_event_epochs(event_markers, event_marker_timestamps, data_array
                                 reject=reject)
 
     labels_array = epochs.events[:, 2]
-    return epochs, epochs_ICA_cleaned, labels_array, raw, raw_ica_recon
+    return epochs, epochs_ICA_cleaned, labels_array, raw, raw_ica_recon, fixation_durations, normalized_fixation_count
 
 
 def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, srate=200, verbose='INFO'):

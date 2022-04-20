@@ -5,8 +5,7 @@ import tensorflow as tf
 from matplotlib.pyplot import cm
 from tensorflow.python.keras.layers import CuDNNLSTM, Concatenate
 
-from attention import Attention
-from data_utils import get_model_size
+from Learning.attention import Attention
 
 
 def window_slice(data, window_size, stride):

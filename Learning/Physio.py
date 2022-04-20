@@ -9,7 +9,7 @@ from scipy import interpolate
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 
-from utils import window_slice, build_train_rnn, plot_train_history, plot_cm_results, build_train_cnn, build_train_ann, \
+from Learning.learning_utils import window_slice, build_train_rnn, plot_train_history, plot_cm_results, build_train_cnn, build_train_ann, \
     build_train_birnn_with_attention, get_img_from_fig, plot_roc_multiclass
 import matplotlib.pyplot as plt
 

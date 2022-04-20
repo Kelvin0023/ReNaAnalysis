@@ -13,25 +13,23 @@ from utils import generate_pupil_event_epochs, \
 
 #################################################################################################
 is_data_preloaded = True
-is_epochs_preloaded = True
+is_epochs_preloaded = False
 is_regenerate_ica = False
-is_save_loaded_data = False
+is_save_loaded_data = True
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
-# preloaded_epoch_path = 'participant_condition_epoch_dict_RSVPCarousel.p'
-# preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarousel_GazeLocked.p'
-# preloaded_epoch_path = 'Data/participant_condition_epoch_dict_Carousel_GazeLocked.p'
-preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVP_GazeLocked.p'
-# preloaded_epoch_path = 'Data/participant_condition_epoch_dict_VS_GazeLocked.p'
+# preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarousel_EventLocked.p'
+preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarousel_GazeLocked.p'
+
 data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
 epoch_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs'
 eventMarker_conditionIndex_dict = {
     'RSVP': slice(0, 4),
-    # 'Carousel': slice(4, 8),
+    'Carousel': slice(4, 8),
     # 'VS': slice(8, 12),
     # 'TS': slice(12, 16)
 }  # Only put interested conditions here
-free_viewing_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
+FixationLocking_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
 
 tmin_pupil = -0.1
 tmax_pupil = 3.
@@ -60,8 +58,11 @@ start_time = time.time()
 participant_list = os.listdir(data_root)
 participant_directory_list = [os.path.join(data_root, x) for x in participant_list]
 
+
+gaze_statistics_path = preloaded_epoch_path.strip('.p') + 'gaze_statistics' + '.p'
 participant_session_dict = defaultdict(dict)  # create a dict that holds participant -> sessions -> list of sessionFiles
 participant_condition_epoch_dict = defaultdict(dict)
+condition_gaze_statistics = defaultdict(dict)
 participant_badchannel_dict = dict()
 # create a dict that holds participant -> condition epochs
 for participant, participant_directory in zip(participant_list, participant_directory_list):
@@ -149,11 +150,11 @@ if not is_epochs_preloaded:
                                                                session_log,
                                                                item_codes, tmin_pupil, tmax_pupil,
                                                                event_ids,
-                                                               is_free_viewing=condition_name in free_viewing_conditions,
+                                                               is_free_viewing=condition_name in FixationLocking_conditions,
                                                                item_markers=itemMarkers,
                                                                item_markers_timestamps=itemMarkers_timestamps)
 
-                _epochs_eeg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
+                _epochs_eeg, _epochs_eeg_ICA_cleaned, labels_array, _, _, fixation_durations, normalized_fixation_count = generate_eeg_event_epochs(
                     event_markers,
                     event_markers_timestamps,
                     eeg_data,
@@ -164,13 +165,22 @@ if not is_epochs_preloaded:
                     session_ICA_path,
                     tmin_eeg, tmax_eeg,
                     event_ids,
-                    is_free_viewing=condition_name in free_viewing_conditions,
+                    is_free_viewing=condition_name in FixationLocking_conditions,
                     item_markers=itemMarkers,
                     item_markers_timestamps=itemMarkers_timestamps,
                     is_regenerate_ica=is_regenerate_ica,
                     bad_channels=participant_badchannel_dict[
                         participant_index] if participant_index in participant_badchannel_dict.keys() else None)
 
+                if fixation_durations is not None and normalized_fixation_count is not None:  # record gaze statistics
+                    if 'durations' in condition_gaze_statistics[condition_name].keys():
+                        condition_gaze_statistics[condition_name]['durations'] = dict([(event_type, duration_list + condition_gaze_statistics[condition_name]['durations'][event_type]) for event_type, duration_list in fixation_durations.items()])
+                    else:
+                        condition_gaze_statistics[condition_name]['durations'] = fixation_durations
+                    if 'counts' in condition_gaze_statistics[condition_name].keys():
+                        condition_gaze_statistics[condition_name]['counts'] = dict([(event_type, 0.5 * (norm_count + condition_gaze_statistics[condition_name]['counts'][event_type])) for event_type, norm_count in normalized_fixation_count.items()])
+                    else:
+                        condition_gaze_statistics[condition_name]['counts'] = normalized_fixation_count
                 if condition_name not in participant_condition_epoch_dict[participant_index].keys():
                     participant_condition_epoch_dict[participant_index][condition_name] = (
                         _epochs_pupil, _epochs_eeg, _epochs_eeg_ICA_cleaned, labels_array)
@@ -188,8 +198,10 @@ if not is_epochs_preloaded:
                             )
                         )
 
-    if is_save_loaded_data: pickle.dump(participant_condition_epoch_dict,
-                                        open(preloaded_epoch_path, 'wb'))
+    if is_save_loaded_data:
+        pickle.dump(participant_condition_epoch_dict, open(preloaded_epoch_path, 'wb'))
+        pickle.dump(condition_gaze_statistics, open(gaze_statistics_path, 'wb'))
+
 else:  # if epochs are preloaded and saved
     print("Loading preloaded epochs ...")
     participant_condition_epoch_dict = pickle.load(open(preloaded_epoch_path, 'rb'))
@@ -243,18 +255,20 @@ for trial_index, single_trial_df in enumerate(epochs_carousel_gaze_this_particip
 
 ''' Export per-condition eeg-ica epochs with design matrices
 '''
+# print("exporting data")
 # for condition_name in eventMarker_conditionIndex_dict.keys():
+#     locking = 'FixationLocked' if condition_name in FixationLocking_conditions else 'EventLocked'
 #     condition_epoch_list = flatten_list([x.items() for x in participant_condition_epoch_dict.values()])
 #     condition_epochs = [e for c, e in condition_epoch_list if c == condition_name]
 #     condition_epochs_eeg_ica: mne.Epochs = mne.concatenate_epochs([eeg_ica for pupil, eeg, eeg_ica, labels in condition_epochs])
 #     condition_epochs_labels =  np.concatenate([labels for pupil, eeg, eeg_ica, labels in condition_epochs])
 #
 #     trial_x_export_path = os.path.join(epoch_data_export_root,
-#                                        "epochs_eeg_ica_condition_{0}_data.npy".format(condition_name))
+#                                        "epochs_{0}_eeg_ica_condition_{1}_data.npy".format(locking, condition_name))
 #     trial_dm_export_path = os.path.join(epoch_data_export_root,
-#                                        "epochs_eeg_ica_condition_{0}_DM.npy".format(condition_name))
+#                                        "epochs_{0}_eeg_ica_condition_{1}_DM.npy".format(locking, condition_name))
 #     trial_y_export_path = os.path.join(epoch_data_export_root,
-#                                        "epochs_eeg_ica_condition_{0}_labels.npy".format(condition_name))
+#                                        "epochs_{0}_eeg_ica_condition_{1}_labels.npy".format(locking, condition_name))
 #     np.save(trial_x_export_path, condition_epochs_eeg_ica.copy().pick('eeg').get_data())
 #     DM_picks = mne.pick_channels_regexp(condition_epochs_eeg_ica.ch_names, regexp=r'DM_.*')
 #     np.save(trial_dm_export_path, condition_epochs_eeg_ica.copy().pick(DM_picks).get_data())
