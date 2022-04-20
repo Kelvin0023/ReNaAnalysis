@@ -208,7 +208,7 @@ for cov, cov_code in covariates.items():
     plt.show()
 
 
-dm_copy = dm.copy()
-dm_copy[frp_index_window[0]:frp_index_window[1]] = 0
-plt.imshow(dm_copy)
-plt.show()
+# dm_copy = dm.copy()
+# dm_copy[frp_index_window[0]:frp_index_window[1]] = 0
+# plt.imshow(dm_copy)
+# plt.show()

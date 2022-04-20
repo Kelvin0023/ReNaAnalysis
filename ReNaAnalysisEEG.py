@@ -3,6 +3,8 @@ import os
 import pickle
 import time
 from collections import defaultdict
+
+import matplotlib.pyplot as plt
 import numpy as np
 import mne
 from rena.utils.data_utils import RNStream
@@ -19,14 +21,14 @@ is_save_loaded_data = True
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
 # preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarousel_EventLocked.p'
-preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarousel_GazeLocked.p'
+preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarouselVS_GazeLocked.p'
 
 data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
 epoch_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs'
 eventMarker_conditionIndex_dict = {
     'RSVP': slice(0, 4),
     'Carousel': slice(4, 8),
-    # 'VS': slice(8, 12),
+    'VS': slice(8, 12)
     # 'TS': slice(12, 16)
 }  # Only put interested conditions here
 FixationLocking_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
@@ -39,8 +41,10 @@ tmax_pupil_viz = 3.
 tmin_eeg = -1.2
 tmax_eeg = 2.4
 
-tmin_eeg_viz = tmin_eeg
-tmax_eeg_viz = tmax_eeg
+# tmin_eeg_viz = tmin_eeg
+# tmax_eeg_viz = tmax_eeg
+tmin_eeg_viz = -0.1
+tmax_eeg_viz = 1.2
 
 # eeg_picks = ['P4', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
@@ -208,6 +212,33 @@ else:  # if epochs are preloaded and saved
     dats_loading_end_time = time.time()
     print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
 
+if condition_gaze_statistics is not None:
+    for condition_name in eventMarker_conditionIndex_dict.keys():
+        for event in event_ids.keys():
+            durations = np.array(condition_gaze_statistics[condition_name]['durations'][event.lower()])
+            durations = durations[durations < 1.4]
+            plt.hist(durations * 1e3, label=event, bins=20)
+            plt.legend()
+            plt.xlabel('Millisecond')
+            plt.ylabel('Count')
+            plt.xlim(0, 1500)
+            plt.ylim(0, 700)
+            plt.title('Fixation duration {0}-{1} (min = 141.4 ms)'.format(condition_name, event))
+            plt.show()
+    # plot counts
+    plt.rcParams["figure.figsize"] = (12.8, 7.2)
+    X = np.arange(3)
+    for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
+        bar = plt.bar(X + 0.25 * i, [condition_gaze_statistics[condition_name]['counts'][event.lower()] for event in event_ids.keys()], label=condition_name, width=0.25)
+        for rect in bar:
+            height = rect.get_height()
+            plt.text(rect.get_x() + rect.get_width() / 2.0, height, f'{height:.3f}', ha='center', va='bottom')
+
+    plt.xticks(np.linspace(0, 2.5, 3), event_ids.keys())
+    plt.legend()
+    plt.title('Normalized fixation counts across conditions and item types')
+    plt.show()
+
 # get all the epochs for conditions and plots per condition
 print("Creating plots across all participants per condition")
 for condition_name in eventMarker_conditionIndex_dict.keys():
@@ -220,7 +251,7 @@ for condition_name in eventMarker_conditionIndex_dict.keys():
     title = 'Averaged across Participants, Condition {0}'.format(condition_name)
     visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
     visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
-                         title + '. ICA Cleaned', is_plot_timeseries=True)
+                         title + '. ICA Cleaned', is_plot_topo_map=False)
     # visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title,
     #                      is_plot_timeseries=True)
 
