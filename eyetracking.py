@@ -3,6 +3,8 @@ import math
 import numpy as np
 from matplotlib import pyplot as plt
 
+SACCADE_CODE = 1
+FIXATION_CODE = 2
 
 class Saccade:
     def __init__(self, amplitude, duration, peak_velocity, average_velocity):
@@ -40,7 +42,7 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
     @param glitch_threshold: float: unit in deg/s, time points with velocity exceeding this threshold will be considered
     a glitch in the recording
     @return
-    event types: -1: noise or glitch; 1: fixation; 2: saccade
+    event types: -1: noise or glitch; 1: saccade; 2: fixation
     """
     events = np.zeros(gaze_timestamps.shape)
     events[gaze_status != 2] = -1  # remove points where the status is invalid from the eyetracker
@@ -85,35 +87,40 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
     for onset, offset in fixation_inteval_indices:
         _xy_deg = gaze_xy_deg[:, onset:offset][:, events[onset:offset] != -1] # check the dispersion excluding the invalid points
         dispersion = np.max(_xy_deg, axis=1) -  np.min(_xy_deg, axis=1)
-        fixations.append(Fixation(offset - onset, dispersion))
-    start = 800
-    end = 1200
-    plt.rcParams["figure.figsize"] = (20, 10)
-    a = [s for s in saccades if s[0] > start and s[2] < end]
-    plt.plot(gaze_timestamps[start:end], velocities[start:end])
-    for s in a:
-        plt.axvspan(gaze_timestamps[s[0]], gaze_timestamps[s[2]], alpha = 0.5, color='r')
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Velocity (deg/sec)')
-    plt.show()
-
-    start = 800
-    end = 1200
-    plt.rcParams["figure.figsize"] = (20, 10)
-    a = [s for s in saccades if s[0] > start and s[2] < end]
-    b = [f for f in fixation_inteval_indices if f[0] > start and f[1] < end]
-    plt.plot(gaze_timestamps[start:end], velocities[start:end])
-    for s in a:
-        plt.axvspan(gaze_timestamps[s[0]], gaze_timestamps[s[2]], alpha = 0.5, color='r')
-    for f in b:
-        plt.axvspan(gaze_timestamps[f[0]], gaze_timestamps[f[1]], alpha = 0.5, color='g')
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Velocity (deg/sec)')
-    plt.show()
+        fixations.append((onset, offset, Fixation(offset - onset, dispersion)))
+    # start = 800
+    # end = 1200
+    # plt.rcParams["figure.figsize"] = (20, 10)
+    # a = [s for s in saccades if s[0] > start and s[2] < end]
+    # plt.plot(gaze_timestamps[start:end], velocities[start:end])
+    # for s in a:
+    #     plt.axvspan(gaze_timestamps[s[0]], gaze_timestamps[s[2]], alpha = 0.5, color='r')
+    # plt.xlabel('Time (sec)')
+    # plt.ylabel('Velocity (deg/sec)')
+    # plt.show()
+    #
+    # start = 800
+    # end = 1200
+    # plt.rcParams["figure.figsize"] = (20, 10)
+    # a = [s for s in saccades if s[0] > start and s[2] < end]
+    # b = [f for f in fixation_inteval_indices if f[0] > start and f[1] < end]
+    # plt.plot(gaze_timestamps[start:end], velocities[start:end])
+    # for s in a:
+    #     plt.axvspan(gaze_timestamps[s[0]], gaze_timestamps[s[2]], alpha = 0.5, color='r')
+    # for f in b:
+    #     plt.axvspan(gaze_timestamps[f[0]], gaze_timestamps[f[1]], alpha = 0.5, color='g')
+    # plt.xlabel('Time (sec)')
+    # plt.ylabel('Velocity (deg/sec)')
+    # plt.show()
 
     # plt.hist([s[3].amplitude for s in saccades])
     # plt.show()
     # plt.hist([s[3].amplitude for s in saccades])
     # plt.show()
     glitch_precentage = np.sum(events == -1) / len(events)
-    print('')
+
+    for onset, _, offset, _ in saccades:
+        events[onset:offset] = SACCADE_CODE
+    for onset, offset, _ in fixations:
+        events[onset:offset] = FIXATION_CODE
+    return events, saccades, fixations

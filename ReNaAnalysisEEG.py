@@ -151,7 +151,7 @@ if not is_epochs_preloaded:
                 # TODO detect the gaze events
                 gaze_xy = eyetracking_data[[varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
                 gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
-                gaze_events = gaze_event_detection(gaze_xy, gaze_status, eyetracking_timestamps)
+                gaze_events, fixations, saccades = gaze_event_detection(gaze_xy, gaze_status, eyetracking_timestamps)
 
                 _epochs_pupil, _ = generate_pupil_event_epochs(event_markers,
                                                                event_markers_timestamps,
