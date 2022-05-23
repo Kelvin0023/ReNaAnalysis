@@ -176,10 +176,10 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             item_block_end_indices.append(np.argmin(np.abs(item_markers_timestamps - event_marker_timestamps[i])))
             continue
 
-    data_block_starts_indices = np.argwhere(
-        data_event_marker_array[0, :] == 4)  # start of a block is denoted by event marker 4
-    data_block_ends_indices = np.argwhere(
-        data_event_marker_array[0, :] == 5)  # end of a block is denoted by event marker 5
+    # data_block_starts_indices = np.argwhere(
+    #     data_event_marker_array[0, :] == 4)  # start of a block is denoted by event marker 4
+    # data_block_ends_indices = np.argwhere(
+    #     data_event_marker_array[0, :] == 5)  # end of a block is denoted by event marker 5
 
     # iterate through blocks
     total_distractor_count = 0
@@ -288,12 +288,12 @@ def extract_block_data(data_with_event_marker, srate, pre_block_time=.5, post_bl
 
 
 def generate_pupil_event_epochs(event_markers, event_marker_timestamps, data_et, data_timestamps, data_channel_names,
-                                session_log, item_codes, tmin, tmax, event_ids, is_free_viewing,
+                                session_log, item_codes, tmin, tmax, event_ids, is_fixation_locked,
                                 item_markers=None, item_markers_timestamps=None, erp_window=(.0, .8),
                                 srate=200,
                                 verbose='WARNING'):  # use a fixed sampling rate for the sampling rate to match between recordings
     mne.set_log_level(verbose=verbose)
-    if is_free_viewing:
+    if is_fixation_locked:
         assert item_markers is not None and item_markers_timestamps is not None
         data_, _, _ = add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers,
                                     event_marker_timestamps,

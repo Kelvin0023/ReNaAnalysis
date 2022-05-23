@@ -9,6 +9,7 @@ import numpy as np
 import mne
 from rena.utils.data_utils import RNStream
 
+from eyetracking import gaze_event_detection
 from utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list
@@ -17,14 +18,17 @@ from utils import generate_pupil_event_epochs, \
 is_data_preloaded = True
 is_epochs_preloaded = False
 is_regenerate_ica = False
-is_save_loaded_data = True
+is_save_loaded_data = False
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
-# preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarousel_EventLocked.p'
 preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RSVPCarouselVS_GazeLocked.p'
+base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+# base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
+# varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
-data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
-epoch_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs'
+data_root = os.path.join(base_root, "Subjects")
+epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
 eventMarker_conditionIndex_dict = {
     'RSVP': slice(0, 4),
     'Carousel': slice(4, 8),
@@ -53,7 +57,6 @@ eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
 # newest eyetracking data channel format
-varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
 event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1}  # event_ids_for_interested_epochs
 
@@ -61,7 +64,6 @@ event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1}  # event_ids_for_intere
 start_time = time.time()
 participant_list = os.listdir(data_root)
 participant_directory_list = [os.path.join(data_root, x) for x in participant_list]
-
 
 gaze_statistics_path = preloaded_epoch_path.strip('.p') + 'gaze_statistics' + '.p'
 participant_session_dict = defaultdict(dict)  # create a dict that holds participant -> sessions -> list of sessionFiles
@@ -146,6 +148,11 @@ if not is_epochs_preloaded:
                     len(session_dict), p_i + 1))
                 event_markers = data['Unity.ReNa.EventMarkers'][0][condition_event_marker_index]
 
+                # TODO detect the gaze events
+                gaze_xy = eyetracking_data[[varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
+                gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
+                gaze_events = gaze_event_detection(gaze_xy, gaze_status, eyetracking_timestamps)
+
                 _epochs_pupil, _ = generate_pupil_event_epochs(event_markers,
                                                                event_markers_timestamps,
                                                                eyetracking_data,
@@ -154,7 +161,7 @@ if not is_epochs_preloaded:
                                                                session_log,
                                                                item_codes, tmin_pupil, tmax_pupil,
                                                                event_ids,
-                                                               is_free_viewing=condition_name in FixationLocking_conditions,
+                                                               is_fixation_locked=condition_name in FixationLocking_conditions,
                                                                item_markers=itemMarkers,
                                                                item_markers_timestamps=itemMarkers_timestamps)
 
@@ -248,7 +255,7 @@ for condition_name in eventMarker_conditionIndex_dict.keys():
     condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, eeg, _, _ in condition_epochs])
     # condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg, _ in condition_epochs])
     condition_epochs_eeg_ica = mne.concatenate_epochs([eeg for pupil, eeg, eeg_ica, _ in condition_epochs])
-    title = 'Averaged across Participants, Condition {0}'.format(condition_name)
+    title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, 'event' if condition_name not in FixationLocking_conditions else 'fixation')
     visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
     visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
                          title + '. ICA Cleaned', is_plot_topo_map=False)
