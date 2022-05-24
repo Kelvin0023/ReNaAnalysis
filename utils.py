@@ -499,17 +499,32 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def create_gaze_behavior_events(fixations, saccades, data_timestamps):
+def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_timestamps, deviation_threshold=1e-2):
     """
     create a new event array that matches the sampling rate of the data timestamps
     the arguements event_timestamps and data_timestamps must be from the same clock
     @rtype: ndarray: the returned event array will be of the same length as the data_timestamps, and the event values are
     synced with the data_timestamps
     """
+    deviant_count = 0
     _event_array = np.zeros(data_timestamps.shape)
-    # for i in range(fixations):
-    #     # find the nearest event marker
-    #     nearest_event = event_array[(np.abs(event_timestamps - data_timestamps[i])).argmin()]
-    #     _event_array[i] = nearest_event
+    for onset, _, _ in fixations:
+        onset_time = gaze_timestamps[onset]
+        if onset_time > np.max(data_timestamps):
+            break
+        if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
+            nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
+            _event_array[nearest_data_index] = 6  # for fixation onset
+        else:
+            deviant_count += 1
+    for onset, _, _, _ in saccades:
+        onset_time = gaze_timestamps[onset]
+        if onset_time > np.max(data_timestamps):
+            break
+        if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
+            nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
+            _event_array[nearest_data_index] = 7  # for saccade onset
+        else:
+            deviant_count += 1
 
-    return _event_array
+    return np.expand_dims(_event_array, axis=0)

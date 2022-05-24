@@ -124,4 +124,4 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
         events[onset:offset] = SACCADE_CODE
     for onset, offset, _ in fixations:
         events[onset:offset] = FIXATION_CODE
-    return events, saccades, fixations
+    return events, fixations, saccades

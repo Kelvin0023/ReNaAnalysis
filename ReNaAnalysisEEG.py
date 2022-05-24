@@ -1,3 +1,9 @@
+"""
+1 is distractor, 2 is target, 3 is novelty
+4 and 5 are block starts and ends
+6 and 7 encodes fixation and saccade onset respectively
+"""
+
 import json
 import os
 import pickle
@@ -75,7 +81,8 @@ participant_directory_list = [os.path.join(data_root, x) for x in participant_li
 
 gaze_statistics_path = preloaded_epoch_path.strip('.p') + 'gaze_statistics' + '.p'
 participant_session_dict = defaultdict(dict)  # create a dict that holds participant -> sessions -> list of sessionFiles
-participant_condition_epoch_dict = defaultdict(dict)
+participant_condition_epoch_dict = defaultdict(dict)  # participants -> condition name -> epoch object
+participant_condition_block_dict = defaultdict(dict)
 condition_gaze_statistics = defaultdict(dict)
 participant_badchannel_dict = dict()
 # create a dict that holds participant -> condition epochs
@@ -164,11 +171,6 @@ if not is_epochs_preloaded:
                     event_markers_timestamps, data_exg_em, session_log,
                     item_codes, exg_sampling_rate, verbose=1)
 
-                exg_egm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeMarker']
-                exg_egm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 2
-                eyetracking_egm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeMarker']
-                eyetracking_egm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 2
-
                 # add gaze behaviors
                 gaze_xy = eyetracking_data[
                     [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
@@ -176,19 +178,28 @@ if not is_epochs_preloaded:
                 gaze_behavior_events, fixations, saccades = gaze_event_detection(gaze_xy, gaze_status,
                                                                                  eyetracking_timestamps)
 
-                # exg_gb_markers = create_gaze_behavior_events(fixations, saccades, data_exg_egm[0])
-                # data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, gaze_behavior_events])
-                # data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
+                exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])
+                data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
+
+                eyetracking_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_eyetracking_egm[0])
+                data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, eyetracking_gb_markers])
+
+
+                # create channels based on the event channels added
+                exg_egm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeMarker'] + ["GazeBehavior"]
+                exg_egm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 3
+                eyetracking_egm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeMarker'] + ["GazeBehavior"]
+                eyetracking_egm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 3
 
                 #########################
 
                 # generate the epochs
-                _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egm,
+                _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,
                                                                eyetracking_egm_channels, eyetracking_egm_channel_types, tmin_pupil, tmax_pupil,
                                                                event_ids, locked_marker)
 
                 _epochs_eeg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
-                    data_exg_egm,
+                    data_exg_egbm,
                     exg_egm_channles,
                     exg_egm_channle_types,
                     session_ICA_path,
@@ -199,7 +210,11 @@ if not is_epochs_preloaded:
                         participant_index] if participant_index in participant_badchannel_dict.keys() else None)
                 #########################
 
-                if fixation_durations is not None and normalized_fixation_count is not None:  # record gaze statistics
+                # extract block data
+                # extract_block_data(data_eyetracking_egm)
+
+                # record gaze statistics
+                if fixation_durations is not None and normalized_fixation_count is not None:
                     if 'durations' in condition_gaze_statistics[condition_name].keys():
                         condition_gaze_statistics[condition_name]['durations'] = dict([(event_type, duration_list +
                                                                                         condition_gaze_statistics[
