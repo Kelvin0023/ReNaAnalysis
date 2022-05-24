@@ -86,8 +86,9 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
     fixation_inteval_indices = [(saccades[i-1][2], saccades[i][0]) for i in range(1, len(saccades))]  # IGNORE the interval before the first saccade
     for onset, offset in fixation_inteval_indices:
         _xy_deg = gaze_xy_deg[:, onset:offset][:, events[onset:offset] != -1] # check the dispersion excluding the invalid points
-        dispersion = np.max(_xy_deg, axis=1) -  np.min(_xy_deg, axis=1)
-        fixations.append((onset, offset, Fixation(offset - onset, dispersion)))
+        if _xy_deg.shape[1] != 0:  # if the entire interval is invalid, then we do NOT add it to fixation
+            dispersion = np.max(_xy_deg, axis=1) - np.min(_xy_deg, axis=1)
+            fixations.append((onset, offset, Fixation(offset - onset, dispersion)))
     # start = 800
     # end = 1200
     # plt.rcParams["figure.figsize"] = (20, 10)
