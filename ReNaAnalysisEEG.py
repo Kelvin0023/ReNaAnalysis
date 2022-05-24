@@ -13,7 +13,7 @@ from eyetracking import gaze_event_detection
 from fs_utils import load_participant_session_dict
 from utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
-    read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, match_event_to_data
+    read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events
 
 #################################################################################################
 is_data_preloaded = True
@@ -36,7 +36,8 @@ eventMarker_conditionIndex_dict = {
     'VS': slice(8, 12)
     # 'TS': slice(12, 16)
 }  # Only put interested conditions here
-FixationLocking_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
+# FixationLocking_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
+locked_marker = 'GazeMarker'
 
 tmin_pupil = -0.1
 tmax_pupil = 3.
@@ -59,10 +60,13 @@ eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 # eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
 
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
-
+info_chns = ["info1", "info2", "info3"]
 # newest eyetracking data channel format
 
-event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1}  # event_ids_for_interested_epochs
+event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1, }  # event_ids_for_interested_epochs
+
+eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
+ecg_ch_name='ECG00'
 
 # end of setup parameters, start of the main block ######################################################
 start_time = time.time()
@@ -94,7 +98,8 @@ for participant, participant_directory in zip(participant_list, participant_dire
 
 # preload all the .dats
 if not is_epochs_preloaded:
-    participant_session_dict = load_participant_session_dict(participant_session_dict, is_data_preloaded, is_save_loaded_data, preloaded_dats_path)
+    participant_session_dict = load_participant_session_dict(participant_session_dict, is_data_preloaded,
+                                                             is_save_loaded_data, preloaded_dats_path)
     dats_loading_end_time = time.time()
     print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
 
@@ -134,52 +139,61 @@ if not is_epochs_preloaded:
                 # merge and rescale eeg and ecg
                 exg_data = rescale_merge_exg(eeg_data, ecg_data)
                 #########################
-
                 #  detect the gaze events
-                gaze_xy = eyetracking_data[
-                    [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
-                gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
-                gaze_behavior_events, fixations, saccades = gaze_event_detection(gaze_xy, gaze_status, eyetracking_timestamps)
                 #########################
 
                 # identify the events and add event array to the data array for both eyetracking and exg
                 # add events
                 data_eyetracking_em = add_em_ts_to_data(event_markers,
-                                                           event_markers_timestamps,
-                                                           eyetracking_data,
-                                                           eyetracking_timestamps, session_log,
-                                                           item_codes, eyetracking_sampling_rate)
+                                                        event_markers_timestamps,
+                                                        eyetracking_data,
+                                                        eyetracking_timestamps, session_log,
+                                                        item_codes, eyetracking_sampling_rate)
                 data_exg_em = add_em_ts_to_data(event_markers,
-                                                   event_markers_timestamps,
-                                                   exg_data,
-                                                   exg_timestamps, session_log,
-                                                   item_codes, exg_sampling_rate)
+                                                event_markers_timestamps,
+                                                exg_data,
+                                                exg_timestamps, session_log,
+                                                item_codes, exg_sampling_rate)
                 # add gaze events
                 data_eyetracking_egm, fixation_durations, normalized_fixation_count = add_gaze_em_to_data(
                     item_markers, item_marker_timestamps, event_markers,
-                    event_markers_timestamps, data_eyetracking_em, eyetracking_timestamps, session_log,
+                    event_markers_timestamps, data_eyetracking_em, session_log,
                     item_codes, eyetracking_sampling_rate, verbose=1)
                 data_exg_egm, _, _ = add_gaze_em_to_data(
                     item_markers, item_marker_timestamps, event_markers,
-                    event_markers_timestamps, data_exg_em, exg_timestamps, session_log,
+                    event_markers_timestamps, data_exg_em, session_log,
                     item_codes, exg_sampling_rate, verbose=1)
+
+                exg_egm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeMarker']
+                exg_egm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 2
+                eyetracking_egm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeMarker']
+                eyetracking_egm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 2
+
                 # add gaze behaviors
-                exg_gb_markers = match_event_to_data(gaze_behavior_events, eyetracking_timestamps, exg_timestamps)
-                data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, gaze_behavior_events])
-                data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
+                gaze_xy = eyetracking_data[
+                    [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
+                gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
+                gaze_behavior_events, fixations, saccades = gaze_event_detection(gaze_xy, gaze_status,
+                                                                                 eyetracking_timestamps)
+
+                # exg_gb_markers = create_gaze_behavior_events(fixations, saccades, data_exg_egm[0])
+                # data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, gaze_behavior_events])
+                # data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
 
                 #########################
 
                 # generate the epochs
-                _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,
-                                                               varjoEyetracking_channelNames, tmin_pupil, tmax_pupil,
-                                                               event_ids)
+                _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egm,
+                                                               eyetracking_egm_channels, eyetracking_egm_channel_types, tmin_pupil, tmax_pupil,
+                                                               event_ids, locked_marker)
 
                 _epochs_eeg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
-                    data_exg_egbm,
+                    data_exg_egm,
+                    exg_egm_channles,
+                    exg_egm_channle_types,
                     session_ICA_path,
                     tmin_eeg, tmax_eeg,
-                    event_ids,
+                    event_ids, locked_marker,
                     is_regenerate_ica=is_regenerate_ica,
                     bad_channels=participant_badchannel_dict[
                         participant_index] if participant_index in participant_badchannel_dict.keys() else None)
@@ -197,7 +211,7 @@ if not is_epochs_preloaded:
                         condition_gaze_statistics[condition_name]['durations'] = fixation_durations
                     if 'counts' in condition_gaze_statistics[condition_name].keys():
                         condition_gaze_statistics[condition_name]['counts'] = dict([(event_type, 0.5 * (
-                                    norm_count + condition_gaze_statistics[condition_name]['counts'][event_type])) for
+                                norm_count + condition_gaze_statistics[condition_name]['counts'][event_type])) for
                                                                                     event_type, norm_count in
                                                                                     normalized_fixation_count.items()])
                     else:
@@ -269,8 +283,7 @@ for condition_name in eventMarker_conditionIndex_dict.keys():
     condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, eeg, _, _ in condition_epochs])
     # condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg, _ in condition_epochs])
     condition_epochs_eeg_ica = mne.concatenate_epochs([eeg for pupil, eeg, eeg_ica, _ in condition_epochs])
-    title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name,
-                                                                             'event' if condition_name not in FixationLocking_conditions else 'fixation')
+    title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, locked_marker)
     visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
     visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
                          title + '. ICA Cleaned', is_plot_topo_map=False)
