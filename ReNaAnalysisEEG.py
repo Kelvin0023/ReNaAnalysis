@@ -3,7 +3,10 @@
 4 and 5 are block starts and ends
 6 and 7 encodes fixation and saccade onset respectively
 
-6 is a fixation on distractor, 7 is a fixation on target,
+6: fixation onset distractor
+7: fixation onset target
+8: fixation onset novelty
+9: saccade onset
 """
 
 import json
@@ -25,18 +28,18 @@ from utils import generate_pupil_event_epochs, \
     extract_block_data, find_fixation_saccade_targets
 
 #################################################################################################
-is_data_preloaded = True
+is_data_preloaded = False
 is_epochs_preloaded = False
 is_regenerate_ica = False
 is_save_loaded_data = True
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
-preloaded_epoch_path = 'Data/participant_condition_epoch_dict.p'
+preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RCV_fsrp.p'
 preloaded_block_path = 'Data/participant_condition_block_dict.p'
-base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
-# base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
-varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
-# varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
+# base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+# varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
+varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
 data_root = os.path.join(base_root, "Subjects")
 epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
@@ -68,14 +71,17 @@ exg_srate = 2048
 eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 # eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
 
-color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green', 'Fixation': 'green', 'Saccade': 'red'}
+color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
+              'Fixation': 'blue', 'Saccade': 'orange',
+              'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green'}
 info_chns = ["info1", "info2", "info3"]
 # newest eyetracking data channel format
 
 # event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1, }  # event_ids_for_interested_epochs
 # locked_marker = 'GazeMarker'
 
-event_ids = {'Fixation': 6, 'Saccade': 7, }  # event_ids_for_interested_epochs
+# event_ids = {'Fixation': 6, 'Saccade': 7, }  # event_ids_for_interested_epochs
+event_ids = {'FixationDistractor': 6, 'FixationTarget': 7, 'FixationNovelty': 8, 'Saccade': 9, }  # event_ids_for_interested_epochs
 locked_marker = 'GazeBehavior'
 
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
@@ -90,7 +96,11 @@ gaze_statistics_path = preloaded_epoch_path.strip('.p') + 'gaze_statistics' + '.
 participant_session_dict = defaultdict(dict)  # create a dict that holds participant -> sessions -> list of sessionFiles
 participant_condition_epoch_dict = defaultdict(dict)  # participants -> condition name -> epoch object
 participant_condition_block_dict = defaultdict(dict)
+condition_gaze_behaviors = defaultdict(dict)
 condition_gaze_statistics = defaultdict(dict)
+for condition_names in eventMarker_conditionIndex_dict.keys():
+    condition_gaze_behaviors[condition_names]['fixations'] = []
+    condition_gaze_behaviors[condition_names]['saccades'] = []
 participant_badchannel_dict = dict()
 # create a dict that holds participant -> condition epochs
 for participant, participant_directory in zip(participant_list, participant_directory_list):
@@ -187,13 +197,14 @@ if not is_epochs_preloaded:
                 gaze_behavior_events, fixations, saccades = gaze_event_detection(gaze_xy, gaze_status,
                                                                                  eyetracking_timestamps)
 
-                find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
+                fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
 
                 exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])
                 data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
 
                 eyetracking_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_eyetracking_egm[0])
                 data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, eyetracking_gb_markers])
+                del data_exg_egm, data_eyetracking_egm
 
                 # create channels based on the event channels added
                 exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeMarker'] + ["GazeBehavior"]
@@ -244,6 +255,10 @@ if not is_epochs_preloaded:
                                                                                     normalized_fixation_count.items()])
                     else:
                         condition_gaze_statistics[condition_name]['counts'] = normalized_fixation_count
+                # Add to gaze behaviors
+
+                condition_gaze_behaviors[condition_name]['fixations'] = condition_gaze_behaviors[condition_name]['fixations'] + fixations
+                condition_gaze_behaviors[condition_name]['saccades'] = condition_gaze_behaviors[condition_name]['saccades'] + saccades
 
                 # Add the new epochs to the epoch dictionary
                 if condition_name not in participant_condition_epoch_dict[participant_index].keys():
@@ -278,7 +293,7 @@ if not is_epochs_preloaded:
 
     if is_save_loaded_data:
         pickle.dump(participant_condition_epoch_dict, open(preloaded_epoch_path, 'wb'))
-        pickle.dump(participant_condition_block_dict, open(preloaded_epoch_path, 'wb'))
+        # pickle.dump(participant_condition_block_dict, open(preloaded_epoch_path, 'wb'))
         pickle.dump(condition_gaze_statistics, open(gaze_statistics_path, 'wb'))
 
 else:  # if epochs are preloaded and saved
@@ -327,7 +342,7 @@ for condition_name in eventMarker_conditionIndex_dict.keys():
     title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, locked_marker)
     visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
     visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
-                         title + '. ICA Cleaned', is_plot_topo_map=False)
+                         title, is_plot_topo_map=False)
     # visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title,
     #                      is_plot_timeseries=True)
 
