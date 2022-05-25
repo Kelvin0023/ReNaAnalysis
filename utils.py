@@ -457,11 +457,15 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
     return epochs, epochs_ICA_cleaned, labels_array, raw, raw_ica_recon
 
 
-def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, srate=200, verbose='INFO'):
+def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
+    plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
     for event_name, event_marker_id in event_ids.items():
-        y = epochs[event_name].get_data()
+        try:
+            y = epochs[event_name].get_data()
+        except KeyError:  # meaning this event does not exist in these epochs
+            continue
         y = interpolate_epoch_zeros(y)  # remove nan
         y = interpolate_epochs_nan(y)  # remove nan
         assert np.sum(np.isnan(y)) == 0
@@ -490,13 +494,17 @@ def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, sra
     plt.show()
 
 
-def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title, out_dir=None, verbose='INFO', is_plot_timeseries=True, is_plot_topo_map=True):
+def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True):
     mne.set_log_level(verbose=verbose)
+    plt.rcParams["figure.figsize"] = fig_size
 
     if is_plot_timeseries:
         for ch in picks:
             for event_name, event_marker_id in event_ids.items():
-                y = epochs.copy().crop(tmin, tmax)[event_name].pick_channels([ch]).get_data().squeeze(1)
+                try:
+                    y = epochs.copy().crop(tmin, tmax)[event_name].pick_channels([ch]).get_data().squeeze(1)
+                except KeyError:  # meaning this event does not exist in these epochs
+                    continue
                 y_mean = np.mean(y, axis=0)
                 y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
                 y2 = y_mean - scipy.stats.sem(y, axis=0)
@@ -524,7 +532,7 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
         vmin_EEG = np.min(evoked.get_data())
 
         for event_name, event_marker_id in event_ids.items():
-            epochs[event_name].average().plot_topomap(times=np.linspace(evoked.tmin, evoked.tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
+            epochs[event_name].average().plot_topomap(times=np.linspace(tmin, tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
 
 
 # def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
@@ -562,22 +570,27 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
     """
     deviant_count = 0
     _event_array = np.zeros(data_timestamps.shape)
-    for onset, _, _ in fixations:
-        onset_time = gaze_timestamps[onset]
+    for f in fixations:
+        onset_time = gaze_timestamps[f.onset]
         if onset_time > np.max(data_timestamps):
             break
         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-            _event_array[nearest_data_index] = 6  # for fixation onset
+            if f.stim == 'distractor':
+                _event_array[nearest_data_index] = 6  # for fixation onset
+            if f.stim == 'target':
+                _event_array[nearest_data_index] = 7  # for fixation onset
+            if f.stim == 'novelty':
+                _event_array[nearest_data_index] = 8  # for fixation onset
         else:
             deviant_count += 1
-    for onset, _, _, _ in saccades:
-        onset_time = gaze_timestamps[onset]
+    for s in saccades:
+        onset_time = gaze_timestamps[s.onset]
         if onset_time > np.max(data_timestamps):
             break
         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-            _event_array[nearest_data_index] = 7  # for saccade onset
+            _event_array[nearest_data_index] = 9  # for saccade onset
         else:
             deviant_count += 1
 
@@ -599,10 +612,10 @@ def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, d
     gaze_markers = data_egm[-1]
     data_timestamp = data_egm[0]
     fixations_new = []
-    for onset, offset, f in fixations:
-        onset = f.preceding_saccade.onset
-        onset_time = eyetracking_timestamps[onset]
-        offset_time = eyetracking_timestamps[offset]
+    for f in fixations:
+        # onset = f.preceding_saccade.onset
+        onset_time = eyetracking_timestamps[f.onset]
+        offset_time = eyetracking_timestamps[f.offset]
         stim = 'null'
         if np.abs(data_timestamp - onset_time).min() < deviation_threshold:
             data_onset = np.abs(data_timestamp - onset_time).argmin()
