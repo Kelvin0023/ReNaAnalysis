@@ -1,5 +1,6 @@
 import math
 import os
+import random
 from copy import copy
 
 import numpy as np
@@ -532,8 +533,10 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
         vmin_EEG = np.min(evoked.get_data())
 
         for event_name, event_marker_id in event_ids.items():
-            epochs[event_name].average().plot_topomap(times=np.linspace(tmin, tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
-
+            try:
+                epochs[event_name].average().plot_topomap(times=np.linspace(tmin, tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
+            except KeyError:  # meaning this event does not exist in these epochs
+                continue
 
 # def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
 #                                 session_log,
@@ -561,15 +564,15 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_timestamps, deviation_threshold=1e-2):
+def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_timestamps, deviation_threshold=1e-2, null_percentage=0.025, random_seed=42):
     """
     create a new event array that matches the sampling rate of the data timestamps
     the arguements event_timestamps and data_timestamps must be from the same clock
     @rtype: ndarray: the returned event array will be of the same length as the data_timestamps, and the event values are
     synced with the data_timestamps
     """
-    deviant_count = 0
     _event_array = np.zeros(data_timestamps.shape)
+    null_fixation = []
     for f in fixations:
         onset_time = gaze_timestamps[f.onset]
         if onset_time > np.max(data_timestamps):
@@ -578,22 +581,43 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
             if f.stim == 'distractor':
                 _event_array[nearest_data_index] = 6  # for fixation onset
-            if f.stim == 'target':
+            elif f.stim == 'target':
                 _event_array[nearest_data_index] = 7  # for fixation onset
-            if f.stim == 'novelty':
+            elif f.stim == 'novelty':
                 _event_array[nearest_data_index] = 8  # for fixation onset
-        else:
-            deviant_count += 1
+            elif f.stim == 'null':
+                null_fixation.append(f)
+
+    random.seed(random_seed)
+    for f in random.sample(null_fixation, int(null_percentage * len(null_fixation))):
+        onset_time = gaze_timestamps[f.onset]
+        if onset_time > np.max(data_timestamps):
+            break
+        if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
+            nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
+            _event_array[nearest_data_index] = 9  # for fixation onset
+
+    null_saccades = []
     for s in saccades:
+        onset_time = gaze_timestamps[s.onset]
+        if onset_time > np.max(data_timestamps):
+            break
+        if s.from_stim == 'null' and s.to_stim == 'null':
+            null_saccades.append(s)
+            continue
+        if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
+            nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
+            _event_array[nearest_data_index] = 10  # for saccade onset
+
+    # select a subset of null fixation and null saccade to add
+    for s in random.sample(null_saccades, int(null_percentage * len(null_saccades))):
         onset_time = gaze_timestamps[s.onset]
         if onset_time > np.max(data_timestamps):
             break
         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-            _event_array[nearest_data_index] = 9  # for saccade onset
-        else:
-            deviant_count += 1
-
+            _event_array[nearest_data_index] = 10  # for saccade onset
+    # print('Found gaze behaviors')
     return np.expand_dims(_event_array, axis=0)
 
 def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_egm, deviation_threshold=1e-2):

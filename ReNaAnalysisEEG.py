@@ -6,6 +6,7 @@
 6: fixation onset distractor
 7: fixation onset target
 8: fixation onset novelty
+9: fixation onset null
 9: saccade onset
 """
 
@@ -31,23 +32,23 @@ from utils import generate_pupil_event_epochs, \
 is_data_preloaded = False
 is_epochs_preloaded = False
 is_regenerate_ica = False
-is_save_loaded_data = False
+is_save_loaded_data = True
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
 preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RCV_fsrp.p'
 preloaded_block_path = 'Data/participant_condition_block_dict.p'
-# base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
-base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
-# varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
-varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
+base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+# base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
+# varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
-data_root = os.path.join(base_root, "Subjects-Test")
+data_root = os.path.join(base_root, "Subjects")
 epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
 eventMarker_conditionIndex_dict = {
     'RSVP': slice(0, 4),
     'Carousel': slice(4, 8),
-    'VS': slice(8, 12)
-    # 'TS': slice(12, 16)
+    'VS': slice(8, 12),
+    'TS': slice(12, 16)
 }  # Only put interested conditions here
 # FixationLocking_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
 
@@ -73,7 +74,7 @@ eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
               'Fixation': 'blue', 'Saccade': 'orange',
-              'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green'}
+              'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green', 'FixationNull': 'grey'}
 info_chns = ["info1", "info2", "info3"]
 # newest eyetracking data channel format
 
@@ -81,7 +82,7 @@ info_chns = ["info1", "info2", "info3"]
 # locked_marker = 'GazeMarker'
 
 # event_ids = {'Fixation': 6, 'Saccade': 7, }  # event_ids_for_interested_epochs
-event_ids = {'FixationDistractor': 6, 'FixationTarget': 7, 'FixationNovelty': 8, 'Saccade': 9, }  # event_ids_for_interested_epochs
+event_ids = {'FixationDistractor': 6, 'FixationTarget': 7, 'FixationNovelty': 8, 'FixationNull': 9, 'Saccade': 10}  # event_ids_for_interested_epochs
 locked_marker = 'GazeBehavior'
 
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
@@ -93,11 +94,12 @@ participant_list = os.listdir(data_root)
 participant_directory_list = [os.path.join(data_root, x) for x in participant_list]
 
 gaze_statistics_path = preloaded_epoch_path.strip('.p') + 'gaze_statistics' + '.p'
+gaze_behavior_path = preloaded_epoch_path.strip('.p') + 'gaze_behavior' + '.p'
 participant_session_dict = defaultdict(dict)  # create a dict that holds participant -> sessions -> list of sessionFiles
 participant_condition_epoch_dict = defaultdict(dict)  # participants -> condition name -> epoch object
 participant_condition_block_dict = defaultdict(dict)
-condition_gaze_behaviors = defaultdict(dict)
 condition_gaze_statistics = defaultdict(dict)
+condition_gaze_behaviors = defaultdict(dict)
 for condition_names in eventMarker_conditionIndex_dict.keys():
     condition_gaze_behaviors[condition_names]['fixations'] = []
     condition_gaze_behaviors[condition_names]['saccades'] = []
@@ -329,6 +331,47 @@ else:  # if epochs are preloaded and saved
 #     plt.legend()
 #     plt.title('Normalized fixation counts across conditions and item types')
 #     plt.show()
+X = np.arange(3)
+plt.rcParams["figure.figsize"] = (12.8, 7.2)
+for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
+    # fixations = condition_gaze_behaviors[condition_name]['fixations']
+    # plt.hist([f.duration for f in fixations if f.duration<4 and f.stim != 'null'], bins=20)
+    # plt.xlabel('Time (sec)')
+    # plt.ylabel('Count')
+    # plt.title('Non-null Fixation Duration. Condition {0}'.format(condition_name))
+    # plt.show()
+
+    saccades = condition_gaze_behaviors[condition_name]['saccades']
+    saccade_amplitudes = [s.amplitude for s in saccades if s.to_stim is not None and s.amplitude < 20 and s.peak_velocity < 700]
+    saccade_peak_velocities = [s.peak_velocity for s in saccades if s.to_stim is not None and s.amplitude < 20 and s.peak_velocity < 700]
+
+    plt.hist(saccade_amplitudes, bins=20)
+    plt.xlabel('Degree')
+    plt.ylabel('Count')
+    plt.title('Non-null designated Saccade Amplitude. Condition {0}'.format(condition_name))
+    plt.show()
+    #
+    plt.hist(saccade_peak_velocities, bins=20)
+    plt.xlabel('Degree/sec')
+    plt.ylabel('Count')
+    plt.title('Non-null designated Saccade Peak Velocity. Condition {0}'.format(condition_name))
+    plt.show()
+
+    plt.scatter(saccade_peak_velocities, saccade_amplitudes)
+    plt.ylabel('Saccade Amplitude (Degree)')
+    plt.xlabel('Saccade Peak Velocity (Deg/sec)')
+    plt.title('Non-null designated Saccade Amplitude vs. Peak Velocity. Condition {0}'.format(condition_name))
+    plt.show()
+    # for stim in ['target', 'distractor', 'novelty']:
+    #     fixations = condition_gaze_behaviors[condition_name]['fixations']
+    #     plt.hist([f.duration for f in fixations if f.duration < 4 and f.stim == stim], bins=20)
+    #     plt.xlabel('Time (sec)')
+    #     plt.ylabel('Count')
+    #     plt.title('{1} Fixation Duration. Condition {0}'.format(condition_name, stim))
+    #     plt.show()
+    # bar = plt.bar(X + 0.25 * i, [condition_gaze_statistics[condition_name]['counts'][event.lower()] for event in
+    #                              event_ids.keys()], label=condition_name, width=0.25)
+
 
 # get all the epochs for conditions and plots per condition
 print("Creating plots across all participants per condition")
