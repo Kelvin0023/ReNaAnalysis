@@ -31,7 +31,7 @@ from utils import generate_pupil_event_epochs, \
 is_data_preloaded = False
 is_epochs_preloaded = False
 is_regenerate_ica = False
-is_save_loaded_data = True
+is_save_loaded_data = False
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
 preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RCV_fsrp.p'
@@ -41,7 +41,7 @@ base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
 # varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
-data_root = os.path.join(base_root, "Subjects")
+data_root = os.path.join(base_root, "Subjects-Test")
 epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
 eventMarker_conditionIndex_dict = {
     'RSVP': slice(0, 4),
@@ -336,13 +336,14 @@ for condition_name in eventMarker_conditionIndex_dict.keys():
     print("Creating plots for condition {0}".format(condition_name))
     condition_epoch_list = flatten_list([x.items() for x in participant_condition_epoch_dict.values()])
     condition_epochs = [e for c, e in condition_epoch_list if c == condition_name]
-    condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, eeg, _, _ in condition_epochs])
+    condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, _, _, _ in condition_epochs])
     # condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg, _ in condition_epochs])
-    condition_epochs_eeg_ica = mne.concatenate_epochs([eeg for pupil, eeg, eeg_ica, _ in condition_epochs])
+    condition_epochs_eeg_ica = mne.concatenate_epochs([eeg_ica for _, _, eeg_ica, _ in condition_epochs])
     title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, locked_marker)
     visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
     visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
-                         title, is_plot_topo_map=False)
+                         title, is_plot_topo_map=True)
+    del condition_epochs_pupil, condition_epochs_eeg_ica, condition_epochs
     # visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title,
     #                      is_plot_timeseries=True)
 
