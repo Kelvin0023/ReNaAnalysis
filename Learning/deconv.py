@@ -89,13 +89,17 @@ color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 # epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_DM.npy'
 # epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_labels.npy'
 
+epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_Carousel_data.npy'
+epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_Carousel_DM.npy'
+epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_Carousel_labels.npy'
+
 # epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_data.npy'
 # epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_DM.npy'
 # epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_labels.npy'
 
-epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_data.npy'
-epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_DM.npy'
-epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_labels.npy'
+# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_data.npy'
+# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_DM.npy'
+# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_labels.npy'
 
 
 srate = 128
@@ -134,10 +138,12 @@ eeg_chs = mne.channels.make_standard_montage('biosemi64').ch_names
 eeg_ch = 'CPz'
 eeg_index = eeg_chs.index(eeg_ch)
 
-plt.plot(losses_train)
-plt.plot(losses_test)
+plt.plot(losses_train, label='Train loss')
+plt.plot(losses_test, label='Test loss')
 plt.xlabel("Epoch")
 plt.ylabel("Loss")
+plt.ylim(0,1.2)
+plt.title('Losses')
 plt.show()
 
 # data_recon = torch.matmul(torch.tensor(dms, device='cuda', dtype=torch.float64), beta) + error.expand(data.shape[1], data.shape[2])
@@ -146,6 +152,7 @@ plt.show()
 # data_recon = scalars[eeg_index].inverse_transform(data_recon)
 
 # plotting covariate betas
+plt.rcParams["figure.figsize"] = (12.8, 7.2)
 for cov, cov_code in covariates.items():
     dm_cov =  create_dm_for_cov(dms, tau, cov_code-1, deconv_window, srate)  # cov_code - 1 because distractor starts at 1
     # cov_beta = torch.matmul(torch.tensor(dm_cov, device='cuda', dtype=torch.float32), beta) + error.expand(data.shape[0], -1, -1)
