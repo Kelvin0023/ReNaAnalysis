@@ -6,8 +6,9 @@ from matplotlib import pyplot as plt
 SACCADE_CODE = 1
 FIXATION_CODE = 2
 
+
 class Saccade:
-    def __init__(self, amplitude, duration, peak_velocity, average_velocity, onset, offset):
+    def __init__(self, amplitude, duration, peak_velocity, average_velocity, onset, offset, peak):
         self.amplitude = amplitude
         self.duration = duration
         self.peak_velocity = peak_velocity
@@ -16,15 +17,19 @@ class Saccade:
         self.to_stim = None  # to what stimulus is the saccade directed
         self.onset = onset
         self.offset = offset
+        self.peak = peak
 
 
 class Fixation:
-    def __init__(self, duration, dispersion, preceding_saccade, following_saccade):
+    def __init__(self, duration, dispersion, preceding_saccade, following_saccade, onset, offset):
         self.duration = duration
         self.dispersion = dispersion
         self.stim = None  # at what stimulus is the participant fixated on
         self.preceding_saccade = preceding_saccade
         self.following_saccade = following_saccade
+        self.onset = onset
+        self.offset = offset
+
 
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
@@ -32,7 +37,8 @@ def running_mean(x, N):
 
 
 def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
-                         saccade_min_peak=6, saccade_min_amplitude=2, saccade_spacing=20e-3, saccade_min_sample=2, fixation_min_sample=2, glitch_threshold=1000):
+                         saccade_min_peak=6, saccade_min_amplitude=2, saccade_spacing=20e-3, saccade_min_sample=2,
+                         fixation_min_sample=2, glitch_threshold=1000):
     """
     gaze event detection based on Velocity Threshold Identification (I-VT)
     inspirations:
@@ -72,11 +78,11 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
         peak = acceleration_zero_crossings[crossing_i + 1]
         offset = acceleration_zero_crossings[crossing_i + 2]
 
-        if not (acceleration[peak] > 0 and acceleration[
-            peak + 1] < 0):  # check the peak is cross from positive to negative
+        if not acceleration[peak] > 0 and acceleration[peak + 1] < 0:
+            # check the peak is cross from positive to negative
             continue
         if len(saccades) > 0 and gaze_timestamps[onset] - gaze_timestamps[
-            saccades[-1][2]] < saccade_spacing:  # check temporal spacing condition for saccade
+            saccades[-1].offset] < saccade_spacing:  # check temporal spacing condition for saccade
             continue
         if np.any(events[onset:offset] == -1):  # check if gaze status is invalid during the potential saccade
             continue
@@ -88,16 +94,19 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
         average_velocity = np.mean(velocities[onset:offset])
         duration = gaze_timestamps[offset] - gaze_timestamps[onset]
         if velocities[peak] > saccade_min_peak and amplitude > saccade_min_amplitude:
-            saccades.append((onset, peak, offset, Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset)))
+            saccades.append(Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset, peak))
 
     # identify the fixations for all the intervals between saccades
-    fixation_inteval_indices = [(saccades[i-1][2], saccades[i][0]) for i in range(1, len(saccades))]  # IGNORE the interval before the first saccade
+    fixation_inteval_indices = [(saccades[i - 1].offset, saccades[i].onset) for i in
+                                range(1, len(saccades))]  # IGNORE the interval before the first saccade
     for i, (onset, offset) in enumerate(fixation_inteval_indices):
         duration = gaze_timestamps[offset] - gaze_timestamps[onset]
-        _xy_deg = gaze_xy_deg[:, onset:offset][:, events[onset:offset] != -1] # check the dispersion excluding the invalid points
-        if _xy_deg.shape[1] != 0 and offset - onset > fixation_min_sample:  # if the entire interval is invalid, then we do NOT add it to fixation
+        _xy_deg = gaze_xy_deg[:, onset:offset][:,
+                  events[onset:offset] != -1]  # check the dispersion excluding the invalid points
+        if _xy_deg.shape[
+            1] != 0 and offset - onset > fixation_min_sample:  # if the entire interval is invalid, then we do NOT add it to fixation
             dispersion = np.max(_xy_deg, axis=1) - np.min(_xy_deg, axis=1)
-            fixations.append((onset, offset, Fixation(duration, dispersion, saccades[i][3], saccades[i+1][3])))
+            fixations.append(Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset))
     # start = 800
     # end = 1200
     # plt.rcParams["figure.figsize"] = (20, 10)
@@ -129,8 +138,8 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
     # plt.show()
     glitch_precentage = np.sum(events == -1) / len(events)
 
-    for onset, _, offset, _ in saccades:
-        events[onset:offset] = SACCADE_CODE
-    for onset, offset, _ in fixations:
-        events[onset:offset] = FIXATION_CODE
+    for s in saccades:
+        events[s.onset:s.offset] = SACCADE_CODE
+    for f in fixations:
+        events[f.onset:f.offset] = FIXATION_CODE
     return events, fixations, saccades
