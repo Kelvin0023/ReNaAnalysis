@@ -8,7 +8,7 @@ FIXATION_CODE = 2
 
 
 class Saccade:
-    def __init__(self, amplitude, duration, peak_velocity, average_velocity, onset, offset, peak):
+    def __init__(self, amplitude, duration, peak_velocity, average_velocity, onset, offset, onset_time, offset_time, peak):
         self.amplitude = amplitude
         self.duration = duration
         self.peak_velocity = peak_velocity
@@ -17,11 +17,13 @@ class Saccade:
         self.to_stim = None  # to what stimulus is the saccade directed
         self.onset = onset
         self.offset = offset
+        self.onset_time = onset_time
+        self.offset_time = offset_time
         self.peak = peak
 
 
 class Fixation:
-    def __init__(self, duration, dispersion, preceding_saccade, following_saccade, onset, offset):
+    def __init__(self, duration, dispersion, preceding_saccade, following_saccade, onset, offset, onset_time, offset_time):
         self.duration = duration
         self.dispersion = dispersion
         self.stim = None  # at what stimulus is the participant fixated on
@@ -29,7 +31,8 @@ class Fixation:
         self.following_saccade = following_saccade
         self.onset = onset
         self.offset = offset
-
+        self.onset_time = onset_time
+        self.offset_time = offset_time
 
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
@@ -94,7 +97,7 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
         average_velocity = np.mean(velocities[onset:offset])
         duration = gaze_timestamps[offset] - gaze_timestamps[onset]
         if velocities[peak] > saccade_min_peak and amplitude > saccade_min_amplitude:
-            saccades.append(Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset, peak))
+            saccades.append(Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset, gaze_timestamps[onset],  gaze_timestamps[offset], peak))
 
     # identify the fixations for all the intervals between saccades
     fixation_inteval_indices = [(saccades[i - 1].offset, saccades[i].onset) for i in
@@ -106,7 +109,7 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
         if _xy_deg.shape[
             1] != 0 and offset - onset > fixation_min_sample:  # if the entire interval is invalid, then we do NOT add it to fixation
             dispersion = np.max(_xy_deg, axis=1) - np.min(_xy_deg, axis=1)
-            fixations.append(Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset))
+            fixations.append(Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset, gaze_timestamps[onset],  gaze_timestamps[offset]))
     # start = 800
     # end = 1200
     # plt.rcParams["figure.figsize"] = (20, 10)

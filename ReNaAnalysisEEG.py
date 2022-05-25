@@ -23,16 +23,17 @@ from rena.utils.data_utils import RNStream
 
 from eyetracking import gaze_event_detection
 from fs_utils import load_participant_session_dict
+from params import event_ids
 from utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events, \
     extract_block_data, find_fixation_saccade_targets
 
 #################################################################################################
-is_data_preloaded = False
+is_data_preloaded = True
 is_epochs_preloaded = False
 is_regenerate_ica = False
-is_save_loaded_data = True
+is_save_loaded_data = False
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
 preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RCV_fsrp.p'
@@ -82,7 +83,6 @@ info_chns = ["info1", "info2", "info3"]
 # locked_marker = 'GazeMarker'
 
 # event_ids = {'Fixation': 6, 'Saccade': 7, }  # event_ids_for_interested_epochs
-event_ids = {'FixationDistractor': 6, 'FixationTarget': 7, 'FixationNovelty': 8, 'FixationNull': 9, 'Saccade': 10}  # event_ids_for_interested_epochs
 locked_marker = 'GazeBehavior'
 
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
@@ -232,12 +232,12 @@ if not is_epochs_preloaded:
                     bad_channels=participant_badchannel_dict[
                         participant_index] if participant_index in participant_badchannel_dict.keys() else None)
 
-                del data_eyetracking_egbm, data_exg_egbm
                 #########################
 
                 # extract block data
-                # _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate)
+                _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visuailzation outside of the loop
                 # _blocks_exg = extract_block_data(data_exg_egbm, exg_egbm_channles, exg_srate)
+                del data_eyetracking_egbm, data_exg_egbm
 
                 # record gaze statistics
                 if fixation_durations is not None and normalized_fixation_count is not None:

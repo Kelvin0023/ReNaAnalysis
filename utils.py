@@ -15,7 +15,7 @@ import mne
 import numpy as np
 import matplotlib.pyplot as plt
 from mne import find_events, Epochs
-
+from params import event_id_color_code_dict, event_color_dict, event_marker_color_dict
 from rena.utils.data_utils import RNStream
 
 from eyetracking import running_mean
@@ -266,7 +266,7 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
     return np.concatenate([data_array, data_event_marker_array], axis=0), gazeRayIntersect_durations, normalized_fixation_count,
 
 
-def extract_block_data(_data, channel_names, srate, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
+def extract_block_data(_data, channel_names, srate, fixations, saccades, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
     # TODO add block end margins and use parameters block_end_margin_seconds
     block_starts = np.argwhere(_data[channel_names.index('EventMarker'), :] == 4) - int(pre_block_time * srate)# start of a block is denoted by event marker 4
     block_ends = np.argwhere(_data[channel_names.index('EventMarker'), :] == 5) + int(post_block_time * srate)  # end of a block is denoted by event marker 5
@@ -275,21 +275,35 @@ def extract_block_data(_data, channel_names, srate, pre_block_time=.5, post_bloc
     return block_sequences
 
     plt.rcParams["figure.figsize"] = (60, 15)
-    em_color_code_dict = {1: 'b', 2: 'r', 3:'g', 4: 'black', 5: 'black'}
-    gb_color_code_dict = {6: 'r', 7: 'g'}
     b = block_sequences[0]
     b = np.copy(b)
     t = b[0]
     p = b[channel_names.index('left_pupil_size'), :]
     p[p == 0] = np.nan
     p = interpolate_nan(p)
+    p = p * 1e2
     xy = b[[channel_names.index('gaze_forward_x'), channel_names.index('gaze_forward_y')], :]
     xy_deg = (180 / math.pi) * np.arcsin(xy)
     dxy = np.diff(xy_deg, axis=1, prepend=xy_deg[:, :1])
     dtheta = np.linalg.norm(dxy, axis=0)
     velocities = dtheta / np.diff(t, prepend=1)
     velocities[0] = 0.
+    ################
+    plt.plot(t, p)
+    for f in [f for f in fixations if f.onset_time > t.min() and f.offset_time < t.max()]:
+        plt.axvspan(f.onset_time, f.offset_time, alpha=0.5, color=event_color_dict[f.stim])
+    for s in [s for s in saccades if s.onset_time > t.min() and s.offset_time < t.max()]:
+        plt.axvspan(s.onset_time, s.offset_time, alpha=0.5, color=event_color_dict['saccade'])
 
+    for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
+        if e != 0:
+            plt.scatter(t[i], p[i] + 0.1, alpha = 0.5, color=event_marker_color_dict[e], marker='v', s=200)
+
+    plt.xlabel('Time (sec)')
+    plt.ylabel('Pupil Size (mm)')
+    plt.title('Block sequence with gaze behavior color bars and event markers \n Condition RSVP, Participant 1, Session 1')
+    plt.show()
+    ###################
     plt.plot(t, p)
     for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
         if e != 0:
@@ -301,37 +315,6 @@ def extract_block_data(_data, channel_names, srate, pre_block_time=.5, post_bloc
     plt.xlabel('Time (sec)')
     plt.title('Gaze ray intersects')
     plt.show()
-
-
-    for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
-        if e != 0:
-            plt.axvline(t[i], linewidth=2, color=em_color_code_dict[e])
-
-    gb = b[channel_names.index('GazeBehavior'), :]
-    previous_marker_index = None
-    for i in range(len(gb) - 1):
-        if gb[i] != 0:
-            if previous_marker_index:
-                plt.axvspan(t[previous_marker_index], t[i], alpha = 0.5, color=gb_color_code_dict[gb[i]])
-            previous_marker_index = i
-    plt.plot(t, velocities)
-    plt.xlabel('Time (sec)')
-    plt.title('Gaze ray intersects')
-    plt.show()
-
-
-    pass
-    # block_sequences_resampled = []
-    # # resample each block to be 100 Hz
-    # for bs in block_sequences:  # don't resample the event marker sequences
-    #     info = mne.create_info(['LSLTimestamp'] + data_channel_names + ['EventMarker', "info1", "info2", "info3"], sfreq=srate,
-    #                            ch_types=['misc'] * (1 + len(data_channel_names)) + ['stim'] + ['misc'] * 3)
-    #     raw = mne.io.RawArray(bs, info)
-    #     raw_resampled = mne.io.RawArray(bs, info)  # resample to 100 Hz
-    #     events = mne.find_events(raw, stim_channel='EventMarker')
-    #     raw_resampled, events_resample = raw_resampled.resample(100, events=events)  # resample to 100 Hz
-    #     raw_resampled.add_events(events_resample, stim_channel='EventMarker', replace=True)
-    #     block_sequences_resampled.append(raw_resampled.get_data())
 
     return block_sequences  # a list of block sequences
 
