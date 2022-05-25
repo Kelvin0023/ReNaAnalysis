@@ -1,4 +1,6 @@
+import math
 import os
+from copy import copy
 
 import numpy as np
 import scipy
@@ -14,6 +16,8 @@ import matplotlib.pyplot as plt
 from mne import find_events, Epochs
 
 from rena.utils.data_utils import RNStream
+
+from eyetracking import running_mean
 
 FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
 ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}
@@ -261,11 +265,61 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
     return np.concatenate([data_array, data_event_marker_array], axis=0), gazeRayIntersect_durations, normalized_fixation_count,
 
 
-def extract_block_data(data_with_event_marker, srate, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
+def extract_block_data(_data, channel_names, srate, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
     # TODO add block end margins and use parameters block_end_margin_seconds
-    block_starts = np.argwhere(data_with_event_marker[-4, :] == 4) - int(pre_block_time * srate)# start of a block is denoted by event marker 4
-    block_ends = np.argwhere(data_with_event_marker[-4, :] == 5) + int( pre_block_time * srate)  # end of a block is denoted by event marker 5
-    block_sequences = [data_with_event_marker[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]
+    block_starts = np.argwhere(_data[channel_names.index('EventMarker'), :] == 4) - int(pre_block_time * srate)# start of a block is denoted by event marker 4
+    block_ends = np.argwhere(_data[channel_names.index('EventMarker'), :] == 5) + int(post_block_time * srate)  # end of a block is denoted by event marker 5
+
+    block_sequences = [_data[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]
+    return block_sequences
+
+    plt.rcParams["figure.figsize"] = (60, 15)
+    em_color_code_dict = {1: 'b', 2: 'r', 3:'g', 4: 'black', 5: 'black'}
+    gb_color_code_dict = {6: 'r', 7: 'g'}
+    b = block_sequences[0]
+    b = np.copy(b)
+    t = b[0]
+    p = b[channel_names.index('left_pupil_size'), :]
+    p[p == 0] = np.nan
+    p = interpolate_nan(p)
+    xy = b[[channel_names.index('gaze_forward_x'), channel_names.index('gaze_forward_y')], :]
+    xy_deg = (180 / math.pi) * np.arcsin(xy)
+    dxy = np.diff(xy_deg, axis=1, prepend=xy_deg[:, :1])
+    dtheta = np.linalg.norm(dxy, axis=0)
+    velocities = dtheta / np.diff(t, prepend=1)
+    velocities[0] = 0.
+
+    plt.plot(t, p)
+    for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
+        if e != 0:
+            plt.axvline(t[i], alpha = 0.5, linewidth=2, color=em_color_code_dict[e])
+
+    for i, e in enumerate(b[channel_names.index('GazeMarker'), :]):
+        if e != 0:
+            plt.axvline(t[i], linestyle='--', color='orange')
+    plt.xlabel('Time (sec)')
+    plt.title('Gaze ray intersects')
+    plt.show()
+
+
+    for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
+        if e != 0:
+            plt.axvline(t[i], linewidth=2, color=em_color_code_dict[e])
+
+    gb = b[channel_names.index('GazeBehavior'), :]
+    previous_marker_index = None
+    for i in range(len(gb) - 1):
+        if gb[i] != 0:
+            if previous_marker_index:
+                plt.axvspan(t[previous_marker_index], t[i], alpha = 0.5, color=gb_color_code_dict[gb[i]])
+            previous_marker_index = i
+    plt.plot(t, velocities)
+    plt.xlabel('Time (sec)')
+    plt.title('Gaze ray intersects')
+    plt.show()
+
+
+    pass
     # block_sequences_resampled = []
     # # resample each block to be 100 Hz
     # for bs in block_sequences:  # don't resample the event marker sequences
@@ -383,15 +437,15 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
 
     reject = dict(eeg=600.)  # DO NOT reject or we will have a mismatch between EEG and pupil
     # only keep events that are in the block
-    event_ids = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in np.unique(mne.find_events(raw, stim_channel=locked_marker)[:, 2])])  # we may not have all target, distractor and novelty, especially in free-viewing
-    epochs = Epochs(raw, events=find_events(raw, stim_channel=locked_marker), event_id=event_ids, tmin=tmin,
+    event_ids = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in np.unique(mne.find_events(raw, stim_channel=locked_marker, shortest_event=1)[:, 2])])  # we may not have all target, distractor and novelty, especially in free-viewing
+    epochs = Epochs(raw, events=find_events(raw, stim_channel=locked_marker, shortest_event=1), event_id=event_ids, tmin=tmin,
                     tmax=tmax,
                     baseline=(-0.1, 0.0),
                     preload=True,
                     verbose=False,
                     reject=reject)
 
-    epochs_ICA_cleaned = Epochs(raw_ica_recon, events=find_events(raw, stim_channel=locked_marker), event_id=event_ids,
+    epochs_ICA_cleaned = Epochs(raw_ica_recon, events=find_events(raw, stim_channel=locked_marker, shortest_event=1), event_id=event_ids,
                                 tmin=tmin,
                                 tmax=tmax,
                                 baseline=(-0.1, 0.0),
@@ -473,18 +527,18 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
             epochs[event_name].average().plot_topomap(times=np.linspace(evoked.tmin, evoked.tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
 
 
-def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
-                                session_log,
-                                item_codes,
-                                srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
-    # interpolate nan's
-    data_event_marker_array = add_em_ts_to_data(event_markers,
-                                                event_marker_timestamps,
-                                                data_array,
-                                                data_timestamps, session_log,
-                                                item_codes, srate)
-    block_sequences = extract_block_data(data_event_marker_array, srate)
-    return block_sequences
+# def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
+#                                 session_log,
+#                                 item_codes,
+#                                 srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
+#     # interpolate nan's
+#     data_event_marker_array = add_em_ts_to_data(event_markers,
+#                                                 event_marker_timestamps,
+#                                                 data_array,
+#                                                 data_timestamps, session_log,
+#                                                 item_codes, srate)
+#     block_sequences = extract_block_data(data_event_marker_array, srate)
+#     return block_sequences
 
 
 def flatten_list(l):
@@ -528,3 +582,47 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
             deviant_count += 1
 
     return np.expand_dims(_event_array, axis=0)
+
+def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_egm, deviation_threshold=1e-2):
+    """
+    process a dataset that has gaze behavior marker and gaze marker, use the gaze marker to find
+    first identify the gaze marker inside a fixation,
+    if there is an gaze marker, find what stimulus type is that gaze marker
+        then we set the preceding saccade's destination to the stimulus type
+        then we set the following saccade's origin to the stimulus type
+    if there is no gaze marker, then this fixation is not on an object
+
+    note the function can run on either exg or eyetracking, we use exg here as it has higher sampling rate and gives
+    presumably better synchronization
+    @rtype: new lists of fixations and saccades
+    """
+    gaze_markers = data_egm[-1]
+    data_timestamp = data_egm[0]
+    fixations_new = []
+    for onset, offset, f in fixations:
+        onset = f.preceding_saccade.onset
+        onset_time = eyetracking_timestamps[onset]
+        offset_time = eyetracking_timestamps[offset]
+        stim = 'null'
+        if np.abs(data_timestamp - onset_time).min() < deviation_threshold:
+            data_onset = np.abs(data_timestamp - onset_time).argmin()
+            data_offset = np.abs(data_timestamp - offset_time).argmin()
+            gm = gaze_markers[data_onset:data_offset]
+            unique_markers = [gm[i] for i in sorted(np.unique(gm, return_index=True)[1])]  # a sorted unique list
+            if len(unique_markers) == 2 and np.max(unique_markers) == 1:
+                stim = 'distractor'
+            elif len(unique_markers) == 2 and np.max(unique_markers) == 2:
+                stim = 'target'
+            elif len(unique_markers) == 2 and np.max(unique_markers) == 3:
+                stim = 'novelty'
+            elif len(unique_markers) > 2:  # TODO
+                stim = 'mixed'
+            temp = copy(f)
+            temp.preceding_saccade.to_stim = stim
+            temp.following_saccade.from_stim = stim
+            temp.stim = stim
+            fixations_new.append(temp)
+
+    len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
+    return fixations_new
+
