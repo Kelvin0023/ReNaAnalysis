@@ -565,12 +565,12 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
             if f.stim == 'distractor':
-                _event_array[nearest_data_index] = 6  # for fixation onset
+                _event_array[nearest_data_index] = 6  # for fixation onset on distractor
             elif f.stim == 'target':
-                _event_array[nearest_data_index] = 7  # for fixation onset
+                _event_array[nearest_data_index] = 7  # for fixation onset on targets
             elif f.stim == 'novelty':
-                _event_array[nearest_data_index] = 8  # for fixation onset
-            elif f.stim == 'null':
+                _event_array[nearest_data_index] = 8  # for fixation onset on novelty
+            elif f.stim == 'null':  # for fixation onset on nothing
                 null_fixation.append(f)
 
     random.seed(random_seed)
@@ -587,12 +587,20 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
         onset_time = gaze_timestamps[s.onset]
         if onset_time > np.max(data_timestamps):
             break
-        if s.from_stim == 'null' and s.to_stim == 'null':
+        if s.from_stim == 'null' or s.to_stim == 'null':
             null_saccades.append(s)
             continue
         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-            _event_array[nearest_data_index] = 10  # for saccade onset
+
+            if s.to_stim == 'distractor':
+                _event_array[nearest_data_index] = 10  # for saccade onset to distractor
+            elif s.to_stim == 'target':
+                _event_array[nearest_data_index] = 11  # for saccade onset to targets
+            elif s.to_stim == 'novelty':
+                _event_array[nearest_data_index] = 12  # for saccade onset to novelty
+            else:
+                raise Exception("Unknown saccade to_stim type, this should never happen")
 
     # select a subset of null fixation and null saccade to add
     for s in random.sample(null_saccades, int(null_percentage * len(null_saccades))):
@@ -601,7 +609,7 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
             break
         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-            _event_array[nearest_data_index] = 10  # for saccade onset
+            _event_array[nearest_data_index] = 13  # for saccade onset
     # print('Found gaze behaviors')
     return np.expand_dims(_event_array, axis=0)
 

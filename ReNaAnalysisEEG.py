@@ -30,27 +30,28 @@ from utils import generate_pupil_event_epochs, \
     extract_block_data, find_fixation_saccade_targets
 
 #################################################################################################
-is_data_preloaded = True
-is_epochs_preloaded = True
+is_data_preloaded = False
+is_epochs_preloaded = False
 is_regenerate_ica = False
-is_save_loaded_data = False
+is_save_loaded_data = True
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
-preloaded_epoch_path = 'Data/participant_condition_epoch_dict_RCV_fsrp.p'
-preloaded_block_path = 'Data/participant_condition_block_dict.p'
+preloaded_epoch_path = 'Data/participant_condition_epoch_dict_VS.p'
+preloaded_block_path = 'Data/participant_condition_block_dict_VS.p'
 base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
-# base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+data_directory = "Subjects-Test"
 varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 # varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
-data_root = os.path.join(base_root, "Subjects-Test")
+data_root = os.path.join(base_root, data_directory)
 epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
+# only the conditions in this dict will be included in the analysis
 eventMarker_conditionIndex_dict = {
-    'RSVP': slice(0, 4),
-    'Carousel': slice(4, 8),
+    # 'RSVP': slice(0, 4),
+    # 'Carousel': slice(4, 8),
     'VS': slice(8, 12),
-    'TS': slice(12, 16)
-}  # Only put interested conditions here
+    # 'TS': slice(12, 16)
+}
 # FixationLocking_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
 
 tmin_pupil = -0.1
@@ -75,7 +76,8 @@ eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
               'Fixation': 'blue', 'Saccade': 'orange',
-              'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green', 'FixationNull': 'grey'}
+              'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green', 'FixationNull': 'grey',
+              'Saccade2Distractor': 'cyan', 'Saccade2Target': 'magenta', 'Saccade2Novelty': 'orange', 'Saccade2Null': 'yellow'}
 info_chns = ["info1", "info2", "info3"]
 # newest eyetracking data channel format
 
@@ -235,8 +237,8 @@ if not is_epochs_preloaded:
                 #########################
 
                 # extract block data
-                _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visuailzation outside of the loop
-                # _blocks_exg = extract_block_data(data_exg_egbm, exg_egbm_channles, exg_srate)
+                _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visualization outside of the loop
+                # _blocks_exg = extract_block_data(data_exg_egbm, exg_egbm_channles, exg_srate, fixations, saccades)
                 del data_eyetracking_egbm, data_exg_egbm
 
                 # record gaze statistics
@@ -257,8 +259,8 @@ if not is_epochs_preloaded:
                                                                                     normalized_fixation_count.items()])
                     else:
                         condition_gaze_statistics[condition_name]['counts'] = normalized_fixation_count
-                # Add to gaze behaviors
 
+                # Add to gaze behaviors
                 condition_gaze_behaviors[condition_name]['fixations'] = condition_gaze_behaviors[condition_name]['fixations'] + fixations
                 condition_gaze_behaviors[condition_name]['saccades'] = condition_gaze_behaviors[condition_name]['saccades'] + saccades
 
@@ -347,17 +349,24 @@ for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
     saccades = condition_gaze_behaviors[condition_name]['saccades']
     saccade_amplitudes = [s.amplitude for s in saccades if s.to_stim is not None and s.amplitude < 20 and s.peak_velocity < 700]
     saccade_peak_velocities = [s.peak_velocity for s in saccades if s.to_stim is not None and s.amplitude < 20 and s.peak_velocity < 700]
+    saccade_peak_durations = [s.duration for s in saccades]
 
     plt.hist(saccade_amplitudes, bins=20)
     plt.xlabel('Degree')
     plt.ylabel('Count')
     plt.title('Non-null designated Saccade Amplitude. Condition {0}'.format(condition_name))
     plt.show()
-    #
+
     plt.hist(saccade_peak_velocities, bins=20)
     plt.xlabel('Degree/sec')
     plt.ylabel('Count')
     plt.title('Non-null designated Saccade Peak Velocity. Condition {0}'.format(condition_name))
+    plt.show()
+
+    plt.hist(saccade_peak_durations, bins=20)
+    plt.xlabel('Sec')
+    plt.ylabel('Count')
+    plt.title('Non-null designated Saccade Duration. Condition {0}'.format(condition_name))
     plt.show()
 
     plt.scatter(saccade_peak_velocities, saccade_amplitudes)
@@ -391,16 +400,13 @@ for condition_name in eventMarker_conditionIndex_dict.keys():
                          title, is_plot_topo_map=True)
 
 # get all the epochs and plots per participant
-# for participant_index, condition_epoch_dict in participant_condition_epoch_dict.items():
-#     for condition_name, condition_epochs in condition_epoch_dict.items():
-#         condition_epochs_pupil = condition_epochs[0]
-#         condition_epochs_eeg = condition_epochs[1]
-#         condition_epochs_eeg_ica = condition_epochs[2]
-#         title = 'Participants {0} - Condition {1}'.format(participant_index, condition_name)
-#         # visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
-#         # visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks,
-#         #                      title + '. ICA Cleaned', is_plot_timeseries=True)
-#         visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title, is_plot_timeseries=False, is_plot_topo_map=True)
+for participant_index, condition_epoch_dict in participant_condition_epoch_dict.items():
+    for condition_name, condition_epochs in condition_epoch_dict.items():
+        condition_epochs_pupil = condition_epochs[0]
+        condition_epochs_eeg_ica = condition_epochs[2]
+        title = 'Participants {0} - Condition {1}'.format(participant_index, condition_name)
+        # visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
+        visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='Figures')
 
 
 # condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[
