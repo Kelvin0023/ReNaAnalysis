@@ -39,7 +39,7 @@ preloaded_dats_path = 'Data/participant_session_dict.p'
 preloaded_epoch_path = 'Data/participant_condition_epoch_dict_VS.p'
 preloaded_block_path = 'Data/participant_condition_block_dict_VS.p'
 base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
-data_directory = "Subjects-Test"
+data_directory = "Subjects"
 varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 # varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
