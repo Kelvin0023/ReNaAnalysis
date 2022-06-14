@@ -274,49 +274,49 @@ def extract_block_data(_data, channel_names, srate, fixations, saccades, pre_blo
     block_sequences = [_data[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]
     return block_sequences
 
-    plt.rcParams["figure.figsize"] = (60, 15)
-    b = block_sequences[0]
-    b = np.copy(b)
-    t = b[0]
-    p = b[channel_names.index('left_pupil_size'), :]
-    p[p == 0] = np.nan
-    p = interpolate_nan(p)
-    p = p * 1e2
-    xy = b[[channel_names.index('gaze_forward_x'), channel_names.index('gaze_forward_y')], :]
-    xy_deg = (180 / math.pi) * np.arcsin(xy)
-    dxy = np.diff(xy_deg, axis=1, prepend=xy_deg[:, :1])
-    dtheta = np.linalg.norm(dxy, axis=0)
-    velocities = dtheta / np.diff(t, prepend=1)
-    velocities[0] = 0.
-    ################
-    plt.plot(t, p)
-    for f in [f for f in fixations if f.onset_time > t.min() and f.offset_time < t.max()]:
-        plt.axvspan(f.onset_time, f.offset_time, alpha=0.5, color=event_color_dict[f.stim])
-    for s in [s for s in saccades if s.onset_time > t.min() and s.offset_time < t.max()]:
-        plt.axvspan(s.onset_time, s.offset_time, alpha=0.5, color=event_color_dict['saccade'])
-
-    for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
-        if e != 0:
-            plt.scatter(t[i], p[i] + 0.1, alpha = 0.5, color=event_marker_color_dict[e], marker='v', s=200)
-
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Pupil Size (mm)')
-    plt.title('Block sequence with gaze behavior color bars and event markers \n Condition RSVP, Participant 1, Session 1')
-    plt.show()
-    ###################
-    plt.plot(t, p)
-    for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
-        if e != 0:
-            plt.axvline(t[i], alpha = 0.5, linewidth=2, color=em_color_code_dict[e])
-
-    for i, e in enumerate(b[channel_names.index('GazeMarker'), :]):
-        if e != 0:
-            plt.axvline(t[i], linestyle='--', color='orange')
-    plt.xlabel('Time (sec)')
-    plt.title('Gaze ray intersects')
-    plt.show()
-
-    return block_sequences  # a list of block sequences
+    # plt.rcParams["figure.figsize"] = (60, 15)
+    # b = block_sequences[0]
+    # b = np.copy(b)
+    # t = b[0]
+    # p = b[channel_names.index('left_pupil_size'), :]
+    # p[p == 0] = np.nan
+    # p = interpolate_nan(p)
+    # p = p * 1e2
+    # xy = b[[channel_names.index('gaze_forward_x'), channel_names.index('gaze_forward_y')], :]
+    # xy_deg = (180 / math.pi) * np.arcsin(xy)
+    # dxy = np.diff(xy_deg, axis=1, prepend=xy_deg[:, :1])
+    # dtheta = np.linalg.norm(dxy, axis=0)
+    # velocities = dtheta / np.diff(t, prepend=1)
+    # velocities[0] = 0.
+    # ################
+    # plt.plot(t, p)
+    # for f in [f for f in fixations if f.onset_time > t.min() and f.offset_time < t.max()]:
+    #     plt.axvspan(f.onset_time, f.offset_time, alpha=0.5, color=event_color_dict[f.stim])
+    # for s in [s for s in saccades if s.onset_time > t.min() and s.offset_time < t.max()]:
+    #     plt.axvspan(s.onset_time, s.offset_time, alpha=0.5, color=event_color_dict['saccade'])
+    #
+    # for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
+    #     if e != 0:
+    #         plt.scatter(t[i], p[i] + 0.1, alpha = 0.5, color=event_marker_color_dict[e], marker='v', s=200)
+    #
+    # plt.xlabel('Time (sec)')
+    # plt.ylabel('Pupil Size (mm)')
+    # plt.title('Block sequence with gaze behavior color bars and event markers \n Condition RSVP, Participant 1, Session 1')
+    # plt.show()
+    # ###################
+    # plt.plot(t, p)
+    # for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
+    #     if e != 0:
+    #         plt.axvline(t[i], alpha = 0.5, linewidth=2, color=em_color_code_dict[e])
+    #
+    # for i, e in enumerate(b[channel_names.index('GazeMarker'), :]):
+    #     if e != 0:
+    #         plt.axvline(t[i], linestyle='--', color='orange')
+    # plt.xlabel('Time (sec)')
+    # plt.title('Gaze ray intersects')
+    # plt.show()
+    #
+    # return block_sequences  # a list of block sequences
 
 
 def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, tmax, event_ids, locked_marker, erp_window=(.0, .8),srate=200,
@@ -441,20 +441,20 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
     return epochs, epochs_ICA_cleaned, labels_array, raw, raw_ica_recon
 
 
-def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
+def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, color_dict, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
     plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
-    for event_name, event_marker_id in event_ids.items():
+    for event_name, events in event_groups.items():
         try:
-            y = epochs[event_name].get_data()
+            y = epochs[events].get_data()
         except KeyError:  # meaning this event does not exist in these epochs
             continue
         y = interpolate_epoch_zeros(y)  # remove nan
         y = interpolate_epochs_nan(y)  # remove nan
         assert np.sum(np.isnan(y)) == 0
         if len(y) == 0:
-            print("visualize_pupil_epochs: all epochs bad, skipping {0}".format(event_name))
+            print("visualize_pupil_epochs: all epochs bad, skipping {0}".format(events))
             continue
         y = np.mean(y, axis=1)  # average left and right
         y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
@@ -465,11 +465,12 @@ def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, sra
         y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
 
         time_vector = np.linspace(tmin, tmax, y.shape[-1])
-        plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+        color = color_dict[events[0]] if type(events) is list else color_dict[events]
+        plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color,
                          interpolate=True,
                          alpha=0.5)
-        plt.plot(time_vector, y_mean, c=color_dict[event_name],
-                 label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+        plt.plot(time_vector, y_mean, c=color,
+                 label='{0}, N={1}'.format(event_name, epochs[events].get_data().shape[0]))
 
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
@@ -478,15 +479,15 @@ def visualize_pupil_epochs(epochs, event_ids, tmin, tmax, color_dict, title, sra
     plt.show()
 
 
-def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True):
+def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, color_dict, picks, title, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True):
     mne.set_log_level(verbose=verbose)
     plt.rcParams["figure.figsize"] = fig_size
 
     if is_plot_timeseries:
         for ch in picks:
-            for event_name, event_marker_id in event_ids.items():
+            for event_name, events in event_groups.items():
                 try:
-                    y = epochs.crop(tmin, tmax)[event_name].pick_channels([ch]).get_data().squeeze(1)
+                    y = epochs.crop(tmin, tmax)[events].pick_channels([ch]).get_data().squeeze(1)
                 except KeyError:  # meaning this event does not exist in these epochs
                     continue
                 y_mean = np.mean(y, axis=0)
@@ -494,11 +495,12 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
                 y2 = y_mean - scipy.stats.sem(y, axis=0)
 
                 time_vector = np.linspace(tmin, tmax, y.shape[-1])
-                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color_dict[event_name],
+                color = color_dict[events[0]] if type(events) is list else color_dict[events]
+                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color,
                                  interpolate=True,
                                  alpha=0.5)
-                plt.plot(time_vector, y_mean, c=color_dict[event_name],
-                         label='{0}, N={1}'.format(event_name, epochs[event_name].get_data().shape[0]))
+                plt.plot(time_vector, y_mean, c=color,
+                         label='{0}, N={1}'.format(event_name, epochs[events].get_data().shape[0]))
             plt.xlabel('Time (sec)')
             plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
             plt.legend()
@@ -515,9 +517,9 @@ def visualize_eeg_epochs(epochs, event_ids, tmin, tmax, color_dict, picks, title
         vmax_EEG = np.max(evoked.get_data())
         vmin_EEG = np.min(evoked.get_data())
 
-        for event_name, event_marker_id in event_ids.items():
+        for event_name, events in event_groups.items():
             try:
-                epochs[event_name].average().plot_topomap(times=np.linspace(tmin, tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
+                epochs[events].average().plot_topomap(times=np.linspace(tmin, tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
             except KeyError:  # meaning this event does not exist in these epochs
                 continue
 

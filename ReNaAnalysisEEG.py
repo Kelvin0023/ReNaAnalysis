@@ -23,7 +23,7 @@ from rena.utils.data_utils import RNStream
 
 from eyetracking import gaze_event_detection
 from fs_utils import load_participant_session_dict
-from params import event_ids
+from params import event_ids, event_viz_groups
 from utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events, \
@@ -31,7 +31,7 @@ from utils import generate_pupil_event_epochs, \
 
 #################################################################################################
 is_data_preloaded = True
-is_epochs_preloaded = False
+is_epochs_preloaded = True
 is_regenerate_ica = False
 is_save_loaded_data = False
 
@@ -43,7 +43,7 @@ base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
 varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 # varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
-data_root = os.path.join(base_root, "Subjects")
+data_root = os.path.join(base_root, "Subjects-Test")
 epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
 eventMarker_conditionIndex_dict = {
     'RSVP': slice(0, 4),
@@ -297,10 +297,13 @@ if not is_epochs_preloaded:
         pickle.dump(participant_condition_epoch_dict, open(preloaded_epoch_path, 'wb'))
         # pickle.dump(participant_condition_block_dict, open(preloaded_epoch_path, 'wb'))
         pickle.dump(condition_gaze_statistics, open(gaze_statistics_path, 'wb'))
+        pickle.dump(condition_gaze_behaviors, open(gaze_behavior_path, 'wb'))
 
 else:  # if epochs are preloaded and saved
     print("Loading preloaded epochs ...")
     participant_condition_epoch_dict = pickle.load(open(preloaded_epoch_path, 'rb'))
+    condition_gaze_statistics = pickle.load(open(gaze_statistics_path, 'rb'))
+    condition_gaze_behaviors = pickle.load(open(gaze_behavior_path, 'rb'))
     dats_loading_end_time = time.time()
     print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
 
@@ -383,12 +386,9 @@ for condition_name in eventMarker_conditionIndex_dict.keys():
     # condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg, _ in condition_epochs])
     condition_epochs_eeg_ica = mne.concatenate_epochs([eeg_ica for _, _, eeg_ica, _ in condition_epochs])
     title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, locked_marker)
-    visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
-    visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
+    visualize_pupil_epochs(condition_epochs_pupil, event_viz_groups, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
+    visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
                          title, is_plot_topo_map=True)
-    del condition_epochs_pupil, condition_epochs_eeg_ica, condition_epochs
-    # visualize_eeg_epochs(condition_epochs_eeg, event_ids, tmin_eeg, tmax_eeg, color_dict, eeg_picks, title,
-    #                      is_plot_timeseries=True)
 
 # get all the epochs and plots per participant
 # for participant_index, condition_epoch_dict in participant_condition_epoch_dict.items():
