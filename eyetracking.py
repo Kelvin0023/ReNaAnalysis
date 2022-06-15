@@ -20,6 +20,7 @@ class Saccade:
         self.onset_time = onset_time
         self.offset_time = offset_time
         self.peak = peak
+        self.epoched = False
 
 
 class Fixation:
@@ -33,6 +34,7 @@ class Fixation:
         self.offset = offset
         self.onset_time = onset_time
         self.offset_time = offset_time
+        self.epoched = False
 
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
