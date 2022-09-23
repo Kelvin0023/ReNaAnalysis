@@ -1,20 +1,15 @@
 import json
 import os
-from collections import defaultdict
 
 import mne
 import numpy as np
-import matplotlib.pyplot as plt
-from mne import find_events, Epochs
 
 from rena.utils.data_utils import RNStream
 
 # file paths
 # data_path = 'C:/Recordings/11_17_2021_22_56_15-Exp_myexperiment-Sbj_someone-Ssn_0.dats'
-from VarjoInterface import varjo_epochs_to_df, varjo_block_seq_to_df
-from utils import interpolate_array_nan, add_em_ts_to_data, generate_pupil_event_epochs, \
-    generate_epochs_visual_search, \
-    visualize_pupil_epochs, generate_condition_sequence
+from utils.utils import generate_pupil_event_epochs, \
+    visualize_pupil_epochs
 
 data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data"
 

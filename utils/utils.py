@@ -1,15 +1,9 @@
-import math
 import os
 import random
 from copy import copy
 
-import numpy as np
 import scipy
-from mne.io import RawArray
-from mne.preprocessing import create_ecg_epochs
 from scipy.interpolate import interp1d
-import json
-import imageio
 
 import mne
 import numpy as np

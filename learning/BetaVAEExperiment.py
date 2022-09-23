@@ -1,5 +1,5 @@
-from Learning.base import BaseVAE
-from Learning.beta_vae import BetaVAE
+from learning.base import BaseVAE
+from learning.beta_vae import BetaVAE
 import numpy as np
 
 # load data

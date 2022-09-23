@@ -1,8 +1,6 @@
 import json
 
-import numpy as np
-import matplotlib.pyplot as plt
-from utils.data_utils import RNStream
+from utils.utils import RNStream
 
 session_log_path = 'C:/Recordings/ReNaSessionLog_01-28-2022-21-51-31.json'
 itemCatalog_path = 'C:/Recordings/ReNaItemCatalog_01-28-2022-21-51-31.json'
