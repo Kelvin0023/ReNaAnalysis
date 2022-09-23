@@ -30,10 +30,11 @@ from utils import generate_pupil_event_epochs, \
     extract_block_data, find_fixation_saccade_targets, flat2gen
 
 #################################################################################################
-is_data_preloaded = True
-is_epochs_preloaded = True
-is_regenerate_ica = False
-is_save_loaded_data = False
+is_data_preloaded = False
+is_epochs_preloaded = False
+is_regenerate_ica = True
+is_ica_inclusive = False
+is_save_loaded_data = True
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
 preloaded_epoch_path = 'Data/participant_condition_epoch_dict_VS.p'
@@ -48,10 +49,10 @@ data_root = os.path.join(base_root, data_directory)
 epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
 # only the conditions in this dict will be included in the analysis
 eventMarker_conditionIndex_dict = {
-    # 'RSVP': slice(0, 4),
-    # 'Carousel': slice(4, 8),
+    'RSVP': slice(0, 4),
+    'Carousel': slice(4, 8),
     'VS': slice(8, 12),
-    # 'TS': slice(12, 16)
+    'TS': slice(12, 16)
 }
 
 tmin_pupil = -0.5
@@ -152,7 +153,7 @@ if not is_epochs_preloaded:
             eeg_data = data['BioSemi'][0][1:65, :]  # take only the EEG channels
             ecg_data = data['BioSemi'][0][65:67, :]  # take only the EEG channels
 
-            for condition_name, condition_event_marker_index in eventMarker_conditionIndex_dict.items():
+            for condition_index, (condition_name, condition_event_marker_index) in enumerate(eventMarker_conditionIndex_dict.items()):
                 print("Processing Condition {0} for participant-code[{1}]: {5} of {2}, session {3} of {4}".format(
                     condition_name,
                     int(participant_index),
@@ -227,7 +228,8 @@ if not is_epochs_preloaded:
                     session_ICA_path,
                     tmin_eeg, tmax_eeg,
                     event_ids, locked_marker,
-                    is_regenerate_ica=is_regenerate_ica,
+                    is_regenerate_ica=is_regenerate_ica if condition_index == 0 else False,  # only generate ICA once
+                    is_ica_selection_inclusive=is_ica_inclusive,
                     bad_channels=participant_badchannel_dict[
                         participant_index] if participant_index in participant_badchannel_dict.keys() else None)
 
@@ -333,9 +335,9 @@ else:  # if epochs are preloaded and saved
 #     plt.legend()
 #     plt.title('Normalized fixation counts across conditions and item types')
 #     plt.show()
-X = np.arange(3)
-plt.rcParams["figure.figsize"] = (12.8, 7.2)
-for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
+# X = np.arange(3)
+# plt.rcParams["figure.figsize"] = (12.8, 7.2)
+# for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
     # fixations = condition_gaze_behaviors[condition_name]['fixations']
     # plt.hist([f.duration for f in fixations if f.duration<4 and f.stim != 'null'], bins=20)
     # plt.xlabel('Time (sec)')
@@ -343,34 +345,34 @@ for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
     # plt.title('Non-null Fixation Duration. Condition {0}'.format(condition_name))
     # plt.show()
 
-    saccades = condition_gaze_behaviors[condition_name]['saccades']
-    saccade_amplitudes = [s.amplitude for s in saccades if s.to_stim is not None and s.amplitude < 20 and s.peak_velocity < 700]
-    saccade_peak_velocities = [s.peak_velocity for s in saccades if s.to_stim is not None and s.amplitude < 20 and s.peak_velocity < 700]
-    saccade_peak_durations = [s.duration for s in saccades]
+    # saccades = condition_gaze_behaviors[condition_name]['saccades']
+    # saccade_amplitudes = [s.amplitude for s in saccades if s.to_stim is not None and s.amplitude < 20 and s.peak_velocity < 700]
+    # saccade_peak_velocities = [s.peak_velocity for s in saccades if s.to_stim is not None and s.amplitude < 20 and s.peak_velocity < 700]
+    # saccade_peak_durations = [s.duration for s in saccades]
 
-    plt.hist(saccade_amplitudes, bins=20)
-    plt.xlabel('Degree')
-    plt.ylabel('Count')
-    plt.title('Non-null designated Saccade Amplitude. Condition {0}'.format(condition_name))
-    plt.show()
-
-    plt.hist(saccade_peak_velocities, bins=20)
-    plt.xlabel('Degree/sec')
-    plt.ylabel('Count')
-    plt.title('Non-null designated Saccade Peak Velocity. Condition {0}'.format(condition_name))
-    plt.show()
-
-    plt.hist(saccade_peak_durations, bins=20)
-    plt.xlabel('Sec')
-    plt.ylabel('Count')
-    plt.title('Non-null designated Saccade Duration. Condition {0}'.format(condition_name))
-    plt.show()
-
-    plt.scatter(saccade_peak_velocities, saccade_amplitudes)
-    plt.ylabel('Saccade Amplitude (Degree)')
-    plt.xlabel('Saccade Peak Velocity (Deg/sec)')
-    plt.title('Non-null designated Saccade Amplitude vs. Peak Velocity. Condition {0}'.format(condition_name))
-    plt.show()
+    # plt.hist(saccade_amplitudes, bins=20)
+    # plt.xlabel('Degree')
+    # plt.ylabel('Count')
+    # plt.title('Non-null designated Saccade Amplitude. Condition {0}'.format(condition_name))
+    # plt.show()
+    #
+    # plt.hist(saccade_peak_velocities, bins=20)
+    # plt.xlabel('Degree/sec')
+    # plt.ylabel('Count')
+    # plt.title('Non-null designated Saccade Peak Velocity. Condition {0}'.format(condition_name))
+    # plt.show()
+    #
+    # plt.hist(saccade_peak_durations, bins=20)
+    # plt.xlabel('Sec')
+    # plt.ylabel('Count')
+    # plt.title('Non-null designated Saccade Duration. Condition {0}'.format(condition_name))
+    # plt.show()
+    #
+    # plt.scatter(saccade_peak_velocities, saccade_amplitudes)
+    # plt.ylabel('Saccade Amplitude (Degree)')
+    # plt.xlabel('Saccade Peak Velocity (Deg/sec)')
+    # plt.title('Non-null designated Saccade Amplitude vs. Peak Velocity. Condition {0}'.format(condition_name))
+    # plt.show()
     # for stim in ['target', 'distractor', 'novelty']:
     #     fixations = condition_gaze_behaviors[condition_name]['fixations']
     #     plt.hist([f.duration for f in fixations if f.duration < 4 and f.stim == stim], bins=20)
@@ -382,28 +384,28 @@ for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
     #                              event_ids.keys()], label=condition_name, width=0.25)
 
 # plot saccade durations across stims
-for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
-    saccades = condition_gaze_behaviors[condition_name]['saccades']
-    for stim in stims:
-        saccade_durations = [s.duration for s in saccades if s.epoched and s.to_stim == stim]
-        plt.hist(saccade_durations, bins=20)
-        plt.xlabel('Degree')
-        plt.ylabel('Count')
-        plt.xlim(0, 0.1)
-        plt.title('Saccade Duration. Condition {0}. Stim {1}'.format(condition_name, stim))
-        plt.show()
+# for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
+#     saccades = condition_gaze_behaviors[condition_name]['saccades']
+#     for stim in stims:
+#         saccade_durations = [s.duration for s in saccades if s.epoched and s.to_stim == stim]
+#         plt.hist(saccade_durations, bins=20)
+#         plt.xlabel('Degree')
+#         plt.ylabel('Count')
+#         plt.xlim(0, 0.1)
+#         plt.title('Saccade Duration. Condition {0}. Stim {1}'.format(condition_name, stim))
+#         plt.show()
 
 # plot fixation durations across stims
-for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
-    fixations = condition_gaze_behaviors[condition_name]['fixations']
-    for stim in stims:
-        fixation_durations = [f.duration for f in fixations if f.epoched and f.stim == stim]
-        plt.hist(fixation_durations, bins=20)
-        plt.xlabel('Degree')
-        plt.ylabel('Count')
-        plt.xlim(0, 2)
-        plt.title('Fixation Duration. Condition {0}. Stim {1}'.format(condition_name, stim))
-        plt.show()
+# for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
+#     fixations = condition_gaze_behaviors[condition_name]['fixations']
+#     for stim in stims:
+#         fixation_durations = [f.duration for f in fixations if f.epoched and f.stim == stim]
+#         plt.hist(fixation_durations, bins=20)
+#         plt.xlabel('Degree')
+#         plt.ylabel('Count')
+#         plt.xlim(0, 2)
+#         plt.title('Fixation Duration. Condition {0}. Stim {1}'.format(condition_name, stim))
+#         plt.show()
 
 
 # get all the epochs for conditions and plots per condition

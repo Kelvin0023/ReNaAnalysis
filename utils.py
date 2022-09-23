@@ -356,7 +356,7 @@ def rescale_merge_exg(data_array_EEG, data_array_ECG):
     return data_array
 
 def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path, tmin, tmax, event_ids, locked_marker, erp_window=(.0, .8), srate=2048, verbose='CRITICAL',
-                              is_regenerate_ica=False, lowcut=1, highcut=50., resample_srate=128, bad_channels=None):
+                              is_regenerate_ica=False, is_ica_selection_inclusive=True, lowcut=1, highcut=50., resample_srate=128, bad_channels=None):
     mne.set_log_level(verbose=verbose)
     biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
     info = mne.create_info(
@@ -405,8 +405,15 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
             print('No channel found to be significantly correlated with ECG, skipping auto ECG artifact removal')
         ica.plot_sources(raw)
         ica.plot_components()
-        ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
-        if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ')]
+        if is_ica_selection_inclusive:
+            ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
+            if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ')]
+        else:
+            ica_includes = input("Enter manual ICA components to INCLUDE (use space to deliminate): ")
+            ica_includes = [int(x) for x in ica_includes.split(' ')]
+            if len(ica_includes) > 0: ica.exclude += [int(x) for x in range(ica.n_components) if x not in ica_includes]
+            print('Excluding ' + str([int(x) for x in range(ica.n_components) if x not in ica_includes]))
+
         f = open(ica_path + '.txt', "w")
         f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
         f.close()
