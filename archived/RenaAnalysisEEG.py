@@ -26,23 +26,27 @@ from params import event_ids, event_viz_groups
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events, \
-    extract_block_data, find_fixation_saccade_targets
+    extract_block_data, find_fixation_saccade_targets, flat2gen
 
+#################################################################################################
+is_data_preloaded = True
+is_epochs_preloaded = True
 # analysis parameters ######################################################################################
 
 
 is_data_preloaded = False
 is_epochs_preloaded = False
 is_regenerate_ica = False
-is_save_loaded_data = True
+is_save_loaded_data = False
 
 preloaded_dats_path = 'Data/participant_session_dict.p'
 preloaded_epoch_path = 'Data/participant_condition_epoch_dict_VS.p'
 preloaded_block_path = 'Data/participant_condition_block_dict_VS.p'
-base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+# base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
 data_directory = "Subjects"
-varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
-# varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
+# varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
+varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 
 data_root = os.path.join(base_root, data_directory)
 epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
@@ -53,11 +57,10 @@ eventMarker_conditionIndex_dict = {
     # 'VS': slice(8, 12),
     # 'TS': slice(12, 16)
 }
-# FixationLocking_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
 
-tmin_pupil = -0.1
+tmin_pupil = -0.5
 tmax_pupil = 3.
-tmin_pupil_viz = -0.1
+tmin_pupil_viz = -0.5
 tmax_pupil_viz = 3.
 
 tmin_eeg = -1.2
@@ -71,21 +74,18 @@ tmax_eeg_viz = 1.2
 eyetracking_srate = 200
 exg_srate = 2048
 
+# choose which channels to plot
 # eeg_picks = ['P4', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
-eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 # eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
+eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
               'Fixation': 'blue', 'Saccade': 'orange',
               'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green', 'FixationNull': 'grey',
-              'Saccade2Distractor': 'cyan', 'Saccade2Target': 'magenta', 'Saccade2Novelty': 'orange', 'Saccade2Null': 'yellow'}
+              'Saccade2Distractor': 'blue', 'Saccade2Target': 'red', 'Saccade2Novelty': 'green', 'Saccade2Null': 'grey'}
+stims = ['target', 'distractor', 'novelty', 'null', 'mixed']
 info_chns = ["info1", "info2", "info3"]
-# newest eyetracking data channel format
 
-# event_ids = {'Novelty': 3, 'Target': 2, 'Distractor': 1, }  # event_ids_for_interested_epochs
-# locked_marker = 'GazeMarker'
-
-# event_ids = {'Fixation': 6, 'Saccade': 7, }  # event_ids_for_interested_epochs
 locked_marker = 'GazeBehavior'
 
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
@@ -238,7 +238,7 @@ if not is_epochs_preloaded:
                 #########################
 
                 # extract block data
-                _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visualization outside of the loop
+                # _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visualization outside of the loop
                 # _blocks_exg = extract_block_data(data_exg_egbm, exg_egbm_channles, exg_srate, fixations, saccades)
                 del data_eyetracking_egbm, data_exg_egbm
 
@@ -385,6 +385,30 @@ for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
     # bar = plt.bar(X + 0.25 * i, [condition_gaze_statistics[condition_name]['counts'][event.lower()] for event in
     #                              event_ids.keys()], label=condition_name, width=0.25)
 
+# plot saccade durations across stims
+for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
+    saccades = condition_gaze_behaviors[condition_name]['saccades']
+    for stim in stims:
+        saccade_durations = [s.duration for s in saccades if s.epoched and s.to_stim == stim]
+        plt.hist(saccade_durations, bins=20)
+        plt.xlabel('Degree')
+        plt.ylabel('Count')
+        plt.xlim(0, 0.1)
+        plt.title('Saccade Duration. Condition {0}. Stim {1}'.format(condition_name, stim))
+        plt.show()
+
+# plot fixation durations across stims
+for i, condition_name in enumerate(eventMarker_conditionIndex_dict.keys()):
+    fixations = condition_gaze_behaviors[condition_name]['fixations']
+    for stim in stims:
+        fixation_durations = [f.duration for f in fixations if f.epoched and f.stim == stim]
+        plt.hist(fixation_durations, bins=20)
+        plt.xlabel('Degree')
+        plt.ylabel('Count')
+        plt.xlim(0, 2)
+        plt.title('Fixation Duration. Condition {0}. Stim {1}'.format(condition_name, stim))
+        plt.show()
+
 
 # get all the epochs for conditions and plots per condition
 print("Creating plots across all participants per condition")
@@ -396,9 +420,9 @@ for condition_name in eventMarker_conditionIndex_dict.keys():
     # condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg, _ in condition_epochs])
     condition_epochs_eeg_ica = mne.concatenate_epochs([eeg_ica for _, _, eeg_ica, _ in condition_epochs])
     title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, locked_marker)
-    visualize_pupil_epochs(condition_epochs_pupil, event_viz_groups, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
+    visualize_pupil_epochs(condition_epochs_pupil, event_viz_groups, tmin_pupil_viz, tmax_pupil_viz, color_dict, title, gaze_behavior=condition_gaze_behaviors[condition_name]['saccades'])
     visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
-                         title, is_plot_topo_map=True)
+                         title, is_plot_topo_map=True, gaze_behavior=condition_gaze_behaviors[condition_name]['saccades'])
 
 # get all the epochs and plots per participant
 for participant_index, condition_epoch_dict in participant_condition_epoch_dict.items():
@@ -410,12 +434,6 @@ for participant_index, condition_epoch_dict in participant_condition_epoch_dict.
         visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='figures')
 
 
-# condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[
-#                                                                    condition_name] is None else mne.concatenate_epochs(
-#     [condition_epochs_pupil_dict[condition_name], _epochs_pupil])
-# condition_event_label_dict[condition_name] = np.concatenate(
-#     [condition_event_label_dict[condition_name], _event_labels])
-#         pass
 ''' Export the per-trial epochs for gaze behavior analysis
 epochs_carousel_gaze_this_participant_trial_dfs = varjo_epochs_to_df(epochs_carousel_gaze_this_participant.copy())
 for trial_index, single_trial_df in enumerate(epochs_carousel_gaze_this_participant_trial_dfs):

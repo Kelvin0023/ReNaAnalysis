@@ -9,12 +9,23 @@ import mne
 import numpy as np
 import matplotlib.pyplot as plt
 from mne import find_events, Epochs
+from params import event_id_color_code_dict, event_color_dict, event_marker_color_dict
+from rena.utils.data_utils import RNStream
+
+from eyetracking import running_mean, Saccade
 
 FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
 ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}
 
 START_OF_BLOCK_ENCODING = 4
 END_OF_BLOCK_ENCODING = 5
+
+def flat2gen(alist):
+  for item in alist:
+    if isinstance(item, list):
+      for subitem in item: yield subitem
+    else:
+      yield item
 
 def interpolate_nan(x):
     not_nan = np.logical_not(np.isnan(x))
@@ -324,7 +335,7 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, 
     # pupil epochs
     epochs_pupil = Epochs(raw, events=find_events(raw, stim_channel=locked_marker), event_id=event_ids, tmin=tmin,
                           tmax=tmax,
-                          baseline=(-0.1, 0.0),
+                          baseline=(-0.5, 0.0),
                           preload=True,
                           verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
     labels_array = epochs_pupil.events[:, 2]
@@ -431,7 +442,7 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
     return epochs, epochs_ICA_cleaned, labels_array, raw, raw_ica_recon
 
 
-def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, color_dict, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
+def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, color_dict, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4), gaze_behavior=None):
     plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
@@ -460,16 +471,26 @@ def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, color_dict, title, 
                          interpolate=True,
                          alpha=0.5)
         plt.plot(time_vector, y_mean, c=color,
-                 label='{0}, N={1}'.format(event_name, epochs[events].get_data().shape[0]))
-
+                 label='{0}, N={1}'.format(event_name, y.shape[0]))
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
+    plt.legend()
+
+    # plot gaze behavior if any
+    if gaze_behavior:
+        if type(gaze_behavior[0]) is Saccade:
+            durations = [x.duration for x in gaze_behavior if x.epoched]
+            plt.twinx()
+            n, bins, patches = plt.hist(durations, bins=10)
+            plt.ylim(top=max(n) / 0.2)
+            plt.ylabel('Saccade duration histogram')
+
     plt.legend()
     plt.title(title)
     plt.show()
 
 
-def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, color_dict, picks, title, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True):
+def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, color_dict, picks, title, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True, gaze_behavior=None):
     mne.set_log_level(verbose=verbose)
     plt.rcParams["figure.figsize"] = fig_size
 
@@ -490,9 +511,20 @@ def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, color_dict, picks, ti
                                  interpolate=True,
                                  alpha=0.5)
                 plt.plot(time_vector, y_mean, c=color,
-                         label='{0}, N={1}'.format(event_name, epochs[events].get_data().shape[0]))
+                         label='{0}, N={1}'.format(event_name, y.shape[0]))
             plt.xlabel('Time (sec)')
             plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
+            plt.legend()
+
+            # plot gaze behavior if any
+            if gaze_behavior:
+                if type(gaze_behavior[0]) is Saccade:
+                    durations = [x.duration for x in gaze_behavior if x.epoched]
+                    plt.twinx()
+                    n, bins, patches = plt.hist(durations, bins=10)
+                    plt.ylim(top=max(n) / 0.2)
+                    plt.ylabel('Saccade duration histogram')
+
             plt.legend()
             plt.title('{0} - Channel {1}'.format(title, ch))
             if out_dir:
@@ -556,12 +588,19 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
             if f.stim == 'distractor':
                 _event_array[nearest_data_index] = 6  # for fixation onset on distractor
+                f.epoched = True
             elif f.stim == 'target':
                 _event_array[nearest_data_index] = 7  # for fixation onset on targets
+                f.epoched = True
             elif f.stim == 'novelty':
                 _event_array[nearest_data_index] = 8  # for fixation onset on novelty
+                f.epoched = True
             elif f.stim == 'null':  # for fixation onset on nothing
                 null_fixation.append(f)
+            elif f.stim is None or f.stim == 'mixed':
+                continue  # ignore fixation with unknown type
+            else:
+                raise Exception("Unknown fixation to_stim typ: {0}, this should never happen".format(f.stim))
 
     random.seed(random_seed)
     for f in random.sample(null_fixation, int(null_percentage * len(null_fixation))):
@@ -571,6 +610,7 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
             _event_array[nearest_data_index] = 9  # for fixation onset
+            f.epoched = True
 
     null_saccades = []
     for s in saccades:
@@ -585,12 +625,17 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
 
             if s.to_stim == 'distractor':
                 _event_array[nearest_data_index] = 10  # for saccade onset to distractor
+                s.epoched = True
             elif s.to_stim == 'target':
                 _event_array[nearest_data_index] = 11  # for saccade onset to targets
+                s.epoched = True
             elif s.to_stim == 'novelty':
                 _event_array[nearest_data_index] = 12  # for saccade onset to novelty
+                s.epoched = True
+            elif s.to_stim is None or s.to_stim == 'mixed':
+                continue  # ignore saccade with unknown type
             else:
-                raise Exception("Unknown saccade to_stim type, this should never happen")
+                raise Exception("Unknown saccade to_stim type {0}, this should never happen".format(s.to_stim))
 
     # select a subset of null fixation and null saccade to add
     for s in random.sample(null_saccades, int(null_percentage * len(null_saccades))):
@@ -600,6 +645,7 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
             _event_array[nearest_data_index] = 13  # for saccade onset
+            s.epoched = True
     # print('Found gaze behaviors')
     return np.expand_dims(_event_array, axis=0)
 
