@@ -62,11 +62,10 @@ is_regenerate_ica = False
 is_save_loaded_data = True
 
 preloaded_dats_path = 'data/participant_session_dict.p'
-preloaded_epoch_path = 'data/participant_condition_epoch_dict_VS.p'
-preloaded_block_path = 'data/participant_condition_block_dict_VS.p'
-# base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
-base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
-data_directory = "Subjects-Test"
+preloaded_epoch_path = 'data/participant_condition_epoch_dict.p'
+preloaded_block_path = 'data/participant_condition_block_dict.p'
+base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
+data_directory = "Subjects"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 
 eventMarker_eventMarkerIndex_dict = {
