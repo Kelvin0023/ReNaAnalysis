@@ -76,7 +76,7 @@ eventMarker_eventMarkerIndex_dict = {
     # 'TS': slice(12, 16)
 }
 
-tmin_pupil = -0.1
+tmin_pupil = -1
 tmax_pupil = 3.
 tmin_pupil_viz = -0.1
 tmax_pupil_viz = 3.
