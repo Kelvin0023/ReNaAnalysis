@@ -1,7 +1,7 @@
 def rena_analysis(is_data_preloaded, is_epochs_preloaded, is_save_loaded_data, is_regenerate_ica: bool,
-                  preloaded_dats_path = 'Data/participant_session_dict.p',
-                  preloaded_epoch_path = 'Data/participant_condition_epoch_dict.p',
-                  preloaded_block_path = 'Data/participant_condition_block_dict.p'):
+                  preloaded_dats_path = 'data/participant_session_dict.p',
+                  preloaded_epoch_path = 'data/participant_condition_epoch_dict.p',
+                  preloaded_block_path = 'data/participant_condition_block_dict.p'):
     """
 
     @param is_data_preloaded:

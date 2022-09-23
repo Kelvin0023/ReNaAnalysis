@@ -35,11 +35,11 @@ is_regenerate_ica = True
 is_ica_inclusive = False
 is_save_loaded_data = True
 
-preloaded_dats_path = 'Data/participant_session_dict.p'
-preloaded_epoch_path = 'Data/participant_condition_epoch_dict_VS.p'
-preloaded_block_path = 'Data/participant_condition_block_dict_VS.p'
-# base_root = "C:/Users/Lab-User/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
-base_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/"
+preloaded_dats_path = 'data/participant_session_dict.p'
+preloaded_epoch_path = 'data/participant_condition_epoch_dict_VS.p'
+preloaded_block_path = 'data/participant_condition_block_dict_VS.p'
+# base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
+base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
 data_directory = "Subjects"
 # varjoEyetrackingComplete_preset_path = 'C:/Users/Lab-User/PycharmProjects/rena_jp/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'
 varjoEyetrackingComplete_preset_path = 'D:/PycharmProjects/RealityNavigation/Presets/LSLPresets/VarjoEyeDataComplete.json'

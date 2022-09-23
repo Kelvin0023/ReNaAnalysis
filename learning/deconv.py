@@ -85,21 +85,21 @@ def ridge_regression_gd(X, Y, X_test, Y_test, lamb, learning_rate=1., iterations
 covariates = {'Distractor':1, 'Target':2, 'Novelty':3}
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
-# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_data.npy'
-# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_DM.npy'
-# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_labels.npy'
+# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_data.npy'
+# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_DM.npy'
+# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_EventLocked_eeg_ica_condition_RSVP_labels.npy'
 
 epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_Carousel_data.npy'
 epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_Carousel_DM.npy'
 epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_Carousel_labels.npy'
 
-# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_data.npy'
-# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_DM.npy'
-# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_labels.npy'
+# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_data.npy'
+# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_DM.npy'
+# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_RSVP_labels.npy'
 
-# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_data.npy'
-# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_DM.npy'
-# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_labels.npy'
+# epoch_data_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_data.npy'
+# epoch_dm_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_DM.npy'
+# epoch_label_path = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects-Epochs/epochs_FixationLocked_eeg_ica_condition_VS_labels.npy'
 
 
 srate = 128
@@ -174,7 +174,7 @@ for cov, cov_code in covariates.items():
     plt.fill_between(time_vector, data_orig_upper, data_orig_lower, where=data_orig_lower <= data_orig_upper, facecolor='red',
                      interpolate=True,
                      alpha=0.5)
-    plt.plot(time_vector, data_orig_mean, label='Original Data for Cov {0}'.format(cov), color='red')
+    plt.plot(time_vector, data_orig_mean, label='Original data for Cov {0}'.format(cov), color='red')
     plt.legend()
     plt.title('{0} on Channel {1}'.format(cov, eeg_ch))
     plt.show()
@@ -200,7 +200,7 @@ for cov, cov_code in covariates.items():
     plt.fill_between(time_vector, data_corrected_upper, data_corrected_lower, where=data_corrected_lower <= data_corrected_upper, facecolor='blue',
                      interpolate=True,
                      alpha=0.5)
-    plt.plot(time_vector, data_corrected_mean, label='Deconv corrected Data for Cov {0}'.format(cov), color='blue')
+    plt.plot(time_vector, data_corrected_mean, label='Deconv corrected data for Cov {0}'.format(cov), color='blue')
 
     data_orig_mean = np.mean(data_orig, axis=0)
     data_orig_upper = data_orig_mean + scipy.stats.sem(data_orig, axis=0)  # this is the upper envelope
@@ -208,7 +208,7 @@ for cov, cov_code in covariates.items():
     plt.fill_between(time_vector, data_orig_upper, data_orig_lower, where=data_orig_lower <= data_orig_upper, facecolor='red',
                      interpolate=True,
                      alpha=0.5)
-    plt.plot(time_vector, data_orig_mean, label='Original Data for Cov {0}'.format(cov), color='red')
+    plt.plot(time_vector, data_orig_mean, label='Original data for Cov {0}'.format(cov), color='red')
 
     plt.legend()
     plt.title('{0} on Channel {1}'.format(cov, eeg_ch))

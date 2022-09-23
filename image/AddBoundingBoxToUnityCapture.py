@@ -19,7 +19,7 @@ def add_bounding_box(a, x, y, width, height, color):
     return copy
 
 
-image_folder = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/3-1-2022/0/ReNaUnityCameraCapture_03-01-2022-20-10-00'
+image_folder = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/3-1-2022/0/ReNaUnityCameraCapture_03-01-2022-20-10-00'
 gaze_info_file = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/3-1-2022/0/ReNaUnityCameraCapture_03-01-2022-20-10-00/GazeInfo.csv'
 video_name = 'UnityFrames.avi'
 

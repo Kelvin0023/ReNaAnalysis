@@ -1,3 +1,10 @@
-On the RTX3090 machine, run this command to install torch
+This project is the analysis script for the Rena experiment. 
 
-    pip3 install torch==1.10.2+cu113 torchvision==0.11.3+cu113 torchaudio===0.10.2+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+# Get started
+Navigate to the root folder of the project and install the libraries in your environment
+with the command
+    
+    pip install -r requirements.txt
+
+The entry point to the analysis is /main.py. At the "analysis parameters" section, located at the
+beginning of the script

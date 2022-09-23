@@ -10,7 +10,7 @@ tmin = -0.1
 tmax = 3
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
-root = 'C:/Dropbox/ReNa/Data/ReNaPilot-2021Fall'
+root = 'C:/Dropbox/ReNa/data/ReNaPilot-2021Fall'
 experiments = [{'data_path': '11-13-2021/11_13_2021_11_04_11-Exp_ReNaPilot-Sbj_AN-Ssn_0.dats',
                 'item_catalog_path': '11-13-2021/ReNaItemCatalog_11-13-2021-11-03-54.json',
                 'session_log_path': '11-13-2021/ReNaSessionLog_11-13-2021-11-03-54.json'},

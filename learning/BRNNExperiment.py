@@ -28,8 +28,8 @@ train_N = len(epoch_dataset) - val_N
 val, train = random_split(epoch_dataset, [train_N, val_N])
 
 # export the dataset
-# np.save('C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/epochs_pupil_raw_condition_RSVP_DL.npy', epoch_dataset.X.cpu().data)
-# np.save('C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/epochs_pupil_raw_condition_RSVP_DL_labels.npy', epoch_dataset.y.cpu().data)
+# np.save('C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/SingleTrials/epochs_pupil_raw_condition_RSVP_DL.npy', epoch_dataset.X.cpu().data)
+# np.save('C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/SingleTrials/epochs_pupil_raw_condition_RSVP_DL_labels.npy', epoch_dataset.y.cpu().data)
 
 train_loader = DataLoader(dataset=train, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(dataset=val, batch_size=batch_size, shuffle=True)

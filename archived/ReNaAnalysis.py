@@ -11,17 +11,17 @@ from rena.utils.data_utils import RNStream
 from utils.utils import generate_pupil_event_epochs, \
     visualize_pupil_epochs
 
-data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data"
+data_root = "C:/Users/S-Vec/Dropbox/ReNa/data"
 
 '''#################################################################################################
 Path to store the full block data
 
 '''
-trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials'
-block_data_export_root = {'RSVP': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-RSVP',
-                          'Carousel': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-Carousel',
-                          'VS': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-VS',
-                          'TS': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Blocks-TS'}
+trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/SingleTrials'
+block_data_export_root = {'RSVP': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Blocks-RSVP',
+                          'Carousel': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Blocks-Carousel',
+                          'VS': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Blocks-VS',
+                          'TS': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Blocks-TS'}
 #################################################################################################
 
 # Only put interested conditions here

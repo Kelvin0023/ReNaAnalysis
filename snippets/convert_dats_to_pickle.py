@@ -8,7 +8,7 @@ from rena.utils.data_utils import RNStream
 #################################################################################################
 from utils.utils import flatten_list
 
-data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
+data_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects"
 
 # end of setup parameters, start of the main block ######################################################
 start_time = time.time()

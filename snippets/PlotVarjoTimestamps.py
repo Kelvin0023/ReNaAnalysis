@@ -7,25 +7,25 @@ tmin = -0.1
 tmax = 3
 color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green'}
 
-trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/SingleTrials'
+trial_data_export_root = 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2021Fall/SingleTrials'
 
 participant_data_dict = {
                 # 'AN': {
-                #     'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
-                #     'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
-                #     'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'},
+                #     'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
+                #     'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
+                #     'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'},
         #         'ZL': {
-        # 'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
-        # 'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
-        # 'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'},
+        # 'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2021Fall/12-16-2021/12_16_2021_15_40_16-Exp_ReNa-Sbj_AN-Ssn_2.dats',
+        # 'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2021Fall/12-16-2021/ReNaItemCatalog_12-16-2021-15-40-01.json',
+        # 'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2021Fall/12-16-2021/ReNaSessionLog_12-16-2021-15-40-01.json'},
                     #     'ZL': {
                     # 'data_path': 'C:/Recordings/01_28_2022_22_05_02-Exp_ReNaTimestampTest-Sbj_ZL-Ssn_0.dats',
                     # 'item_catalog_path': 'C:/Recordings/ReNaLogs/ReNaItemCatalog_01-28-2022-22-00-48.json',
                     # 'session_log_path': 'C:/Recordings/ReNaLogs/ReNaSessionLog_01-28-2022-22-00-48.json'}
     'ZL': {
-        'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/01_31_2022_15_10_12-Exp_ReNa-Sbj_ZL-Ssn_0.dats',
-        'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/ReNaItemCatalog_01-31-2022-15-09-45.json',
-        'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/01-31-2022/ReNaSessionLog_01-31-2022-15-09-45.json'}
+        'data_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/01-31-2022/01_31_2022_15_10_12-Exp_ReNa-Sbj_ZL-Ssn_0.dats',
+        'item_catalog_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/01-31-2022/ReNaItemCatalog_01-31-2022-15-09-45.json',
+        'session_log_path': 'C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/01-31-2022/ReNaSessionLog_01-31-2022-15-09-45.json'}
 }
 
 

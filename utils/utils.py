@@ -9,10 +9,11 @@ import mne
 import numpy as np
 import matplotlib.pyplot as plt
 from mne import find_events, Epochs
+
+from eye.eyetracking import Saccade
 from params import event_id_color_code_dict, event_color_dict, event_marker_color_dict
 from rena.utils.data_utils import RNStream
 
-from eyetracking import running_mean, Saccade
 
 FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
 ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}
@@ -236,7 +237,7 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             # check if the intersects is long enough to warrant a fixation
             gaze_intersected_durations = item_markers_timestamps_of_block[gaze_intersect_end_index] - \
                                          item_markers_timestamps_of_block[gaze_intersect_start_index]
-            # append_list_lines_to_file(gaze_intersected_durations, 'Data/FixationDurations')  # TODO: check this after we collect more data using the 'reset item marker' fix
+            # append_list_lines_to_file(gaze_intersected_durations, 'data/FixationDurations')  # TODO: check this after we collect more data using the 'reset item marker' fix
             gazeRayIntersect_durations[item_type] += list(gaze_intersected_durations)
 
             true_fixations_indices = np.argwhere(gaze_intersected_durations > foveate_duration_threshold)[:, 0]
