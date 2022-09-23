@@ -19,17 +19,18 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 import mne
-from rena.utils.data_utils import RNStream
 
-from eyetracking import gaze_event_detection
-from fs_utils import load_participant_session_dict
+from eye.eyetracking import gaze_event_detection
+from utils.fs_utils import load_participant_session_dict
 from params import event_ids, event_viz_groups
-from utils import generate_pupil_event_epochs, \
+from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events, \
     extract_block_data, find_fixation_saccade_targets
 
-#################################################################################################
+# analysis parameters ######################################################################################
+
+
 is_data_preloaded = False
 is_epochs_preloaded = False
 is_regenerate_ica = False
@@ -47,9 +48,9 @@ data_root = os.path.join(base_root, data_directory)
 epoch_data_export_root = os.path.join(base_root, 'Subjects-Epochs')
 # only the conditions in this dict will be included in the analysis
 eventMarker_conditionIndex_dict = {
-    # 'RSVP': slice(0, 4),
-    # 'Carousel': slice(4, 8),
-    'VS': slice(8, 12),
+    'RSVP': slice(0, 4),
+    'Carousel': slice(4, 8),
+    # 'VS': slice(8, 12),
     # 'TS': slice(12, 16)
 }
 # FixationLocking_conditions = ['RSVP', 'Carousel', 'VS', 'TS']
@@ -406,7 +407,7 @@ for participant_index, condition_epoch_dict in participant_condition_epoch_dict.
         condition_epochs_eeg_ica = condition_epochs[2]
         title = 'Participants {0} - Condition {1}'.format(participant_index, condition_name)
         # visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
-        visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='Figures')
+        visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='figures')
 
 
 # condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[
@@ -448,3 +449,5 @@ for trial_index, single_trial_df in enumerate(epochs_carousel_gaze_this_particip
 
 end_time = time.time()
 print("Took {0} seconds".format(end_time - start_time))
+
+

@@ -3,7 +3,7 @@ import unittest
 
 from torchsummary import summary
 
-from Learning.beta_vae import BetaVAE
+from learning.beta_vae import BetaVAE
 
 
 class TestVAE(unittest.TestCase):

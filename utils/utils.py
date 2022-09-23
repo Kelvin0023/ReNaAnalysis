@@ -1,24 +1,14 @@
-import math
 import os
 import random
 from copy import copy
 
-import numpy as np
 import scipy
-from mne.io import RawArray
-from mne.preprocessing import create_ecg_epochs
 from scipy.interpolate import interp1d
-import json
-import imageio
 
 import mne
 import numpy as np
 import matplotlib.pyplot as plt
 from mne import find_events, Epochs
-from params import event_id_color_code_dict, event_color_dict, event_marker_color_dict
-from rena.utils.data_utils import RNStream
-
-from eyetracking import running_mean
 
 FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
 ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}

@@ -1,14 +1,12 @@
-import json
 import os
 import pickle
 import time
 from collections import defaultdict
 import numpy as np
-import mne
 from rena.utils.data_utils import RNStream
 
 #################################################################################################
-from utils import flatten_list
+from utils.utils import flatten_list
 
 data_root = "C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/Subjects"
 

@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader, random_split
 import numpy as np
 
 # load data
-from Learning.BRNN import BRNN
-from Learning.EpochDataset import EpochDatset
+from learning.BRNN import BRNN
+from learning.EpochDataset import EpochDatset
 
 data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/epochs_pupil_raw_condition_RSVP.npy'
 label_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Spring/SingleTrials/epoch_labels_pupil_raw_condition_RSVP.npy'
