@@ -51,7 +51,7 @@ eventMarker_conditionIndex_dict = {
     'RSVP': slice(0, 4),
     'Carousel': slice(4, 8),
     # 'VS': slice(8, 12),
-    # 'TS': slice(12, 16)
+    # 'TS': slice(12, 16)   
 }
 
 tmin_pupil = -0.5
@@ -195,9 +195,7 @@ if not is_epochs_preloaded:
                 gaze_xy = eyetracking_data[
                     [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
                 gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
-                gaze_behavior_events, fixations, saccades = gaze_event_detection(gaze_xy, gaze_status,
-                                                                                 eyetracking_timestamps)
-
+                gaze_behavior_events, fixations, saccades, _ = gaze_event_detection(gaze_xy, gaze_timestamps=eyetracking_timestamps, gaze_status=gaze_status)
                 fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
 
                 exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])

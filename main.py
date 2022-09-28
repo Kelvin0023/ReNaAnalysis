@@ -213,7 +213,7 @@ if not is_epochs_preloaded:
                 gaze_xy = eyetracking_data[
                     [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
                 gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
-                gaze_behavior_events, fixations, saccades = gaze_event_detection(gaze_xy, gaze_status,
+                gaze_behavior_events, fixations, saccades, _ = gaze_event_detection(gaze_xy, gaze_status,
                                                                                  eyetracking_timestamps)
 
                 fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)

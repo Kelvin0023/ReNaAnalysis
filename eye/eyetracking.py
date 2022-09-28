@@ -8,7 +8,8 @@ FIXATION_CODE = 2
 
 
 class Saccade:
-    def __init__(self, amplitude, duration, peak_velocity, average_velocity, onset, offset, onset_time, offset_time, peak):
+    def __init__(self, amplitude, duration, peak_velocity, average_velocity, onset, offset, onset_time, offset_time,
+                 peak):
         self.amplitude = amplitude
         self.duration = duration
         self.peak_velocity = peak_velocity
@@ -24,7 +25,8 @@ class Saccade:
 
 
 class Fixation:
-    def __init__(self, duration, dispersion, preceding_saccade, following_saccade, onset, offset, onset_time, offset_time):
+    def __init__(self, duration, dispersion, preceding_saccade, following_saccade, onset, offset, onset_time,
+                 offset_time):
         self.duration = duration
         self.dispersion = dispersion
         self.stim = None  # at what stimulus is the participant fixated on
@@ -36,12 +38,13 @@ class Fixation:
         self.offset_time = offset_time
         self.epoched = False
 
+
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
 
-def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
+def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_status=None,
                          saccade_min_peak=6, saccade_min_amplitude=2, saccade_spacing=20e-3, saccade_min_sample=2,
                          fixation_min_sample=2, glitch_threshold=1000):
     """
@@ -52,6 +55,7 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
     https://ieeexplore.ieee.org/abstract/document/8987791/ for some implementation of I-VT method
     currently no criterion is applied to the fixations
 
+    @param gaze_status: if the gaze is valid
     @param saccade_min_peak: float: the peak velocity of a potential saccade period has to be greater than this minimal
     to be considered a saccade, unit is in deg/s
     @param saccade_min_amplitude: float: the minimal amplitude of for a saccade, unit is deg
@@ -64,11 +68,12 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
     events = np.zeros(gaze_timestamps.shape)
     plt.plot(np.linspace(0, 5, 200 * 5), gaze_xy[0, :200 * 5])
     plt.plot(np.linspace(0, 5, 200 * 5), gaze_xy[1, :200 * 5])
-    events[gaze_status != 2] = -1  # remove points where the status is invalid from the eyetracker
+    if gaze_status is not None: events[
+        gaze_status != 2] = -1  # remove points where the status is invalid from the eyetracker
     saccades = []  # items are tuple of three: saccade onset index, saccade peak velocity index, saccade offset index, Saccade object,
     fixations = []  # items are tuple of three: saccade onset index, saccade peak velocity index, saccade offset index, Saccade object,
 
-    gaze_xy_deg = (180 / math.pi) * np.arcsin(gaze_xy)
+    gaze_xy_deg = (180 / math.pi) * np.arcsin(gaze_xy) if gaze_xy_format == 'ratio' else gaze_xy
 
     # calculate eye velocity in degrees
     dxy = np.diff(gaze_xy_deg, axis=1, prepend=gaze_xy_deg[:, :1])
@@ -101,7 +106,9 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
         average_velocity = np.mean(velocities[onset:offset])
         duration = gaze_timestamps[offset] - gaze_timestamps[onset]
         if velocities[peak] > saccade_min_peak and amplitude > saccade_min_amplitude:
-            saccades.append(Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset, gaze_timestamps[onset],  gaze_timestamps[offset], peak))
+            saccades.append(
+                Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset, gaze_timestamps[onset],
+                        gaze_timestamps[offset], peak))
 
     # identify the fixations for all the intervals between saccades
     fixation_inteval_indices = [(saccades[i - 1].offset, saccades[i].onset) for i in
@@ -113,7 +120,9 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
         if _xy_deg.shape[
             1] != 0 and offset - onset > fixation_min_sample:  # if the entire interval is invalid, then we do NOT add it to fixation
             dispersion = np.max(_xy_deg, axis=1) - np.min(_xy_deg, axis=1)
-            fixations.append(Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset, gaze_timestamps[onset],  gaze_timestamps[offset]))
+            fixations.append(
+                Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset, gaze_timestamps[onset],
+                         gaze_timestamps[offset]))
     # start = 800
     # end = 1200
     # plt.rcParams["figure.figsize"] = (20, 10)
@@ -149,4 +158,37 @@ def gaze_event_detection(gaze_xy, gaze_status, gaze_timestamps,
         events[s.onset:s.offset] = SACCADE_CODE
     for f in fixations:
         events[f.onset:f.offset] = FIXATION_CODE
-    return events, fixations, saccades
+    return events, fixations, saccades, velocities
+
+
+def plot_gaze_events_overlay(start_time, end_time, gaze_timestamps, saccades, fixations, velocities):
+    """
+
+    @param start_time: time in seconds
+    @param end_time: time in seconds
+    """
+    try:
+        assert start_time < np.max(gaze_timestamps) and start_time > np.min(gaze_timestamps)
+        assert end_time < np.max(gaze_timestamps) and end_time > np.min(gaze_timestamps)
+        assert end_time > start_time
+    except AssertionError:
+        raise AttributeError("Invalid start and end")
+    plt.rcParams["figure.figsize"] = (20, 10)
+    saccades_in_bounds = [s for s in saccades if s.onset_time > start_time and s.offset_time < end_time]
+    fixations_in_bounds = [f for f in fixations if f.onset_time > start_time and f.offset_time < end_time]
+
+    start_index = np.argmin(np.abs(gaze_timestamps - start_time))
+    end_index = np.argmin(np.abs(gaze_timestamps - end_time))
+    plt.plot(gaze_timestamps[start_index:end_index], velocities[start_index:end_index], label='velocity')
+
+    plt.axvspan(gaze_timestamps[saccades_in_bounds[0].onset], gaze_timestamps[saccades_in_bounds[0].offset], alpha=0.5, color='r', label='saccade')
+    plt.axvspan(gaze_timestamps[fixations_in_bounds[0].onset], gaze_timestamps[fixations_in_bounds[0].offset], alpha=0.5, color='g', label='fixation')
+    for s in saccades_in_bounds[1:]:
+        plt.axvspan(gaze_timestamps[s.onset], gaze_timestamps[s.offset], alpha=0.5, color='r')
+    for f in fixations_in_bounds[1:]:
+        plt.axvspan(gaze_timestamps[f.onset], gaze_timestamps[f.offset], alpha=0.5, color='g')
+    plt.ylim(0, 1000)
+    plt.xlabel('Time (sec)')
+    plt.ylabel('Velocity (deg/sec)')
+    plt.legend()
+    plt.show()
