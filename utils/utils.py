@@ -659,7 +659,7 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
 
 def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_egm, deviation_threshold=1e-2):
     """
-    process a dataset that has gaze behavior marker and gaze marker, use the gaze marker to find
+    process a dataset that has gaze behavior marker and gaze marker (gaze ray intersect with object), use the gaze marker to find
     first identify the gaze marker inside a fixation,
     if there is an gaze marker, find what stimulus type is that gaze marker
         then we set the preceding saccade's destination to the stimulus type
