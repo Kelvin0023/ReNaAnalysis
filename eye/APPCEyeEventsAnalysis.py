@@ -37,12 +37,13 @@ fixation_heat_radius_pix = fixation_heat_radius_deg * ppi
 fixation_locations = [np.mean(gaze_xy[:,f.onset:f.offset], axis=1) for f in fixations]
 
 for i, (cx, cy)in enumerate(fixation_locations):
-    print("Processing fixations: {}/{}".format(i, len(fixation_locations)), end='\r')
     mask = (x[np.newaxis,:]-cx)**2 + (y[:,np.newaxis]-cy)**2 < fixation_heat_radius_pix**2
     attention_heatmap[mask] += 1
+    print("Processing fixations: {}/{}. Mask size is {}".format(i, len(fixation_locations), np.sum(mask)), end='\r')
+
 
 # plot a sample gaze sequence
-plot_gaze_events_overlay(1700, 1705, gaze_timestamps, saccades, fixations, velocities)
+plot_gaze_events_overlay(1700, 1705, gaze_timestamps, saccades, fixations, velocities)  # TODO this plot isn't quite right
 # plot a sample gaze sequence
 plt.pcolormesh(x, y, attention_heatmap)
 plt.colorbar()
