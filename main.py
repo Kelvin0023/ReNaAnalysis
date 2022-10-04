@@ -56,7 +56,7 @@ Event markers are encoded in integers, this list shows what event does each numb
 9: saccade onset
 """
 
-is_data_preloaded = True
+is_data_preloaded = False
 is_epochs_preloaded = False
 is_regenerate_ica = False
 is_save_loaded_data = True
@@ -126,7 +126,7 @@ for participant, participant_directory in zip(participant_list, participant_dire
     file_names = os.listdir(participant_directory)
     # assert len(file_names) % 3 == 0
     # must have #files divisible by 3. That is, we have a itemCatalog, SessionLog and data file for each experiment session.
-    num_sessions = flatten_list([[int(s) for s in txt if s.isdigit()] for txt in file_names])
+    num_sessions = flatten_list([[int(s) for s in txt if s.isdigit()] for txt in file_names if txt != '.DS_Store'])
     num_sessions = len(np.unique(num_sessions))
     if os.path.exists(os.path.join(participant_directory, 'badchannels.txt')):  # load bad channels for this participant
         participant_badchannel_dict[participant] = read_file_lines_as_list(
