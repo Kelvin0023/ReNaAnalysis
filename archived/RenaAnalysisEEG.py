@@ -22,7 +22,7 @@ import mne
 
 from eye.eyetracking import gaze_event_detection
 from utils.fs_utils import load_participant_session_dict
-from params import event_ids, event_viz_groups
+from params import event_ids_dict, event_viz_groups
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events, \
@@ -216,7 +216,7 @@ if not is_epochs_preloaded:
                 # generate the epochs
                 _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,
                                                                eyetracking_egbm_channels, eyetracking_egbm_channel_types, tmin_pupil, tmax_pupil,
-                                                               event_ids, locked_marker)
+                                                               event_ids_dict, locked_marker)
 
                 _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
                     data_exg_egbm,
@@ -224,7 +224,7 @@ if not is_epochs_preloaded:
                     exg_egbm_channle_types,
                     session_ICA_path,
                     tmin_eeg, tmax_eeg,
-                    event_ids, locked_marker,
+                    event_ids_dict, locked_marker,
                     is_regenerate_ica=is_regenerate_ica if condition_index == 0 else False,  # only generate ICA once
                     is_ica_selection_inclusive=is_ica_inclusive,
                     bad_channels=participant_badchannel_dict[

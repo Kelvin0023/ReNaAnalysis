@@ -12,7 +12,7 @@ import mne
 
 from eye.eyetracking import gaze_event_detection
 from utils.fs_utils import load_participant_session_dict
-from params import event_ids, event_viz_groups
+from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events, \
@@ -65,7 +65,8 @@ preloaded_dats_path = 'data/participant_session_dict.p'
 preloaded_epoch_path = 'data/participant_condition_epoch_dict.p'
 preloaded_block_path = 'data/participant_condition_block_dict.p'
 base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
-data_directory = "Subjects"
+# base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
+data_directory = "Subjects-Test"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 
 eventMarker_eventMarkerIndex_dict = {
@@ -91,13 +92,13 @@ exg_srate = 2048
 
 eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 
-color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
+color_dict = {
+    # 1: 'b', 2: 'r', 3: 'orange',
+              'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
               'Fixation': 'blue', 'Saccade': 'orange',
               'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green', 'FixationNull': 'grey',
               'Saccade2Distractor': 'cyan', 'Saccade2Target': 'magenta', 'Saccade2Novelty': 'orange', 'Saccade2Null': 'yellow'}
 info_chns = ["info1", "info2", "info3"]
-
-locked_marker = 'GazeBehavior'
 
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
 ecg_ch_name='ECG00'
@@ -225,9 +226,9 @@ if not is_epochs_preloaded:
                 del data_exg_egm, data_eyetracking_egm
 
                 # create channels based on the event channels added
-                exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeRay'] + ["GazeBehavior"]
+                exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
                 exg_egbm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 3
-                eyetracking_egbm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeMarker'] + ["GazeBehavior"]
+                eyetracking_egbm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
                 eyetracking_egbm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 3
 
                 #########################
@@ -235,7 +236,7 @@ if not is_epochs_preloaded:
                 # generate the epochs
                 _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,
                                                                eyetracking_egbm_channels, eyetracking_egbm_channel_types, tmin_pupil, tmax_pupil,
-                                                               event_ids, locked_marker)
+                                                               event_ids_dict)
 
                 _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
                     data_exg_egbm,
@@ -243,7 +244,7 @@ if not is_epochs_preloaded:
                     exg_egbm_channle_types,
                     session_ICA_path,
                     tmin_eeg, tmax_eeg,
-                    event_ids, locked_marker,
+                    event_ids_dict,
                     is_regenerate_ica=is_regenerate_ica,
                     bad_channels=participant_badchannel_dict[
                         participant_index] if participant_index in participant_badchannel_dict.keys() else None)
@@ -408,9 +409,9 @@ for condition_name in eventMarker_eventMarkerIndex_dict.keys():
     condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, _, _, _ in condition_epochs])
     # condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg, _ in condition_epochs])
     condition_epochs_eeg_ica = mne.concatenate_epochs([eeg_ica for _, _, eeg_ica, _ in condition_epochs])
-    title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, locked_marker)
-    visualize_pupil_epochs(condition_epochs_pupil, event_viz_groups, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
-    visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
+    title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, event_viz)
+    visualize_pupil_epochs(condition_epochs_pupil, event_ids_dict[event_viz], tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
+    visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids_dict[event_viz], tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
                          title, is_plot_topo_map=True)
 
 # get all the epochs and plots per participant
@@ -420,7 +421,7 @@ for participant_index, condition_epoch_dict in participant_condition_epoch_dict.
         condition_epochs_eeg_ica = condition_epochs[2]
         title = 'Participants {0} - Condition {1}'.format(participant_index, condition_name)
         # visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
-        visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='figures')
+        visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids_dict[event_viz], tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='figures')
 
 
 # condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[

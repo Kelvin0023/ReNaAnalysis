@@ -11,8 +11,6 @@ import matplotlib.pyplot as plt
 from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
-from params import event_id_color_code_dict, event_color_dict, event_marker_color_dict
-from rena.utils.data_utils import RNStream
 
 
 FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
@@ -225,7 +223,6 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
                 if verbose: print('Out of block item found: should NOT happen again after RESET FIX')
                 continue
             # find if there is gaze ray intersection
-            # TODO: find saccade before fixations
             # foveate_indices = find_value_thresholding_interval(this_item_marker[2, :], item_markers_timestamps_of_block, foveate_value_threshold, foveate_duration_threshold)
             # force the first last to be not-intersected
             this_item_marker[4, 0] = 0
@@ -316,7 +313,7 @@ def extract_block_data(_data, channel_names, srate, fixations, saccades, pre_blo
     # return block_sequences  # a list of block sequences
 
 
-def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, tmax, event_ids, locked_marker, erp_window=(.0, .8),srate=200,
+def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, tmax, event_ids_dict, erp_window=(.0, .8), srate=200,
                                 verbose='WARNING'):  # use a fixed sampling rate for the sampling rate to match between recordings
     mne.set_log_level(verbose=verbose)
 
@@ -327,15 +324,24 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, 
     raw = mne.io.RawArray(data_, info)
 
     # only keep events that are in the block
-    event_ids = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in np.unique(mne.find_events(raw, stim_channel=locked_marker)[:, 2])])
-    # pupil epochs
-    epochs_pupil = Epochs(raw, events=find_events(raw, stim_channel=locked_marker), event_id=event_ids, tmin=tmin,
-                          tmax=tmax,
-                          baseline=(-0.5, 0.0),
-                          preload=True,
-                          verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
-    labels_array = epochs_pupil.events[:, 2]
-    return epochs_pupil, labels_array
+    epochs_pupil_all = []
+    labels_array_all = []
+    for stim_channel, event_ids in event_ids_dict.items():
+        found_events = mne.find_events(raw, stim_channel=stim_channel)
+        unique_events = np.unique(found_events[:, 2])
+        events = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in unique_events])
+        # pupil epochs
+        if len(events) > 0:
+            epochs_pupil = Epochs(raw, events=found_events, event_id=events, tmin=tmin,
+                                  tmax=tmax,
+                                  baseline=(-0.5, 0.0),
+                                  preload=True,
+                                  verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
+            epochs_pupil_all.append(epochs_pupil)
+            labels_array_all.append(epochs_pupil.events[:, 2])
+    epochs_pupil_all = mne.concatenate_epochs(epochs_pupil_all)
+    labels_array_all = np.concatenate(labels_array_all)
+    return epochs_pupil_all, labels_array_all
 
 
 def rescale_merge_exg(data_array_EEG, data_array_ECG):
@@ -345,7 +351,7 @@ def rescale_merge_exg(data_array_EEG, data_array_ECG):
     data_array = np.concatenate([data_array_EEG, data_array_ECG])
     return data_array
 
-def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path, tmin, tmax, event_ids, locked_marker, erp_window=(.0, .8), srate=2048, verbose='CRITICAL',
+def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path, tmin, tmax, event_ids_dict, erp_window=(.0, .8), srate=2048, verbose='CRITICAL',
                               is_regenerate_ica=False, is_ica_selection_inclusive=True, lowcut=1, highcut=50., resample_srate=128, bad_channels=None):
     mne.set_log_level(verbose=verbose)
     biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
@@ -425,24 +431,36 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
 
     reject = dict(eeg=600.)  # DO NOT reject or we will have a mismatch between EEG and pupil
     # only keep events that are in the block
-    event_ids = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in np.unique(mne.find_events(raw, stim_channel=locked_marker, shortest_event=1)[:, 2])])  # we may not have all target, distractor and novelty, especially in free-viewing
-    epochs = Epochs(raw, events=find_events(raw, stim_channel=locked_marker, shortest_event=1), event_id=event_ids, tmin=tmin,
-                    tmax=tmax,
-                    baseline=(-0.1, 0.0),
-                    preload=True,
-                    verbose=False,
-                    reject=reject)
 
-    epochs_ICA_cleaned = Epochs(raw_ica_recon, events=find_events(raw, stim_channel=locked_marker, shortest_event=1), event_id=event_ids,
-                                tmin=tmin,
-                                tmax=tmax,
-                                baseline=(-0.1, 0.0),
-                                preload=True,
-                                verbose=False,
-                                reject=reject)
+    epochs_all = []
+    epochs_ica_cleaned_all = []
+    labels_array_all = []
+    for stim_channel, event_ids in event_ids_dict.items():
+        found_events = mne.find_events(raw, stim_channel=stim_channel)
+        unique_events = np.unique(found_events[:, 2])
+        events = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in unique_events])
+        if len(events) > 0:
+            epochs = Epochs(raw, events=found_events, event_id=events, tmin=tmin,
+                            tmax=tmax,
+                            baseline=(-0.1, 0.0),
+                            preload=True,
+                            verbose=False,
+                            reject=reject)
 
-    labels_array = epochs.events[:, 2]
-    return epochs, epochs_ICA_cleaned, labels_array, raw, raw_ica_recon
+            epochs_ICA_cleaned = Epochs(raw_ica_recon, events=found_events, event_id=events,
+                                        tmin=tmin,
+                                        tmax=tmax,
+                                        baseline=(-0.1, 0.0),
+                                        preload=True,
+                                        verbose=False,
+                                        reject=reject)
+            epochs_all.append(epochs)
+            epochs_ica_cleaned_all.append(epochs_ICA_cleaned)
+            labels_array_all.append(epochs.events[:, 2])
+    epochs_all = mne.concatenate_epochs(epochs_all)
+    epochs_ica_cleaned_all = mne.concatenate_epochs(epochs_ica_cleaned_all)
+    labels_array_all = np.concatenate(labels_array_all)
+    return epochs_all, epochs_ica_cleaned_all, labels_array_all, raw, raw_ica_recon
 
 
 def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, color_dict, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4), gaze_behavior=None):
