@@ -56,8 +56,8 @@ Event markers are encoded in integers, this list shows what event does each numb
 9: saccade onset
 """
 
-is_data_preloaded = False
-is_epochs_preloaded = False
+is_data_preloaded = True
+is_epochs_preloaded = True
 is_regenerate_ica = False
 is_save_loaded_data = True
 
@@ -71,8 +71,8 @@ varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 eventMarker_eventMarkerIndex_dict = {
     'RSVP': slice(0, 4),
     'Carousel': slice(4, 8),
-    # 'VS': slice(8, 12),
-    # 'TS': slice(12, 16)
+    'VS': slice(8, 12),
+    'TS': slice(12, 16)
 }
 
 tmin_pupil = -1
@@ -107,7 +107,7 @@ start_time = time.time()
 data_root = os.path.join(base_root, data_directory)
 epoch_data_export_root = os.path.join(base_root, data_directory + '-Epoch')
 participant_list = os.listdir(data_root)
-participant_directory_list = [os.path.join(data_root, x) for x in participant_list]
+participant_directory_list = [os.path.join(data_root, x) for x in participant_list if x != '.DS_Store']
 
 gaze_statistics_path = preloaded_epoch_path.strip('.p') + 'gaze_statistics' + '.p'
 gaze_behavior_path = preloaded_epoch_path.strip('.p') + 'gaze_behavior' + '.p'
@@ -213,8 +213,7 @@ if not is_epochs_preloaded:
                 gaze_xy = eyetracking_data[
                     [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
                 gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
-                gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy, gaze_status,
-                                                                                 eyetracking_timestamps)
+                gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy, gaze_timestamps=eyetracking_timestamps, gaze_status=gaze_status)
 
                 fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
 

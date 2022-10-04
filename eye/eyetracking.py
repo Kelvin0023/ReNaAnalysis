@@ -78,6 +78,11 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
     # calculate eye velocity in degrees
     dxy = np.diff(gaze_xy_deg, axis=1, prepend=gaze_xy_deg[:, :1])
     dtheta = np.linalg.norm(dxy, axis=0)
+
+    try:
+        assert not np.any(np.diff(gaze_timestamps, prepend=1) == 0)
+    except AssertionError:
+        raise ValueError('Invalid gaze timestamps, time delta is zero at {0}'.format(np.argwhere(np.diff(gaze_timestamps, prepend=1) == 0)))
     velocities = dtheta / np.diff(gaze_timestamps, prepend=1)
     velocities[0] = 0.  # assume the first velocity is 0
 

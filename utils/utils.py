@@ -697,6 +697,6 @@ def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, d
             temp.stim = stim
             fixations_new.append(temp)
 
-    len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
+    # len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
     return fixations_new
 
