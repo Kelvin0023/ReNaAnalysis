@@ -225,7 +225,6 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
                 if verbose: print('Out of block item found: should NOT happen again after RESET FIX')
                 continue
             # find if there is gaze ray intersection
-            # TODO: find saccade before fixations
             # foveate_indices = find_value_thresholding_interval(this_item_marker[2, :], item_markers_timestamps_of_block, foveate_value_threshold, foveate_duration_threshold)
             # force the first last to be not-intersected
             this_item_marker[4, 0] = 0
@@ -335,15 +334,18 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, 
     epochs_pupil_all = []
     labels_array_all = []
     for stim_channel, event_ids in event_ids_dict.items():
-        events = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in np.unique(mne.find_events(raw, stim_channel=stim_channel)[:, 2])])
+        found_events = mne.find_events(raw, stim_channel=stim_channel)
+        unique_events = np.unique(found_events[:, 2])
+        events = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in unique_events])
         # pupil epochs
-        epochs_pupil = Epochs(raw, events=find_events(raw, stim_channel=stim_channel), event_id=events, tmin=tmin,
-                              tmax=tmax,
-                              baseline=(-0.5, 0.0),
-                              preload=True,
-                              verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
-        epochs_pupil_all.append(epochs_pupil)
-        labels_array_all.append(epochs_pupil.events[:, 2])
+        if len(events) > 0:
+            epochs_pupil = Epochs(raw, events=found_events, event_id=events, tmin=tmin,
+                                  tmax=tmax,
+                                  baseline=(-0.5, 0.0),
+                                  preload=True,
+                                  verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
+            epochs_pupil_all.append(epochs_pupil)
+            labels_array_all.append(epochs_pupil.events[:, 2])
     epochs_pupil_all = mne.concatenate_epochs(epochs_pupil_all)
     labels_array_all = np.concatenate(labels_array_all)
     return epochs_pupil_all, labels_array_all
@@ -441,24 +443,27 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
     epochs_ica_cleaned_all = []
     labels_array_all = []
     for stim_channel, event_ids in event_ids_dict.items():
-        event_ids_dict = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in np.unique(mne.find_events(raw, stim_channel=stim_channel, shortest_event=1)[:, 2])])  # we may not have all target, distractor and novelty, especially in free-viewing
-        epochs = Epochs(raw, events=find_events(raw, stim_channel=stim_channel, shortest_event=1), event_id=event_ids_dict, tmin=tmin,
-                        tmax=tmax,
-                        baseline=(-0.1, 0.0),
-                        preload=True,
-                        verbose=False,
-                        reject=reject)
+        found_events = mne.find_events(raw, stim_channel=stim_channel)
+        unique_events = np.unique(found_events[:, 2])
+        events = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in unique_events])
+        if len(events) > 0:
+            epochs = Epochs(raw, events=found_events, event_id=events, tmin=tmin,
+                            tmax=tmax,
+                            baseline=(-0.1, 0.0),
+                            preload=True,
+                            verbose=False,
+                            reject=reject)
 
-        epochs_ICA_cleaned = Epochs(raw_ica_recon, events=find_events(raw, stim_channel=stim_channel, shortest_event=1), event_id=event_ids_dict,
-                                    tmin=tmin,
-                                    tmax=tmax,
-                                    baseline=(-0.1, 0.0),
-                                    preload=True,
-                                    verbose=False,
-                                    reject=reject)
-        epochs_all.append(epochs)
-        epochs_ica_cleaned_all.append(epochs_ICA_cleaned)
-        labels_array_all.append(epochs.events[:, 2])
+            epochs_ICA_cleaned = Epochs(raw_ica_recon, events=found_events, event_id=events,
+                                        tmin=tmin,
+                                        tmax=tmax,
+                                        baseline=(-0.1, 0.0),
+                                        preload=True,
+                                        verbose=False,
+                                        reject=reject)
+            epochs_all.append(epochs)
+            epochs_ica_cleaned_all.append(epochs_ICA_cleaned)
+            labels_array_all.append(epochs.events[:, 2])
     epochs_all = mne.concatenate_epochs(epochs_all)
     epochs_ica_cleaned_all = mne.concatenate_epochs(epochs_ica_cleaned_all)
     labels_array_all = np.concatenate(labels_array_all)
