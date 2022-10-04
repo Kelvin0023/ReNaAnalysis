@@ -11,10 +11,12 @@ import matplotlib.pyplot as plt
 from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
-
+from params import event_ids_dict, color_dict
 
 FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
-ITEM_TYPE_ENCODING = {1: 'distractor', 2: 'target', 3: 'novelty'}
+ITEM_TYPE_ENCODING = {event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']: 'distractor',
+                      event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']: 'target',
+                      event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty']: 'novelty'}
 
 START_OF_BLOCK_ENCODING = 4
 END_OF_BLOCK_ENCODING = 5
@@ -123,11 +125,11 @@ def add_em_ts_to_data(event_markers, event_marker_timestamps, data_array, data_t
             novelties = session_log[str(int(block_num))]['novelties']
 
             if event in distractors:
-                data_event_marker_array[3][data_event_marker_index] = 1
+                data_event_marker_array[3][data_event_marker_index] = event_ids_dict['EventMarker']['DistractorPops']
             elif event in targets:
-                data_event_marker_array[3][data_event_marker_index] = 2
+                data_event_marker_array[3][data_event_marker_index] = event_ids_dict['EventMarker']['TargetPops']
             elif event in novelties:
-                data_event_marker_array[3][data_event_marker_index] = 3
+                data_event_marker_array[3][data_event_marker_index] = event_ids_dict['EventMarker']['NoveltyPops']
             data_event_marker_array[:3, data_event_marker_index] = info1, info2, info3
 
     # remove the data before and after the last event
@@ -208,15 +210,15 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             if this_item_code in distractors:
                 total_distractor_count += 1
                 item_type = 'distractor'
-                event_code = 1
+                event_code = event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']
             elif this_item_code in targets:
                 total_target_count += 1
                 item_type = 'target'
-                event_code = 2
+                event_code = event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']
             elif this_item_code in novelties:
                 total_novelty_count += 1
                 item_type = 'novelty'
-                event_code = 3
+                event_code = event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty']
             else:
                 # TODO: put the exception back after the 'reset item marker' update
                 # raise Exception("Unknown item code {0} in block. This should NEVER happen!".format(this_item_code, block_i))
@@ -252,7 +254,9 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
     # [plt.axvline(x=x, color='blue') for x in item_block_start_indices]
     # [plt.axvline(x=x, color='red') for x in item_block_end_indices]
     # plt.show()
-    if verbose: print("found gaze ray intersects: %d distractors, %d targets, %d novelties" % (np.sum(data_event_marker_array[0]==1), np.sum(data_event_marker_array[0]==2), np.sum(data_event_marker_array[0]==3)))
+    if verbose: print("found gaze ray intersects: %d distractors, %d targets, %d novelties" % (np.sum(data_event_marker_array[0]==event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']),
+                                                                                               np.sum(data_event_marker_array[0]==event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']),
+                                                                                               np.sum(data_event_marker_array[0]==event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty'])))
     total_item_count = total_distractor_count + total_target_count + total_novelty_count
     normalized_fixation_count = {'distractor': np.sum(data_event_marker_array[0]==1) / total_distractor_count,
                         'target': np.sum(data_event_marker_array[0]==2) / total_target_count,
@@ -463,13 +467,13 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
     return epochs_all, epochs_ica_cleaned_all, labels_array_all, raw, raw_ica_recon
 
 
-def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, color_dict, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4), gaze_behavior=None):
+def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4), gaze_behavior=None):
     plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
     for event_name, events in event_groups.items():
         try:
-            y = epochs[events].get_data()
+            y = epochs[event_name].get_data()
         except KeyError:  # meaning this event does not exist in these epochs
             continue
         y = interpolate_epoch_zeros(y)  # remove nan
@@ -487,10 +491,11 @@ def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, color_dict, title, 
         y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
 
         time_vector = np.linspace(tmin, tmax, y.shape[-1])
-        color = color_dict[events[0]] if type(events) is list else color_dict[events]
-        plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color,
-                         interpolate=True,
-                         alpha=0.5)
+        color = color_dict[event_name]
+        if not (np.any(np.isnan(y1)) or np.any(np.isnan(y2))):
+            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color,
+                             interpolate=True,
+                             alpha=0.5)
         plt.plot(time_vector, y_mean, c=color,
                  label='{0}, N={1}'.format(event_name, y.shape[0]))
     plt.xlabel('Time (sec)')
@@ -511,7 +516,7 @@ def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, color_dict, title, 
     plt.show()
 
 
-def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, color_dict, picks, title, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True, gaze_behavior=None):
+def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, picks, title, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True, gaze_behavior=None):
     mne.set_log_level(verbose=verbose)
     plt.rcParams["figure.figsize"] = fig_size
 
@@ -519,7 +524,7 @@ def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, color_dict, picks, ti
         for ch in picks:
             for event_name, events in event_groups.items():
                 try:
-                    y = epochs.crop(tmin, tmax)[events].pick_channels([ch]).get_data().squeeze(1)
+                    y = epochs.crop(tmin, tmax)[event_name].pick_channels([ch]).get_data().squeeze(1)
                 except KeyError:  # meaning this event does not exist in these epochs
                     continue
                 y_mean = np.mean(y, axis=0)
@@ -527,7 +532,7 @@ def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, color_dict, picks, ti
                 y2 = y_mean - scipy.stats.sem(y, axis=0)
 
                 time_vector = np.linspace(tmin, tmax, y.shape[-1])
-                color = color_dict[events[0]] if type(events) is list else color_dict[events]
+                color = color_dict[event_name]
                 plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color,
                                  interpolate=True,
                                  alpha=0.5)

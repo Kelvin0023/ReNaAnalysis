@@ -56,8 +56,8 @@ Event markers are encoded in integers, this list shows what event does each numb
 9: saccade onset
 """
 
-is_data_preloaded = False
-is_epochs_preloaded = False
+is_data_preloaded = True
+is_epochs_preloaded = True
 is_regenerate_ica = False
 is_save_loaded_data = True
 
@@ -66,14 +66,14 @@ preloaded_epoch_path = 'data/participant_condition_epoch_dict.p'
 preloaded_block_path = 'data/participant_condition_block_dict.p'
 base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
 # base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
-data_directory = "Subjects-Test"
+data_directory = "Subjects"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 
 eventMarker_eventMarkerIndex_dict = {
     'RSVP': slice(0, 4),
     'Carousel': slice(4, 8),
     'VS': slice(8, 12),
-    'TS': slice(12, 16)
+    # 'TS': slice(12, 16)
 }
 
 tmin_pupil = -1
@@ -92,12 +92,7 @@ exg_srate = 2048
 
 eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 
-color_dict = {
-    # 1: 'b', 2: 'r', 3: 'orange',
-              'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
-              'Fixation': 'blue', 'Saccade': 'orange',
-              'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green', 'FixationNull': 'grey',
-              'Saccade2Distractor': 'cyan', 'Saccade2Target': 'magenta', 'Saccade2Novelty': 'orange', 'Saccade2Null': 'yellow'}
+
 info_chns = ["info1", "info2", "info3"]
 
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
@@ -351,6 +346,8 @@ else:  # if epochs are preloaded and saved
 #     plt.legend()
 #     plt.title('Normalized fixation counts across conditions and item types')
 #     plt.show()
+
+'''
 X = np.arange(3)
 plt.rcParams["figure.figsize"] = (12.8, 7.2)
 for i, condition_name in enumerate(eventMarker_eventMarkerIndex_dict.keys()):
@@ -398,7 +395,7 @@ for i, condition_name in enumerate(eventMarker_eventMarkerIndex_dict.keys()):
     #     plt.show()
     # bar = plt.bar(X + 0.25 * i, [condition_gaze_statistics[condition_name]['counts'][event.lower()] for event in
     #                              event_ids.keys()], label=condition_name, width=0.25)
-
+'''
 
 # get all the epochs for conditions and plots per condition
 print("Creating plots across all participants per condition")
@@ -410,8 +407,8 @@ for condition_name in eventMarker_eventMarkerIndex_dict.keys():
     # condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg, _ in condition_epochs])
     condition_epochs_eeg_ica = mne.concatenate_epochs([eeg_ica for _, _, eeg_ica, _ in condition_epochs])
     title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, event_viz)
-    visualize_pupil_epochs(condition_epochs_pupil, event_ids_dict[event_viz], tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
-    visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids_dict[event_viz], tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
+    visualize_pupil_epochs(condition_epochs_pupil, event_ids_dict[event_viz], tmin_pupil_viz, tmax_pupil_viz, title)
+    visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids_dict[event_viz], tmin_eeg_viz, tmax_eeg_viz, eeg_picks,
                          title, is_plot_topo_map=True)
 
 # get all the epochs and plots per participant
@@ -421,7 +418,7 @@ for participant_index, condition_epoch_dict in participant_condition_epoch_dict.
         condition_epochs_eeg_ica = condition_epochs[2]
         title = 'Participants {0} - Condition {1}'.format(participant_index, condition_name)
         # visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
-        visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids_dict[event_viz], tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='figures')
+        visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids_dict[event_viz], tmin_eeg_viz, tmax_eeg_viz, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='figures')
 
 
 # condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[
