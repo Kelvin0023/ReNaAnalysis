@@ -12,7 +12,7 @@ import mne
 
 from eye.eyetracking import gaze_event_detection
 from utils.fs_utils import load_participant_session_dict
-from params import event_ids_dict, event_viz_groups
+from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events, \
@@ -92,7 +92,8 @@ exg_srate = 2048
 
 eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 
-color_dict = {'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
+color_dict = {1: 'b', 2: 'r', 3: 'orange',
+              'Target': 'red', 'Distractor': 'blue', 'Novelty': 'green',
               'Fixation': 'blue', 'Saccade': 'orange',
               'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'green', 'FixationNull': 'grey',
               'Saccade2Distractor': 'cyan', 'Saccade2Target': 'magenta', 'Saccade2Novelty': 'orange', 'Saccade2Null': 'yellow'}
@@ -407,9 +408,9 @@ for condition_name in eventMarker_eventMarkerIndex_dict.keys():
     condition_epochs_pupil = mne.concatenate_epochs([pupil for pupil, _, _, _ in condition_epochs])
     # condition_epochs_eeg = mne.concatenate_epochs([eeg for pupil, eeg, _ in condition_epochs])
     condition_epochs_eeg_ica = mne.concatenate_epochs([eeg_ica for _, _, eeg_ica, _ in condition_epochs])
-    title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, locked_marker)
-    visualize_pupil_epochs(condition_epochs_pupil, event_viz_groups, tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
-    visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
+    title = 'Averaged across Participants, Condition {0}, {1} Locked'.format(condition_name, event_viz)
+    visualize_pupil_epochs(condition_epochs_pupil, event_ids_dict[event_viz], tmin_pupil_viz, tmax_pupil_viz, color_dict, title)
+    visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids_dict[event_viz], tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks,
                          title, is_plot_topo_map=True)
 
 # get all the epochs and plots per participant
@@ -419,7 +420,7 @@ for participant_index, condition_epoch_dict in participant_condition_epoch_dict.
         condition_epochs_eeg_ica = condition_epochs[2]
         title = 'Participants {0} - Condition {1}'.format(participant_index, condition_name)
         # visualize_pupil_epochs(condition_epochs_pupil, event_ids, tmin_pupil, tmax_pupil, color_dict, title)
-        visualize_eeg_epochs(condition_epochs_eeg_ica, event_viz_groups, tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='figures')
+        visualize_eeg_epochs(condition_epochs_eeg_ica, event_ids_dict[event_viz], tmin_eeg_viz, tmax_eeg_viz, color_dict, eeg_picks, title, is_plot_timeseries=True, is_plot_topo_map=False, out_dir='figures')
 
 
 # condition_epochs_pupil_dict[condition_name] = _epochs_pupil if condition_epochs_pupil_dict[

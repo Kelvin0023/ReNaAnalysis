@@ -11,8 +11,6 @@ import matplotlib.pyplot as plt
 from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
-from params import event_id_color_code_dict, event_color_dict, event_marker_color_dict
-from rena.utils.data_utils import RNStream
 
 
 FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
