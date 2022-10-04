@@ -57,7 +57,7 @@ Event markers are encoded in integers, this list shows what event does each numb
 """
 
 is_data_preloaded = True
-is_epochs_preloaded = True
+is_epochs_preloaded = False
 is_regenerate_ica = False
 is_save_loaded_data = True
 
@@ -225,7 +225,7 @@ if not is_epochs_preloaded:
                 del data_exg_egm, data_eyetracking_egm
 
                 # create channels based on the event channels added
-                exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeMarker'] + ["GazeBehavior"]
+                exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeRay'] + ["GazeBehavior"]
                 exg_egbm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 3
                 eyetracking_egbm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeMarker'] + ["GazeBehavior"]
                 eyetracking_egbm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 3

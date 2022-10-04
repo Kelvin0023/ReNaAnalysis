@@ -1,4 +1,7 @@
-event_ids = {'FixationDistractor': 6, 'FixationTarget': 7, 'FixationNovelty': 8, 'FixationNull': 9, 'Saccade2Distractor': 10, 'Saccade2Target': 11, 'Saccade2Novelty': 12, 'Saccade2Null': 13}  # event_ids_for_interested_epochs
+event_ids = {'distractorPop': 1, 'targetPop': 2, 'noveltyPop': 3,
+                'FixationDistractor': 6, 'FixationTarget': 7, 'FixationNovelty': 8, 'FixationNull': 9,
+             'Saccade2Distractor': 10, 'Saccade2Target': 11, 'Saccade2Novelty': 12, 'Saccade2Null': 13,
+             'GazeRayDistractor': 14, 'GazeRayTarget': 15, 'GazeRayNovelty': 16}  # event_ids_for_interested_epochs
 # event_viz_groups = {'Fixation': ['FixationDistractor', 'FixationTarget', 'FixationNovelty', 'FixationNull'], 'Saccade': ['Saccade2Novelty', 'Saccade2Distractor', 'Saccade2Target', 'Saccade2Null']}
 # event_viz_groups = {'Saccade2Novelty': 'Saccade2Novelty', 'Saccade2Distractor': 'Saccade2Distractor', 'Saccade2Target': 'Saccade2Target', 'Saccade2Null': 'Saccade2Null'}
 event_viz_groups = {'FixationDistractor': 'FixationDistractor', 'FixationTarget': 'FixationTarget', 'FixationNovelty': 'FixationNovelty', 'FixationNull': 'FixationNull', 'Saccade': 'Saccade'}

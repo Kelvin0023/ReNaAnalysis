@@ -246,16 +246,11 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
             # find where in data marker to insert the marker
             data_event_marker_indices = [(np.abs(data_timestamps - x)).argmin() for x in true_fixation_timestamps]
             data_event_marker_array[0][data_event_marker_indices] = event_code
-            # if len(true_fixation_timestamps) > 0: print(
-            #     'Found {0} fixations for item {1} of type {2}, in block {3}'.format(len(true_fixation_timestamps),
-            #                                                                         this_item_marker[1, 0],
-            #                                                                         ITEM_TYPE_ENCODING[
-            #                                                                             event_code], block_i))
-
-        # 3. get the IsGazeRay intersected stream and their timestamps (item marker) keyed by the item count in block
-        # 4. for each of the 30 items in the block, find where the IsGazeRay is true
-        # 5. insert the gazed event marker in the data_event_marker_array at the data_timestamp nearest to the corresponding item_marker_timestamp
-
+            if len(true_fixation_timestamps) > 0: print(
+                'Found {0} fixations for item {1} of type {2}, in block {3}'.format(len(true_fixation_timestamps),
+                                                                                    this_item_marker[1, 0],
+                                                                                    ITEM_TYPE_ENCODING[
+                                                                                        event_code], block_i))
     # plt.plot(item_markers[1])
     # [plt.axvline(x=x, color='blue') for x in item_block_start_indices]
     # [plt.axvline(x=x, color='red') for x in item_block_end_indices]
