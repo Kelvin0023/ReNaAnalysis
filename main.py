@@ -65,8 +65,8 @@ preloaded_dats_path = 'data/participant_session_dict.p'
 preloaded_epoch_path = 'data/participant_condition_epoch_dict.p'
 preloaded_block_path = 'data/participant_condition_block_dict.p'
 # base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
-base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
-data_directory = "Subjects-Test"
+base_root = "/Users/hannahztx/Dropbox/Mac/Documents/ReNa"
+data_directory = "Subjects"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 
 eventMarker_eventMarkerIndex_dict = {
@@ -106,7 +106,7 @@ ecg_ch_name='ECG00'
 start_time = time.time()
 data_root = os.path.join(base_root, data_directory)
 epoch_data_export_root = os.path.join(base_root, data_directory + '-Epoch')
-participant_list = os.listdir(data_root)
+participant_list = [x for x in os.listdir(data_root) if x != '.DS_Store']
 participant_directory_list = [os.path.join(data_root, x) for x in participant_list if x != '.DS_Store']
 
 gaze_statistics_path = preloaded_epoch_path.strip('.p') + 'gaze_statistics' + '.p'
