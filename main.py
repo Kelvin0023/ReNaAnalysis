@@ -102,7 +102,7 @@ ecg_ch_name='ECG00'
 start_time = time.time()
 data_root = os.path.join(base_root, data_directory)
 epoch_data_export_root = os.path.join(base_root, data_directory + '-Epoch')
-participant_list = os.listdir(data_root)
+participant_list = [x for x in os.listdir(data_root) if x != '.DS_Store']
 participant_directory_list = [os.path.join(data_root, x) for x in participant_list if x != '.DS_Store']
 
 gaze_statistics_path = preloaded_epoch_path.strip('.p') + 'gaze_statistics' + '.p'
