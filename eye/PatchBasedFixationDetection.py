@@ -29,13 +29,13 @@ image_folder = 'C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/3-5-202
 gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
 video_name = 'PatchComparison.mp4'
 
-similarity_threshold = .1
+similarity_threshold = .02
 
 plot_time = 20
 fps = 30
 video_start_frame = 2789
 video_frame_count = plot_time * fps  # this is 20 seconds
-patch_size = 200, 200  # width, height
+patch_size = 63, 111  # width, height
 fovs = 115, 90  # horizontal, vertical, in degrees
 central_fov = 13  # fov of the fovea
 near_peripheral_fov = 30  # physio fov
@@ -64,39 +64,43 @@ height, width, layers = frame.shape
 # video = cv2.VideoWriter(video_name, cv2.VideoWriter_fourcc(*'DIVX'), 30, (width,height))
 loss_fn_alex = lpips.LPIPS(net='alex')  # best forward scores
 images_with_bb = []
-previous_img = None
-distance = None
+previous_img_patch = None
 distance_list = []
 fixation_list = []
 for i, image in enumerate(images[video_start_frame:]):  # iterate through the images
     print('Processing {0} of {1} images'.format(i + 1, video_frame_count), end='\r', flush=True)
     img = cv2.imread(os.path.join(image_folder, image))  # read in the image
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # convert from BGR to RGB
+    img_modified = img.copy()
     gaze_coordinate = gaze_info.iloc[i, :].values  # get the gaze coordinate for this image
     gaze_x, gaze_y = int(gaze_coordinate[1]), int(gaze_coordinate[2])  # the gaze coordinate
     gaze_y = image_size[1] - gaze_y  # because CV's y zero is at the bottom of the screen
     center = gaze_x, gaze_y
 
-    if previous_img is not None:
-        img_tensor, previous_img_tensor = prepare_image_for_sim_score(img), prepare_image_for_sim_score(previous_img)
+    # get similarity score
+    img_patch = img[int(np.max([0, gaze_x - patch_size[0] / 2])) : int(np.min([image_size[0], gaze_x + patch_size[0] / 2])),
+                int(np.max([0, gaze_y - patch_size[1] / 2])):int(np.min([image_size[1], gaze_y + patch_size[1] / 2]))]
+    if previous_img_patch is not None:
+        img_tensor, previous_img_tensor = prepare_image_for_sim_score(img_patch), prepare_image_for_sim_score(previous_img_patch)
         distance = loss_fn_alex(img_tensor, previous_img_tensor).item()
+        img_modified = cv2.putText(img_modified, "%.2f" % distance, center, cv2.FONT_HERSHEY_SIMPLEX, 1, center_color, 2, cv2.LINE_AA)
         distance_list.append(distance)
         fixation_list.append(0 if distance > similarity_threshold else 1)
+    previous_img_patch = img_patch
+    # if i % 10 == 0:
+    #     plt.imshow(img_patch)
+    #     plt.show()
 
-    previous_img = img
-    if distance is not None:
-        img = cv2.putText(img, "%.2f" % distance, center, cv2.FONT_HERSHEY_SIMPLEX, 1, center_color, 2, cv2.LINE_AA)
-
-    img = add_bounding_box(img, gaze_x, gaze_y, 63, 111, patch_color)
-    cv2.circle(img, center, 1, center_color, 2)
+    img_modified = add_bounding_box(img_modified, gaze_x, gaze_y, patch_size[0], patch_size[1], patch_color)
+    cv2.circle(img_modified, center, 1, center_color, 2)
     axis = (int(central_fov * ppds[0]), int(central_fov * ppds[1]))
-    cv2.ellipse(img, center, axis, 0, 0, 360, fovea_color, thickness=4)
+    cv2.ellipse(img_modified, center, axis, 0, 0, 360, fovea_color, thickness=4)
     axis = (int(near_peripheral_fov * ppds[0]), int(near_peripheral_fov * ppds[1]))
-    cv2.ellipse(img, center, axis, 0, 0, 360, parafovea_color, thickness=4)
+    cv2.ellipse(img_modified, center, axis, 0, 0, 360, parafovea_color, thickness=4)
     axis = (int(1.25 * mid_perpheral_fov * ppds[0]), int(mid_perpheral_fov * ppds[1]))
-    cv2.ellipse(img, center, axis, 0, 0, 360, peripheri_color, thickness=4)
+    cv2.ellipse(img_modified, center, axis, 0, 0, 360, peripheri_color, thickness=4)
 
-    images_with_bb.append(img)
+    images_with_bb.append(img_modified)
     # video.write(img)
     if i == video_frame_count:
         break
@@ -114,7 +118,7 @@ fix_interval_indices = [x for x in fix_interval_indices if x[1] - x[0] > 5]  # o
 fix_list_filtered = np.empty(len(fixation_list))
 fix_list_filtered[:] = np.nan
 for index_onset, index_offset in fix_interval_indices:
-    fix_list_filtered[index_onset:index_offset] = 0.0  # for visualization
+    fix_list_filtered[index_onset:index_offset] = -1e-2  # for visualization
 
 viz_time = 10
 
