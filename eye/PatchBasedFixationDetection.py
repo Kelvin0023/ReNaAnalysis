@@ -25,16 +25,19 @@ def add_bounding_box(a, x, y, width, height, color):
     copy[bounding_box[1]:bounding_box[1] + bounding_box[3], np.min([image_width-1, bounding_box[0] + bounding_box[2]])] = color
     return copy
 
-image_folder = 'C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/3-5-2022/0/ReNaUnityCameraCapture_03-05-2022-13-42-32'
+image_folder = 'C:/Recordings/ReNaUnityCameraCapture_10-12-2022-02-19-52'
 gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
 video_name = 'PatchComparison.mp4'
 
 similarity_threshold = .02
 
-plot_time = 20
+fixation_y_value = -1e-2
 fps = 30
-video_start_frame = 2789
-video_frame_count = plot_time * fps  # this is 20 seconds
+video_fps = 30
+video_start_frame = 0
+video_frame_count = 5300  # this is 20 seconds
+plot_time = video_frame_count - fps
+
 patch_size = 63, 111  # width, height
 fovs = 115, 90  # horizontal, vertical, in degrees
 central_fov = 13  # fov of the fovea
@@ -67,6 +70,7 @@ images_with_bb = []
 previous_img_patch = None
 distance_list = []
 fixation_list = []
+patch_boundaries = []
 for i, image in enumerate(images[video_start_frame:]):  # iterate through the images
     print('Processing {0} of {1} images'.format(i + 1, video_frame_count), end='\r', flush=True)
     img = cv2.imread(os.path.join(image_folder, image))  # read in the image
@@ -81,8 +85,9 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     img_patch_x_max = int(np.max([np.min([image_size[0], gaze_x + patch_size[0] / 2]), patch_size[0]]))
     img_patch_y_min = int(np.min([np.max([0, gaze_y - patch_size[1] / 2]), image_size[1] - patch_size[1]]))
     img_patch_y_max = int(np.max([np.min([image_size[1], gaze_y + patch_size[1] / 2]), patch_size[1]]))
-    img_patch = img[img_patch_x_min: img_patch_x_max,
-                img_patch_y_min: img_patch_y_max]
+    patch_boundaries.append((img_patch_x_min, img_patch_y_min, img_patch_x_max, img_patch_y_max))
+
+    img_patch = img[img_patch_x_min: img_patch_x_max, img_patch_y_min: img_patch_y_max]
 
     # get similarity score
     if previous_img_patch is not None:
@@ -96,8 +101,7 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     #     plt.imshow(img_patch)
     #     plt.show()
 
-    img_modified = cv2.rectangle(img_modified, (img_patch_x_min, img_patch_y_min), (img_patch_x_max, img_patch_y_max),
-                                 patch_color, thickness=2)
+    # draw the patch rectangle
     cv2.circle(img_modified, center, 1, center_color, 2)
     axis = (int(central_fov * ppds[0]), int(central_fov * ppds[1]))
     cv2.ellipse(img_modified, center, axis, 0, 0, 360, fovea_color, thickness=4)
@@ -111,6 +115,7 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     if i == video_frame_count:
         break
 
+# duration thresholding
 fixation_diff = np.diff(np.concatenate([[0], fixation_list]))
 fix_onset_indices = np.argwhere(fixation_diff==1)
 fix_offset_indices = np.argwhere(fixation_diff==-1)
@@ -119,10 +124,21 @@ fix_interval_indices = [x for x in fix_interval_indices if x[1] - x[0] > 5]  # o
 fix_list_filtered = np.empty(len(fixation_list))
 fix_list_filtered[:] = np.nan
 for index_onset, index_offset in fix_interval_indices:
-    fix_list_filtered[index_onset:index_offset] = -1e-2  # for visualization
+    fix_list_filtered[index_onset:index_offset] = fixation_y_value # for visualization
 
+for i, (fix, img, patch_boundary) in enumerate(zip(fix_list_filtered, images_with_bb, patch_boundaries)):
+    img_modified = img.copy()
+    if fix == fixation_y_value:
+        shapes = np.zeros_like(img_modified, np.uint8)
+        alpha = 0.3
+        cv2.rectangle(shapes, patch_boundary[:2], patch_boundary[2:], patch_color, thickness=-1)
+        mask = shapes.astype(bool)
+        img_modified[mask] = cv2.addWeighted(img_modified, alpha, shapes, 1 - alpha, 0)[mask]
+    else:
+        cv2.rectangle(img_modified, patch_boundary[:2], patch_boundary[2:], patch_color, thickness=2)
+    images_with_bb[i] = img_modified
 
-clip = ImageSequenceClip.ImageSequenceClip(images_with_bb, fps=fps)
+clip = ImageSequenceClip.ImageSequenceClip(images_with_bb, fps=video_fps)
 clip.write_videofile(video_name)
 
 
