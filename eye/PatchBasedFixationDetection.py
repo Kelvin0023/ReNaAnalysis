@@ -77,9 +77,14 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     gaze_y = image_size[1] - gaze_y  # because CV's y zero is at the bottom of the screen
     center = gaze_x, gaze_y
 
+    img_patch_x_min = int(np.min([np.max([0, gaze_x - patch_size[0] / 2]), image_size[0] - patch_size[0]]))
+    img_patch_x_max = int(np.max([np.min([image_size[0], gaze_x + patch_size[0] / 2]), patch_size[0]]))
+    img_patch_y_min = int(np.min([np.max([0, gaze_y - patch_size[1] / 2]), image_size[1] - patch_size[1]]))
+    img_patch_y_max = int(np.max([np.min([image_size[1], gaze_y + patch_size[1] / 2]), patch_size[1]]))
+    img_patch = img[img_patch_x_min: img_patch_x_max,
+                img_patch_y_min: img_patch_y_max]
+
     # get similarity score
-    img_patch = img[int(np.max([0, gaze_x - patch_size[0] / 2])) : int(np.min([image_size[0], gaze_x + patch_size[0] / 2])),
-                int(np.max([0, gaze_y - patch_size[1] / 2])):int(np.min([image_size[1], gaze_y + patch_size[1] / 2]))]
     if previous_img_patch is not None:
         img_tensor, previous_img_tensor = prepare_image_for_sim_score(img_patch), prepare_image_for_sim_score(previous_img_patch)
         distance = loss_fn_alex(img_tensor, previous_img_tensor).item()
@@ -91,7 +96,8 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     #     plt.imshow(img_patch)
     #     plt.show()
 
-    img_modified = add_bounding_box(img_modified, gaze_x, gaze_y, patch_size[0], patch_size[1], patch_color)
+    img_modified = cv2.rectangle(img_modified, (img_patch_x_min, img_patch_y_min), (img_patch_x_max, img_patch_y_max),
+                                 patch_color, thickness=2)
     cv2.circle(img_modified, center, 1, center_color, 2)
     axis = (int(central_fov * ppds[0]), int(central_fov * ppds[1]))
     cv2.ellipse(img_modified, center, axis, 0, 0, 360, fovea_color, thickness=4)
@@ -105,11 +111,6 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     if i == video_frame_count:
         break
 
-
-clip = ImageSequenceClip.ImageSequenceClip(images_with_bb, fps=fps)
-clip.write_videofile(video_name)
-
-
 fixation_diff = np.diff(np.concatenate([[0], fixation_list]))
 fix_onset_indices = np.argwhere(fixation_diff==1)
 fix_offset_indices = np.argwhere(fixation_diff==-1)
@@ -119,6 +120,11 @@ fix_list_filtered = np.empty(len(fixation_list))
 fix_list_filtered[:] = np.nan
 for index_onset, index_offset in fix_interval_indices:
     fix_list_filtered[index_onset:index_offset] = -1e-2  # for visualization
+
+
+clip = ImageSequenceClip.ImageSequenceClip(images_with_bb, fps=fps)
+clip.write_videofile(video_name)
+
 
 viz_time = 10
 
