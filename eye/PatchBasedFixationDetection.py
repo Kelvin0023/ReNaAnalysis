@@ -9,7 +9,7 @@ import numpy as np
 from PIL import ImageDraw
 from moviepy.video.io import ImageSequenceClip
 import matplotlib.pyplot as plt
-from eye.EyeUtils import prepare_image_for_sim_score
+from eye.EyeUtils import prepare_image_for_sim_score, temporal_filter_fixation
 
 
 def add_bounding_box(a, x, y, width, height, color):
@@ -116,15 +116,7 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
         break
 
 # duration thresholding
-fixation_diff = np.diff(np.concatenate([[0], fixation_list]))
-fix_onset_indices = np.argwhere(fixation_diff==1)
-fix_offset_indices = np.argwhere(fixation_diff==-1)
-fix_interval_indices = [(x[0], y[0]) for x, y in zip(fix_onset_indices, fix_offset_indices)]
-fix_interval_indices = [x for x in fix_interval_indices if x[1] - x[0] > 5]  # only keep the fix interval longer than 150 ms == 5 frames
-fix_list_filtered = np.empty(len(fixation_list))
-fix_list_filtered[:] = np.nan
-for index_onset, index_offset in fix_interval_indices:
-    fix_list_filtered[index_onset:index_offset] = fixation_y_value # for visualization
+fix_list_filtered = temporal_filter_fixation(fixation_list, marker_mode='viz')
 
 for i, (fix, img, patch_boundary) in enumerate(zip(fix_list_filtered, images_with_bb, patch_boundaries)):
     img_modified = img.copy()

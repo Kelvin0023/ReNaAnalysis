@@ -81,7 +81,6 @@ condition_gaze_behaviors = defaultdict(lambda: defaultdict(list))
 # preload all the .dats or .p
 if not is_loading_saved_analysis:
 
-
     participant_session_file_path_dict = load_participant_session_dict(participant_session_file_path_dict, preloaded_dats_path)
     print("Loading data took {0} seconds".format(time.time() - start_time))
 
@@ -112,7 +111,7 @@ if not is_loading_saved_analysis:
             ecg_data = data['BioSemi'][0][65:67, :]  # take only the EEG channels
             exg_data = rescale_merge_exg(eeg_data, ecg_data)  # merge and rescale eeg and ecg
 
-            for condition_name in conditions:
+            for condition_name in conditions:  # TODO should not separate by conditions
                 print("Processing Condition {0} for participant-code[{1}]: {5} of {2}, session {3} of {4}".format(condition_name,int(participant_index),len(participant_session_file_path_dict),session_index + 1,len(session_dict), p_i + 1))
                 event_markers = data['Unity.ReNa.EventMarkers'][0]
 

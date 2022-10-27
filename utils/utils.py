@@ -718,3 +718,12 @@ def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, d
     # len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
     return fixations_new
 
+class Bidict(dict):
+  def __init__(self, init_dict):
+    self.inverse = {}
+    dict.__init__(self, init_dict)
+    for key, value in init_dict.items():
+      self.inverse[value] = key
+  def __setitem__(self, key, value):
+    dict.__setitem__(self, key, value)
+    self.inverse.__setitem__(value, key)
