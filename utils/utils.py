@@ -11,15 +11,8 @@ import matplotlib.pyplot as plt
 from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
-from params import event_ids_dict, color_dict
+from params import *
 
-FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
-ITEM_TYPE_ENCODING = {event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']: 'distractor',
-                      event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']: 'target',
-                      event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty']: 'novelty'}
-
-START_OF_BLOCK_ENCODING = 4
-END_OF_BLOCK_ENCODING = 5
 
 def flat2gen(alist):
   for item in alist:
@@ -83,7 +76,7 @@ def find_value_thresholding_interval(array, timestamps, value_threshold, time_th
                 print('exceed time tolerance ignoring interval')
     return out
 
-def add_em_ts_to_data(event_markers, event_marker_timestamps, data_array, data_timestamps,
+def add_em_ts_to_data(event_markers, event_marker_timestamps, data_dicts,
                       session_log,
                       item_codes, srate, pre_first_block_time=1, post_final_block_time=1):
     """
@@ -91,8 +84,7 @@ def add_em_ts_to_data(event_markers, event_marker_timestamps, data_array, data_t
     also discard data that falls other side the first and the last block
     :param event_markers:
     :param event_marker_timestamps:
-    :param data_array:
-    :param data_timestamps:
+    :param data_dicts: list of data keys include 'data_array', 'data_timestamps', and 'srate'
     :param session_log:
     :param item_codes:
     :param srate:
@@ -101,9 +93,28 @@ def add_em_ts_to_data(event_markers, event_marker_timestamps, data_array, data_t
     :return:
     """
     block_num = None
-    assert event_markers.shape[0] == 4
-    data_event_marker_array = np.zeros(shape=(4, data_array.shape[1]))
+
+    for d in data_dicts.values():
+        d['event_marker'] = np.zeros(shape=(1, len(d['data_timestamps'])))
     first_block_start_index = None
+
+    block_ids = event_markers[eventmarker_preset["ChannelNames"].index('BlockIDStartEnd'), :]
+    block_id_timestamps = event_marker_timestamps[block_ids != 0]
+    block_ids = block_ids[block_ids != 0]
+    block_marker = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]
+    assert np.all(block_id_timestamps[::2] == event_marker_timestamps[np.logical_and(block_marker != 0, [bm in conditions.values() for bm in block_marker])])  # check the timestamps for the conditionBlockID matches that of conditionBlock conditions
+    block_marker_timestamps = block_id_timestamps[::2]
+    block_marker = block_marker[np.logical_and(block_marker != 0, [bm in conditions.values() for bm in block_marker])]  # check both non-zero (there is an event), and the marker is for a condition, i.e., not for change of metablocks
+
+    # change the DTN markers based on which block they are in
+    dtn = event_markers[eventmarker_preset["ChannelNames"].index('DTN'), :]
+    dtn_timestamps = event_marker_timestamps[dtn != 0]
+    dtn = dtn[dtn != 0]
+    dtn_condition = np.zeros(len(dtn_timestamps))
+    for i, dtn_time in enumerate(dtn_timestamps):
+        dtn_condition[i] = block_marker[np.argmax(block_marker_timestamps[block_marker_timestamps < dtn_time])]
+
+
     for i in range(event_markers.shape[1]):
         event, info1, info2, info3 = event_markers[:, i]
         data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
@@ -718,12 +729,3 @@ def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, d
     # len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
     return fixations_new
 
-class Bidict(dict):
-  def __init__(self, init_dict):
-    self.inverse = {}
-    dict.__init__(self, init_dict)
-    for key, value in init_dict.items():
-      self.inverse[value] = key
-  def __setitem__(self, key, value):
-    dict.__setitem__(self, key, value)
-    self.inverse.__setitem__(value, key)

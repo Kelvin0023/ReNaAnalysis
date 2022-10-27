@@ -24,8 +24,8 @@ def load_participant_session_dict(participant_session_dict, preloaded_dats_path)
                 data = RNStream(data_path).stream_in(ignore_stream=('monitor1'), jitter_removal=False)
             participant_session_dict[participant_index][session_index][0] = data
     # save the preloaded .dats
-    print("Saving preloaded sessions...")
-    pickle.dump(participant_session_dict, open(preloaded_dats_path, 'wb'))
+    # print("Saving preloaded sessions...")
+    # pickle.dump(participant_session_dict, open(preloaded_dats_path, 'wb'))
     # else:
     #     print("Loading preloaded sessions...")
     #     participant_session_dict = pickle.load(open(preloaded_dats_path, 'rb'))
@@ -35,6 +35,7 @@ def load_participant_session_dict(participant_session_dict, preloaded_dats_path)
 def get_analysis_result_paths(base_root, note):
     dt_string = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
     analysis_result_dir = os.path.join(base_root, 'RenaAnalysis-{}-{}'.format(dt_string, note))
+    os.mkdir(analysis_result_dir)
 
     preloaded_dats_path = os.path.join(analysis_result_dir, 'participant_session_dict.p')
     preloaded_epoch_path = os.path.join(analysis_result_dir, 'participant_condition_epoch_dict.p')

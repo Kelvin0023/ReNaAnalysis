@@ -9,7 +9,7 @@ def prepare_image_for_sim_score(img):
     img = torch.Tensor(img)
     return img
 
-def temporal_filter_fixation(thresholded_sim_distance, marker_mode='viz', fixation_y_value = -1e-2):
+def temporal_filter_fixation(thresholded_sim_distance, marker_mode='viz', fixation_y_value = -1e-2, verbose=1):
     """
     marker_mode:
         viz: marker value is 1 for the duration of the fixations, nan otherwise
@@ -30,5 +30,5 @@ def temporal_filter_fixation(thresholded_sim_distance, marker_mode='viz', fixati
         else:
             fix_list_filtered[index_onset] = 1
             fix_list_filtered[index_offset] = 2
-
+    if verbose > 0: print('Detected {} fixations'.format(len(fix_onset_indices)))
     return fix_list_filtered

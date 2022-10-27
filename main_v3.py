@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import mne
 
+from eye.EyeUtils import temporal_filter_fixation
 from eye.eyetracking import gaze_event_detection
+from utils.data_utils import get_exg_data
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
 from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
@@ -68,9 +70,6 @@ preloaded_dats_path, preloaded_epoch_path, preloaded_block_path, gaze_statistics
 # get the paths to the data files
 participant_list, participant_session_file_path_dict, participant_badchannel_dict = get_data_file_paths(base_root, data_directory)
 
-# load presets
-varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
-eventmarker_preset = json.load(open(eventmarker_preset_path))
 
 # init variables to hold data
 participant_condition_epoch_dict = defaultdict(dict)  # participants -> condition name -> epoch object
@@ -87,6 +86,7 @@ if not is_loading_saved_analysis:
     for p_i, (participant_index, session_dict) in enumerate(participant_session_file_path_dict.items()):
         # print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
         for session_index, session_files in session_dict.items():
+            print("Processing participant-code[{0}]: {4} of {1}, session {2} of {3}".format(int(participant_index),len(participant_session_file_path_dict),session_index + 1,len(session_dict), p_i + 1))
             data, item_catalog_path, session_log_path, session_ICA_path = session_files
             item_catalog = json.load(open(item_catalog_path))
             session_log = json.load(open(session_log_path))
@@ -100,133 +100,121 @@ if not is_loading_saved_analysis:
             # data
             varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
 
-            eyetracking_timestamps = data['Unity.VarjoEyeTrackingComplete'][1]
-            eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0]
+            event_markers = data['Unity.ReNa.EventMarkers'][0]
 
-            fixation_timestamps = data['FixationDetection'][1]
-            fixation_data = data['FixationDetection'][0]
+            data_dict = {'eyetracking': {'data_array':data['Unity.VarjoEyeTrackingComplete'][0], 'data_timestamps':data['Unity.VarjoEyeTrackingComplete'][1], 'srate': eyetracking_srate},
+                         'exg': {'data_array':get_exg_data(data), 'data_timestamps':data['BioSemi'][1], 'srate': exg_srate},
+                         'eyetracking': {'data_array':temporal_filter_fixation(data['FixationDetection'][0][1], marker_mode='event'), 'data_timestamps':data['FixationDetection'][1], 'srate': 30},}
+            data_dict_em = add_em_ts_to_data(event_markers, event_markers_timestamps, data_dict, session_log, item_codes, eyetracking_srate)
 
-            exg_timestamps = data['BioSemi'][1]
-            eeg_data = data['BioSemi'][0][1:65, :]  # take only the EEG channels
-            ecg_data = data['BioSemi'][0][65:67, :]  # take only the EEG channels
-            exg_data = rescale_merge_exg(eeg_data, ecg_data)  # merge and rescale eeg and ecg
+            # add gaze events
+            data_eyetracking_egm, fixation_durations, normalized_fixation_count = add_gaze_em_to_data(
+                item_markers, item_marker_timestamps, event_markers,
+                event_markers_timestamps, data_eyetracking_em, session_log,
+                item_codes, eyetracking_srate, verbose=1)
+            data_exg_egm, _, _ = add_gaze_em_to_data(
+                item_markers, item_marker_timestamps, event_markers,
+                event_markers_timestamps, data_exg_em, session_log,
+                item_codes, exg_srate, verbose=1)
+            del data_eyetracking_em, data_exg_em
 
-            for condition_name in conditions:  # TODO should not separate by conditions
-                print("Processing Condition {0} for participant-code[{1}]: {5} of {2}, session {3} of {4}".format(condition_name,int(participant_index),len(participant_session_file_path_dict),session_index + 1,len(session_dict), p_i + 1))
-                event_markers = data['Unity.ReNa.EventMarkers'][0]
+            # add gaze behaviors
+            gaze_xy = eyetracking_data[
+                [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
+            gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
+            gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy, gaze_timestamps=eyetracking_timestamps, gaze_status=gaze_status)
 
-                data_eyetracking_em = add_em_ts_to_data(event_markers, event_markers_timestamps, eyetracking_data, eyetracking_timestamps, session_log,
-                                                        item_codes, eyetracking_srate)
-                data_exg_em = add_em_ts_to_data(event_markers,event_markers_timestamps,exg_data,exg_timestamps, session_log,item_codes, exg_srate)
+            fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
 
-                # add gaze events
-                data_eyetracking_egm, fixation_durations, normalized_fixation_count = add_gaze_em_to_data(
-                    item_markers, item_marker_timestamps, event_markers,
-                    event_markers_timestamps, data_eyetracking_em, session_log,
-                    item_codes, eyetracking_srate, verbose=1)
-                data_exg_egm, _, _ = add_gaze_em_to_data(
-                    item_markers, item_marker_timestamps, event_markers,
-                    event_markers_timestamps, data_exg_em, session_log,
-                    item_codes, exg_srate, verbose=1)
-                del data_eyetracking_em, data_exg_em
+            exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])
+            data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
 
-                # add gaze behaviors
-                gaze_xy = eyetracking_data[
-                    [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
-                gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
-                gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy, gaze_timestamps=eyetracking_timestamps, gaze_status=gaze_status)
+            eyetracking_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_eyetracking_egm[0])
+            data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, eyetracking_gb_markers])
+            del data_exg_egm, data_eyetracking_egm
 
-                fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
+            # create channels based on the event channels added
+            exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
+            exg_egbm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 3
+            eyetracking_egbm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
+            eyetracking_egbm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 3
 
-                exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])
-                data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
+            #########################
 
-                eyetracking_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_eyetracking_egm[0])
-                data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, eyetracking_gb_markers])
-                del data_exg_egm, data_eyetracking_egm
+            # generate the epochs
+            _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,
+                                                           eyetracking_egbm_channels, eyetracking_egbm_channel_types, tmin_pupil, tmax_pupil,
+                                                           event_ids_dict)
 
-                # create channels based on the event channels added
-                exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
-                exg_egbm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 3
-                eyetracking_egbm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
-                eyetracking_egbm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 3
+            _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
+                data_exg_egbm,
+                exg_egbm_channles,
+                exg_egbm_channle_types,
+                session_ICA_path,
+                tmin_eeg, tmax_eeg,
+                event_ids_dict,
+                is_regenerate_ica=is_regenerate_ica,
+                bad_channels=participant_badchannel_dict[
+                    participant_index] if participant_index in participant_badchannel_dict.keys() else None)
 
-                #########################
+            #########################
 
-                # generate the epochs
-                _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,
-                                                               eyetracking_egbm_channels, eyetracking_egbm_channel_types, tmin_pupil, tmax_pupil,
-                                                               event_ids_dict)
+            # extract block data
+            _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visualization outside of the loop
+            # _blocks_exg = extract_block_data(data_exg_egbm, exg_egbm_channles, exg_srate, fixations, saccades)
+            del data_eyetracking_egbm, data_exg_egbm
 
-                _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
-                    data_exg_egbm,
-                    exg_egbm_channles,
-                    exg_egbm_channle_types,
-                    session_ICA_path,
-                    tmin_eeg, tmax_eeg,
-                    event_ids_dict,
-                    is_regenerate_ica=is_regenerate_ica,
-                    bad_channels=participant_badchannel_dict[
-                        participant_index] if participant_index in participant_badchannel_dict.keys() else None)
-
-                #########################
-
-                # extract block data
-                _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visualization outside of the loop
-                # _blocks_exg = extract_block_data(data_exg_egbm, exg_egbm_channles, exg_srate, fixations, saccades)
-                del data_eyetracking_egbm, data_exg_egbm
-
-                # record gaze statistics
-                if fixation_durations is not None and normalized_fixation_count is not None:
-                    if 'durations' in condition_gaze_statistics[condition_name].keys():
-                        condition_gaze_statistics[condition_name]['durations'] = dict([(event_type, duration_list +
-                                                                                        condition_gaze_statistics[
-                                                                                            condition_name][
-                                                                                            'durations'][event_type])
-                                                                                       for event_type, duration_list in
-                                                                                       fixation_durations.items()])
-                    else:
-                        condition_gaze_statistics[condition_name]['durations'] = fixation_durations
-                    if 'counts' in condition_gaze_statistics[condition_name].keys():
-                        condition_gaze_statistics[condition_name]['counts'] = dict([(event_type, 0.5 * (
-                                norm_count + condition_gaze_statistics[condition_name]['counts'][event_type])) for
-                                                                                    event_type, norm_count in
-                                                                                    normalized_fixation_count.items()])
-                    else:
-                        condition_gaze_statistics[condition_name]['counts'] = normalized_fixation_count
-
-                # Add to gaze behaviors
-                condition_gaze_behaviors[condition_name]['fixations'] = condition_gaze_behaviors[condition_name]['fixations'] + fixations
-                condition_gaze_behaviors[condition_name]['saccades'] = condition_gaze_behaviors[condition_name]['saccades'] + saccades
-
-                # Add the new epochs to the epoch dictionary
-                if condition_name not in participant_condition_epoch_dict[participant_index].keys():
-                    participant_condition_epoch_dict[participant_index][condition_name] = (
-                        _epochs_pupil, _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array)
+            # record gaze statistics
+            if fixation_durations is not None and normalized_fixation_count is not None:
+                if 'durations' in condition_gaze_statistics[condition_name].keys():
+                    condition_gaze_statistics[condition_name]['durations'] = dict([(event_type, duration_list +
+                                                                                    condition_gaze_statistics[
+                                                                                        condition_name][
+                                                                                        'durations'][event_type])
+                                                                                   for event_type, duration_list in
+                                                                                   fixation_durations.items()])
                 else:
-                    participant_condition_epoch_dict[participant_index][condition_name] = (
-                        mne.concatenate_epochs(
-                            [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
-                        mne.concatenate_epochs(
-                            [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_exg]),
-                        mne.concatenate_epochs(
-                            [participant_condition_epoch_dict[participant_index][condition_name][2],
-                             _epochs_eeg_ICA_cleaned]),
-                        np.concatenate(
-                            [participant_condition_epoch_dict[participant_index][condition_name][3], labels_array]
-                        )
-                    )
-                # Add the new blocks to the block dictionary
-                # if condition_name not in participant_condition_block_dict[participant_index].keys():
-                #     participant_condition_block_dict[participant_index][condition_name] = (
-                #         _blocks_eyetracking, _blocks_exg)
-                # else:
-                #     participant_condition_block_dict[participant_index][condition_name] = (
-                #         participant_condition_block_dict[participant_index][condition_name][0] + _blocks_eyetracking,
-                #         participant_condition_block_dict[participant_index][condition_name][1] + _blocks_exg
-                #     )
+                    condition_gaze_statistics[condition_name]['durations'] = fixation_durations
+                if 'counts' in condition_gaze_statistics[condition_name].keys():
+                    condition_gaze_statistics[condition_name]['counts'] = dict([(event_type, 0.5 * (
+                            norm_count + condition_gaze_statistics[condition_name]['counts'][event_type])) for
+                                                                                event_type, norm_count in
+                                                                                normalized_fixation_count.items()])
+                else:
+                    condition_gaze_statistics[condition_name]['counts'] = normalized_fixation_count
 
-                # continue to the next condition
+            # Add to gaze behaviors
+            condition_gaze_behaviors[condition_name]['fixations'] = condition_gaze_behaviors[condition_name]['fixations'] + fixations
+            condition_gaze_behaviors[condition_name]['saccades'] = condition_gaze_behaviors[condition_name]['saccades'] + saccades
+
+            # Add the new epochs to the epoch dictionary
+            if condition_name not in participant_condition_epoch_dict[participant_index].keys():
+                participant_condition_epoch_dict[participant_index][condition_name] = (
+                    _epochs_pupil, _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array)
+            else:
+                participant_condition_epoch_dict[participant_index][condition_name] = (
+                    mne.concatenate_epochs(
+                        [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
+                    mne.concatenate_epochs(
+                        [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_exg]),
+                    mne.concatenate_epochs(
+                        [participant_condition_epoch_dict[participant_index][condition_name][2],
+                         _epochs_eeg_ICA_cleaned]),
+                    np.concatenate(
+                        [participant_condition_epoch_dict[participant_index][condition_name][3], labels_array]
+                    )
+                )
+            # Add the new blocks to the block dictionary
+            # if condition_name not in participant_condition_block_dict[participant_index].keys():
+            #     participant_condition_block_dict[participant_index][condition_name] = (
+            #         _blocks_eyetracking, _blocks_exg)
+            # else:
+            #     participant_condition_block_dict[participant_index][condition_name] = (
+            #         participant_condition_block_dict[participant_index][condition_name][0] + _blocks_eyetracking,
+            #         participant_condition_block_dict[participant_index][condition_name][1] + _blocks_exg
+            #     )
+
+            # continue to the next condition
             # continue to the next session
         # continue to the next participant
 

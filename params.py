@@ -1,6 +1,9 @@
+import itertools
+import json
+
 import mne
 
-from utils.utils import Bidict
+from utils.classes import Bidict
 
 event_ids_dict = {'EventMarker': {'DistractorPops': 1, 'TargetPops': 2, 'NoveltyPops': 3},
             'GazeRayIntersect': {'GazeRayIntersectsDistractor': 4, 'GazeRayIntersectsTarget': 5, 'GazeRayIntersectsNovelty': 6},
@@ -15,16 +18,20 @@ color_dict = {
               'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'orange', 'FixationNull': 'grey',
               'Saccade2Distractor': 'blue', 'Saccade2Target': 'red', 'Saccade2Novelty': 'orange', 'Saccade2Null': 'yellow'}
 
+
 event_viz = 'GazeRayIntersect'
 
 
-conditions = ['RSVP', 'Carousel']
+conditions = Bidict({'RSVP': 1, 'Carousel': 2, 'VS': 3, 'TS': 4})
 
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 eventmarker_preset_path = 'presets/ReNaEventMarker.json'
+# load presets
+varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
+eventmarker_preset = json.load(open(eventmarker_preset_path))
 
 tmin_pupil = -1
 tmax_pupil = 3.
@@ -47,21 +54,26 @@ ecg_ch_name='ECG00'
 
 note = "test_v3"
 
+FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
+
+START_OF_BLOCK_ENCODING = 4
+END_OF_BLOCK_ENCODING = 5
+
+ITEM_TYPE_ENCODING = {event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']: 'distractor',
+                      event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']: 'target',
+                      event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty']: 'novelty'}
+
 
 '''
 The core events, each core event will have some meta information associated with it
 
+RSVP-pop: 
 '''
 
-events = ['BlockStart', 'BlockEnd',
-          'RSVP-Distractor-Pop', 'RSVP-Target-Pop', 'RSVP-Novelty-Pop',
-          'RSVP-Distractor-IDTFixGaze', 'RSVP-Target-IDTFixGaze', 'RSVP-Novelty-IDTFixGaze',
-          'RSVP-Distractor-FixDetectGaze', 'RSVP-Target-FixDetectGaze', 'RSVP-Novelty-FixDetectGaze',
+classifier_prep_markers = ['{}-{}-{}-{}'.format(a, b, c ,d) for a, b, c ,d in itertools.product(['practice', 'exp'], ['RSVP', 'Carousel'], ['Distractor', 'Target', 'Novelty'], ['Pop', 'IDTFixGaze', 'FixDetectGaze'])]
+identifier_prep_markers = ['{}-VS-{}-{}'.format(a, b, c) for a, b, c in itertools.product(['practice', 'exp'], ['Distractor', 'Target', 'Novelty'], ['IDTFixGaze', 'FixDetectGaze'])]
+events = ['BlockStart', 'BlockEnd'] + classifier_prep_markers + identifier_prep_markers
 
-          'Carousel-Distractor-Pop', 'Carousel-Target-Pop', 'Carousel-Novelty-Pop',
-          'Carousel-Distractor-IDTFixGaze', 'Carousel-Target-IDTFixGaze', 'Carousel-Novelty-IDTFixGaze',
-          'Carousel-Distractor-FixDetectGaze', 'Carousel-Target-FixDetectGaze', 'Carousel-Novelty-FixDetectGaze',
 
-          'VS-Distractor-IDTFixGaze', 'VS-Target-IDTFixGaze', 'VS-Novelty-IDTFixGaze',
-          'VS-Distractor-FixDetectGaze', 'VS-Target-FixDetectGaze', 'VS-Novelty-FixDetectGaze']
-events = Bidict([(e, i) for i, e in enumerate(events)])
+events = Bidict(dict([(e, i) for i, e in enumerate(events)]))
+
