@@ -82,6 +82,9 @@ def add_em_ts_to_data(event_markers, event_marker_timestamps, data_dicts,
     """
     add LSL timestamps, event markers based on the session log to the data array
     also discard data that falls other side the first and the last block
+
+    add the DTN events for RSVP and carousel, with meta information.
+    add the block onsets and offsets, with likert info TODO
     :param event_markers:
     :param event_marker_timestamps:
     :param data_dicts: list of data keys include 'data_array', 'data_timestamps', and 'srate'
@@ -92,12 +95,11 @@ def add_em_ts_to_data(event_markers, event_marker_timestamps, data_dicts,
     :param post_final_block_time:
     :return:
     """
-    block_num = None
 
     for d in data_dicts.values():
         d['event_marker'] = np.zeros(shape=(1, len(d['data_timestamps'])))
-    first_block_start_index = None
 
+    # get the block events
     block_ids = event_markers[eventmarker_preset["ChannelNames"].index('BlockIDStartEnd'), :]
     block_id_timestamps = event_marker_timestamps[block_ids != 0]
     block_ids = block_ids[block_ids != 0]
@@ -110,10 +112,16 @@ def add_em_ts_to_data(event_markers, event_marker_timestamps, data_dicts,
     dtn = event_markers[eventmarker_preset["ChannelNames"].index('DTN'), :]
     dtn_timestamps = event_marker_timestamps[dtn != 0]
     dtn = dtn[dtn != 0]
-    dtn_condition = np.zeros(len(dtn_timestamps))
+    dtn_conditions = np.zeros(len(dtn_timestamps))
     for i, dtn_time in enumerate(dtn_timestamps):
-        dtn_condition[i] = block_marker[np.argmax(block_marker_timestamps[block_marker_timestamps < dtn_time])]
+        dtn_conditions[i] = block_marker[np.argmax(block_marker_timestamps[block_marker_timestamps < dtn_time])]
 
+
+    for type, timestamp, condition in zip(dtn, dtn_timestamps, dtn_conditions):
+        if condition == conditions['RSVP']:
+
+
+        data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
 
     for i in range(event_markers.shape[1]):
         event, info1, info2, info3 = event_markers[:, i]
@@ -147,6 +155,58 @@ def add_em_ts_to_data(event_markers, event_marker_timestamps, data_dicts,
     out = np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
     out = out[:, first_block_start_index - srate * pre_first_block_time:final_block_end_index + srate * post_final_block_time]
     return out
+
+def extract_block_data(_data, channel_names, srate, fixations, saccades, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
+    # TODO update this v3 experiment
+    block_starts = np.argwhere(_data[channel_names.index('EventMarker'), :] == 4) - int(pre_block_time * srate)# start of a block is denoted by event marker 4
+    block_ends = np.argwhere(_data[channel_names.index('EventMarker'), :] == 5) + int(post_block_time * srate)  # end of a block is denoted by event marker 5
+
+    block_sequences = [_data[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]
+    return block_sequences
+
+    # plt.rcParams["figure.figsize"] = (60, 15)
+    # b = block_sequences[0]
+    # b = np.copy(b)
+    # t = b[0]
+    # p = b[channel_names.index('left_pupil_size'), :]
+    # p[p == 0] = np.nan
+    # p = interpolate_nan(p)
+    # p = p * 1e2
+    # xy = b[[channel_names.index('gaze_forward_x'), channel_names.index('gaze_forward_y')], :]
+    # xy_deg = (180 / math.pi) * np.arcsin(xy)
+    # dxy = np.diff(xy_deg, axis=1, prepend=xy_deg[:, :1])
+    # dtheta = np.linalg.norm(dxy, axis=0)
+    # velocities = dtheta / np.diff(t, prepend=1)
+    # velocities[0] = 0.
+    # ################
+    # plt.plot(t, p)
+    # for f in [f for f in fixations if f.onset_time > t.min() and f.offset_time < t.max()]:
+    #     plt.axvspan(f.onset_time, f.offset_time, alpha=0.5, color=event_color_dict[f.stim])
+    # for s in [s for s in saccades if s.onset_time > t.min() and s.offset_time < t.max()]:
+    #     plt.axvspan(s.onset_time, s.offset_time, alpha=0.5, color=event_color_dict['saccade'])
+    #
+    # for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
+    #     if e != 0:
+    #         plt.scatter(t[i], p[i] + 0.1, alpha = 0.5, color=event_marker_color_dict[e], marker='v', s=200)
+    #
+    # plt.xlabel('Time (sec)')
+    # plt.ylabel('Pupil Size (mm)')
+    # plt.title('Block sequence with gaze behavior color bars and event markers \n Condition RSVP, Participant 1, Session 1')
+    # plt.show()
+    # ###################
+    # plt.plot(t, p)
+    # for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
+    #     if e != 0:
+    #         plt.axvline(t[i], alpha = 0.5, linewidth=2, color=em_color_code_dict[e])
+    #
+    # for i, e in enumerate(b[channel_names.index('GazeMarker'), :]):
+    #     if e != 0:
+    #         plt.axvline(t[i], linestyle='--', color='orange')
+    # plt.xlabel('Time (sec)')
+    # plt.title('Gaze ray intersects')
+    # plt.show()
+    #
+    # return block_sequences  # a list of block sequences
 
 def add_design_matrix_to_data(data_array, event_marker_index, srate, erp_window, event_type_of_interest=(1, 2, 3)):
     '''
@@ -274,58 +334,6 @@ def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, ev
                         'novelty': np.sum(data_event_marker_array[0]==3) / total_novelty_count}
     return np.concatenate([data_array, data_event_marker_array], axis=0), gazeRayIntersect_durations, normalized_fixation_count,
 
-
-def extract_block_data(_data, channel_names, srate, fixations, saccades, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
-    # TODO add block end margins and use parameters block_end_margin_seconds
-    block_starts = np.argwhere(_data[channel_names.index('EventMarker'), :] == 4) - int(pre_block_time * srate)# start of a block is denoted by event marker 4
-    block_ends = np.argwhere(_data[channel_names.index('EventMarker'), :] == 5) + int(post_block_time * srate)  # end of a block is denoted by event marker 5
-
-    block_sequences = [_data[:, i[0]:j[0]] for i, j in zip(block_starts, block_ends)]
-    return block_sequences
-
-    # plt.rcParams["figure.figsize"] = (60, 15)
-    # b = block_sequences[0]
-    # b = np.copy(b)
-    # t = b[0]
-    # p = b[channel_names.index('left_pupil_size'), :]
-    # p[p == 0] = np.nan
-    # p = interpolate_nan(p)
-    # p = p * 1e2
-    # xy = b[[channel_names.index('gaze_forward_x'), channel_names.index('gaze_forward_y')], :]
-    # xy_deg = (180 / math.pi) * np.arcsin(xy)
-    # dxy = np.diff(xy_deg, axis=1, prepend=xy_deg[:, :1])
-    # dtheta = np.linalg.norm(dxy, axis=0)
-    # velocities = dtheta / np.diff(t, prepend=1)
-    # velocities[0] = 0.
-    # ################
-    # plt.plot(t, p)
-    # for f in [f for f in fixations if f.onset_time > t.min() and f.offset_time < t.max()]:
-    #     plt.axvspan(f.onset_time, f.offset_time, alpha=0.5, color=event_color_dict[f.stim])
-    # for s in [s for s in saccades if s.onset_time > t.min() and s.offset_time < t.max()]:
-    #     plt.axvspan(s.onset_time, s.offset_time, alpha=0.5, color=event_color_dict['saccade'])
-    #
-    # for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
-    #     if e != 0:
-    #         plt.scatter(t[i], p[i] + 0.1, alpha = 0.5, color=event_marker_color_dict[e], marker='v', s=200)
-    #
-    # plt.xlabel('Time (sec)')
-    # plt.ylabel('Pupil Size (mm)')
-    # plt.title('Block sequence with gaze behavior color bars and event markers \n Condition RSVP, Participant 1, Session 1')
-    # plt.show()
-    # ###################
-    # plt.plot(t, p)
-    # for i, e in enumerate(b[channel_names.index('EventMarker'), :]):
-    #     if e != 0:
-    #         plt.axvline(t[i], alpha = 0.5, linewidth=2, color=em_color_code_dict[e])
-    #
-    # for i, e in enumerate(b[channel_names.index('GazeMarker'), :]):
-    #     if e != 0:
-    #         plt.axvline(t[i], linestyle='--', color='orange')
-    # plt.xlabel('Time (sec)')
-    # plt.title('Gaze ray intersects')
-    # plt.show()
-    #
-    # return block_sequences  # a list of block sequences
 
 
 def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, tmax, event_ids_dict, erp_window=(.0, .8), srate=200,
@@ -729,3 +737,5 @@ def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, d
     # len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
     return fixations_new
 
+def get_event_marker_condition_dtn(condition, dtn):
+    if condition == conditions['RSVP']:
