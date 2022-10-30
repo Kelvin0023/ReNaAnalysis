@@ -23,6 +23,7 @@ event_viz = 'GazeRayIntersect'
 
 
 conditions = Bidict({'RSVP': 1, 'Carousel': 2, 'VS': 3, 'TS': 4})
+meta_blocks = Bidict({'cp': 5, 'ip': 7})
 
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
@@ -71,10 +72,11 @@ The core events, each core event will have some meta information associated with
 RSVP-pop: 
 '''
 
-classifier_prep_markers = ['{}-{}-{}-{}'.format(a, b, c ,d) for a, b, c ,d in itertools.product(['practice', 'exp'], ['RSVP', 'Carousel'], ['Distractor', 'Target', 'Novelty'], ['Pop', 'IDTFixGaze', 'FixDetectGaze'])]
-identifier_prep_markers = ['{}-VS-{}-{}'.format(a, b, c) for a, b, c in itertools.product(['practice', 'exp'], ['Distractor', 'Target', 'Novelty'], ['IDTFixGaze', 'FixDetectGaze'])]
-events = ['BlockStart', 'BlockEnd'] + classifier_prep_markers + identifier_prep_markers
+# classifier_prep_markers = ['{}-{}-{}-{}'.format(a, b, c ,d) for a, b, c ,d in itertools.product(['practice', 'exp'], ['RSVP', 'Carousel'], ['Distractor', 'Target', 'Novelty'], ['Pop', 'IDTFixGaze', 'FixDetectGaze'])]
+# identifier_prep_markers = ['{}-VS-{}-{}'.format(a, b, c) for a, b, c in itertools.product(['practice', 'exp'], ['Distractor', 'Target', 'Novelty'], ['IDTFixGaze', 'FixDetectGaze'])]
+# events = ['BlockStart', 'BlockEnd'] + classifier_prep_markers + identifier_prep_markers
+#
+#
+# events = Bidict(dict([(e, i) for i, e in enumerate(events)]))
 
-
-events = Bidict(dict([(e, i) for i, e in enumerate(events)]))
-
+item_marker_names = ['itemDTNType', 'ItemIndexInBlock', 'itemID', 'foveateAngle', 'isInFrustum', 'isGazeRayIntersected', 'distFromPlayer', 'transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z']

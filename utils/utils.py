@@ -12,7 +12,7 @@ from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
 from params import *
-from utils.Event import Event, get_closest_event
+from utils.Event import Event, get_closest_event, get_indices_from_transfer_timestamps
 
 
 def flat2gen(alist):
@@ -89,24 +89,29 @@ def get_block_events(event_markers, event_marker_timestamps):
     block_ids = block_ids[block_ids != 0]
 
     block_condition = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]
-    assert np.all(block_id_timestamps[::2] == event_marker_timestamps[np.logical_and(block_condition != 0,
-                                                                                     [bm in conditions.values() for bm
-                                                                                      in
-                                                                                      block_condition])])  # check the timestamps for the conditionBlockID matches that of conditionBlock conditions
+    assert np.all(block_id_timestamps[::2] == event_marker_timestamps[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in block_condition])])  # check the timestamps for the conditionBlockID matches that of conditionBlock conditions
     block_conditions_timestamps = block_id_timestamps[::2]
-    block_condition = block_condition[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in
-                                                                block_condition])]  # check both non-zero (there is an event), and the marker is for a condition, i.e., not for change of metablocks
+    block_condition = block_condition[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in block_condition])]  # check both non-zero (there is an event), and the marker is for a condition, i.e., not for change of metablocks
     block_is_practice = get_practice_block_marker(block_condition)
     # add the block starts
-    for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[::2], block_conditions_timestamps, block_condition, block_is_practice):
-        events.append(Event(b_timestamp, b_id, b_condition, is_block_start=True, block_is_practice=b_is_practice))
+    for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[::2], block_id_timestamps[::2], block_condition, block_is_practice):
+        events.append(Event(b_timestamp, block_id=b_id, block_condition=b_condition, is_block_start=True, block_is_practice=b_is_practice))
 
-    for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[1::2], block_conditions_timestamps, block_condition, block_is_practice):
-        events.append(Event(b_timestamp, b_id, b_condition, is_block_end=True, block_is_practice=b_is_practice))
+    for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[1::2], block_id_timestamps[1::2], block_condition, block_is_practice):
+        events.append(Event(b_timestamp, block_id=b_id, block_condition=b_condition, is_block_end=True, block_is_practice=b_is_practice))
+
+    # add the meta block events
+    meta_block_marker = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]
+    meta_block_indices = np.logical_and(meta_block_marker != 0, [bm not in conditions.values() for bm in meta_block_marker])
+    meta_block_marker_timestamps = event_marker_timestamps[meta_block_indices]
+    meta_block_marker = meta_block_marker[meta_block_indices]
+
+    for m_marker, b_timestamp in zip(meta_block_marker, meta_block_marker_timestamps):
+        events.append(Event(b_timestamp, meta_block=m_marker))
 
     return events
 
-def add_dtn_events(event_markers, event_marker_timestamps, block_events):
+def get_dtn_events(event_markers, event_marker_timestamps, block_events):
     events = []
 
     dtn = event_markers[eventmarker_preset["ChannelNames"].index('DTN'), :]
@@ -121,17 +126,18 @@ def add_dtn_events(event_markers, event_marker_timestamps, block_events):
         condition = get_closest_event(block_events, dtn_time, 'block_condition', event_filter=lambda e: e.is_block_start)   # must be a block start event
         is_practice = get_closest_event(block_events, dtn_time, 'is_practice', event_filter=lambda e: e.is_block_start)  # must be a block start event
         block_id = get_closest_event(block_events, dtn_time, 'block_id', event_filter=lambda e: e.is_block_start)  # must be a block start event
-        e = Event(dtn_time, block_id, condition, dtn=dtn[i], block_is_practice=is_practice, item_id=item_ids[i],
+        e = Event(dtn_time, block_id=block_id, block_condition=condition, dtn=abs(dtn[i]), block_is_practice=is_practice, item_id=item_ids[i],
                             obj_dist=obj_dists[i])
 
         if condition == conditions['Carousel']:
             e.carousel_speed, e.carousel_angle = carousel_speed[i], carousel_angle[i]
+
+        e.dtn_onffset = dtn[i] > 0
+
         events.append(e)
     return events
 
-def get_events(event_markers, event_marker_timestamps, data_dicts,
-               session_log,
-               item_codes, srate, pre_first_block_time=1, post_final_block_time=1):
+def get_events(event_markers, event_marker_timestamps, item_markers, item_marker_timestamps):
     """
     add LSL timestamps, event markers based on the session log to the data array
     also discard data that falls other side the first and the last block
@@ -151,8 +157,10 @@ def get_events(event_markers, event_marker_timestamps, data_dicts,
     events = []
 
     events += get_block_events(event_markers, event_marker_timestamps)  # get the block events
-    events += add_dtn_events(event_markers, event_marker_timestamps, events)
+    events += get_dtn_events(event_markers, event_marker_timestamps, events)  # dtn events needs the block events to know the conditions
+    events += get_gaze_ray_events(item_markers, item_marker_timestamps, event_markers, event_marker_timestamps, events)  # dtn events needs the block events to know the conditions
 
+    # add gaze related events
     return events
 
 def extract_block_data(_data, channel_names, srate, fixations, saccades, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
@@ -230,108 +238,69 @@ def add_design_matrix_to_data(data_array, event_marker_index, srate, erp_window,
     return np.concatenate([data_array, design_matrix], axis=0), design_matrix, design_matrix_channel_names
 
 
-def add_gaze_em_to_data(item_markers, item_markers_timestamps, event_markers, event_marker_timestamps,
-                        data_array,  # this data array already has timestamps, this function is called after add_em_ts_to_data
-                        session_log, item_codes, srate, verbose, pre_block_time=1, post_block_time=1, foveate_value_threshold=15, foveate_duration_threshold=FIXATION_MINIMAL_TIME):
-    block_list = []
-    assert event_markers.shape[0] == 4
-    data_event_marker_array = np.zeros(shape=(1, data_array.shape[1]))
-    data_timestamps = data_array[0]
+def get_gaze_ray_events(item_markers, item_marker_timestamps, event_markers, event_marker_timestamps, events, foveate_duration_threshold=FIXATION_MINIMAL_TIME):
+    """
+    the item marker has the gaze events for each object. Its channel represent different objects in each block
+    @param item_markers:
+    @param item_markers_timestamps:
+    @param event_markers:
+    @param event_marker_timestamps:
+    @param data_array:
+    @param session_log:
+    @param item_codes:
+    @param srate:
+    @param verbose:
+    @param pre_block_time:
+    @param post_block_time:
+    @param foveate_value_threshold:
+    @param foveate_duration_threshold:
+    @return:
+    """
+    rtn = []
 
-    item_block_start_indices = []
-    item_block_end_indices = []
+    # get block infos
+    block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
+    block_end_timestamps = [e.timestamp for e in events if e.is_block_end]
+    block_conditions = [e.block_condition for e in events if e.is_block_start]
+    block_ids = [e.block_id for e in events if e.is_block_start]
 
-    for i in range(event_markers.shape[1]):
-        event, info1, info2, info3 = event_markers[:, i]
+    item_block_start_idx = get_indices_from_transfer_timestamps(item_marker_timestamps, block_start_timestamps)
+    item_block_end_idx = get_indices_from_transfer_timestamps(item_marker_timestamps, block_end_timestamps)
 
-        if str(int(event)) in session_log.keys():  # for start-of-block events
-            # print('Processing block with ID: {0}'.format(event))
-            block_list.append(event)
-            item_block_start_indices.append(np.argmin(np.abs(item_markers_timestamps - event_marker_timestamps[i])))
-            continue
-        elif event_markers[0, i - 1] != 0 and event == 0:  # this is the end of a block
-            item_block_end_indices.append(np.argmin(np.abs(item_markers_timestamps - event_marker_timestamps[i])))
-            continue
-    # iterate through blocks
-    total_distractor_count = 0
-    total_target_count = 0
-    total_novelty_count = 0
-    gazeRayIntersect_durations = {'distractor': [], 'target': [], 'novelty': []}
+    block_item_markers = [(item_markers[:, start:end], item_marker_timestamps[start:end])for start, end in zip(item_block_start_idx, item_block_end_idx)]
+    for j, (b_item_markers, b_item_timestamps) in enumerate(block_item_markers):
+        b_gazeray = b_item_markers[item_marker_names.index('isGazeRayIntersected')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
+        b_itemids = b_item_markers[item_marker_names.index('itemID')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
+        b_dtns = b_item_markers[item_marker_names.index('itemDTNType')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
+        b_obj_dist = b_item_markers[item_marker_names.index('distFromPlayer')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
 
-    for block_i, item_marker_block_start_index, item_marker_block_end_index in zip(block_list, item_block_start_indices, item_block_end_indices):
-        targets = session_log[str(int(block_i))]['targets']
-        distractors = session_log[str(int(block_i))]['distractors']
-        novelties = session_log[str(int(block_i))]['novelties']
+        # b_foveate_angle = b_item_markers[item_marker_names.index('foveateAngle')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
+        # b_foveate_angle = b_foveate_angle * np.pi / 180
 
-        # 2. find the nearest timestamp of the block start and end in the item marker timestamps
-        item_markers_of_block = item_markers[:, item_marker_block_start_index:item_marker_block_end_index]
-        item_markers_timestamps_of_block = item_markers_timestamps[
-                                           item_marker_block_start_index:item_marker_block_end_index]
+        for i_b_gr, i_b_iid, i_b_dtn, i_b_obj_dist in zip(b_gazeray, b_itemids, b_dtns, b_obj_dist):
+            if np.any(i_b_gr != 0):
+                ts = b_item_timestamps[i_b_gr != 0][0]
+                i_b_obj_dist = i_b_obj_dist[i_b_gr!=0][0]
 
-        item_block_start_indices.append(item_marker_block_start_index)
-        item_block_end_indices.append(item_marker_block_end_index)
+                i_b_iid = i_b_iid[i_b_gr != 0]
+                i_b_dtn = i_b_dtn[i_b_gr != 0]
+                assert np.all(i_b_iid == i_b_iid)
+                assert np.all(i_b_dtn == i_b_dtn)
+                i_b_iid = i_b_iid[0]
+                i_b_dtn = i_b_dtn[0]
 
-        for i in range(30):  # the item marker hold up to 30 items
-            # this_item_marker = item_markers_of_block[i * 11: (i + 1) * 11, i::30]
-            this_item_marker = item_markers_of_block[i * 11 : (i+1) * 11]
-            this_item_code = this_item_marker[1, -1]  # TODO: change this to  np.max(this_item_marker[1, :]) after the 'reset item marker' update
-            assert len(np.unique(this_item_marker[1, :])) == 2 or len(np.unique(this_item_marker[1, :])) == 1  # can only be either the item code or 0 if item is not active during that interval
-            # check the item type
-            if this_item_code in distractors:
-                total_distractor_count += 1
-                item_type = 'distractor'
-                event_code = event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']
-            elif this_item_code in targets:
-                total_target_count += 1
-                item_type = 'target'
-                event_code = event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']
-            elif this_item_code in novelties:
-                total_novelty_count += 1
-                item_type = 'novelty'
-                event_code = event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty']
-            else:
-                # TODO: put the exception back after the 'reset item marker' update
-                # raise Exception("Unknown item code {0} in block. This should NEVER happen!".format(this_item_code, block_i))
-                if verbose: print('Out of block item found: should NOT happen again after RESET FIX')
-                continue
-            # find if there is gaze ray intersection
-            # foveate_indices = find_value_thresholding_interval(this_item_marker[2, :], item_markers_timestamps_of_block, foveate_value_threshold, foveate_duration_threshold)
-            # force the first last to be not-intersected
-            this_item_marker[4, 0] = 0
-            this_item_marker[4, -1] = 0
-            gaze_intersect_start_index = np.argwhere(np.diff(this_item_marker[4, :]) == 1)[:, 0]
-            gaze_intersect_end_index = np.argwhere(np.diff(this_item_marker[4, :]) == -1)[:, 0]
-            assert len(gaze_intersect_end_index) == len(gaze_intersect_start_index)
+                # i_b_gr = i_b_gr[i_b_gr!=0][0]
 
-            # check if the intersects is long enough to warrant a fixation
-            gaze_intersected_durations = item_markers_timestamps_of_block[gaze_intersect_end_index] - \
-                                         item_markers_timestamps_of_block[gaze_intersect_start_index]
-            # append_list_lines_to_file(gaze_intersected_durations, 'data/FixationDurations')  # TODO: check this after we collect more data using the 'reset item marker' fix
-            gazeRayIntersect_durations[item_type] += list(gaze_intersected_durations)
+                # TODO only keep the first gaze ray event for now, not taking diff because gaze ray intersect is too discrete
+                e = Event(ts, gaze_intersect=True, block_condition=block_conditions[j], block_id=block_ids[j], dtn=i_b_dtn, item_id=i_b_iid,obj_dist=i_b_obj_dist)
 
-            true_fixations_indices = np.argwhere(gaze_intersected_durations > foveate_duration_threshold)[:, 0]
-            true_fixation_timestamps = item_markers_timestamps_of_block[gaze_intersect_start_index[true_fixations_indices]]
+                if block_conditions[j] == conditions['Carousel']:
+                    e.carousel_speed = get_closest_event(events, ts, 'carousel_speed', lambda x: x.dtn_onffset)
+                    e.carousel_angle = get_closest_event(events, ts, 'carousel_angle', lambda x: x.dtn_onffset)
+                events.append(e)
 
-            # find where in data marker to insert the marker
-            data_event_marker_indices = [(np.abs(data_timestamps - x)).argmin() for x in true_fixation_timestamps]
-            data_event_marker_array[0][data_event_marker_indices] = event_code
-            if len(true_fixation_timestamps) > 0: print(
-                'Found {0} fixations for item {1} of type {2}, in block {3}'.format(len(true_fixation_timestamps),
-                                                                                    this_item_marker[1, 0],
-                                                                                    ITEM_TYPE_ENCODING[
-                                                                                        event_code], block_i))
-    # plt.plot(item_markers[1])
-    # [plt.axvline(x=x, color='blue') for x in item_block_start_indices]
-    # [plt.axvline(x=x, color='red') for x in item_block_end_indices]
-    # plt.show()
-    if verbose: print("found gaze ray intersects: %d distractors, %d targets, %d novelties" % (np.sum(data_event_marker_array[0]==event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']),
-                                                                                               np.sum(data_event_marker_array[0]==event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']),
-                                                                                               np.sum(data_event_marker_array[0]==event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty'])))
-    total_item_count = total_distractor_count + total_target_count + total_novelty_count
-    normalized_fixation_count = {'distractor': np.sum(data_event_marker_array[0]==1) / total_distractor_count,
-                        'target': np.sum(data_event_marker_array[0]==2) / total_target_count,
-                        'novelty': np.sum(data_event_marker_array[0]==3) / total_novelty_count}
-    return np.concatenate([data_array, data_event_marker_array], axis=0), gazeRayIntersect_durations, normalized_fixation_count,
+
+    plt.plot(b_item_timestamps, b_gaze_ray_inter[1])
 
 
 
