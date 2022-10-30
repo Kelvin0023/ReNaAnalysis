@@ -95,10 +95,10 @@ def get_block_events(event_markers, event_marker_timestamps):
     block_is_practice = get_practice_block_marker(block_condition)
     # add the block starts
     for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[::2], block_id_timestamps[::2], block_condition, block_is_practice):
-        events.append(Event(b_timestamp, block_id=b_id, block_condition=b_condition, is_block_start=True, block_is_practice=b_is_practice))
+        events.append(Event(b_timestamp, block_id=abs(b_id), block_condition=b_condition, is_block_start=True, block_is_practice=b_is_practice))
 
     for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[1::2], block_id_timestamps[1::2], block_condition, block_is_practice):
-        events.append(Event(b_timestamp, block_id=b_id, block_condition=b_condition, is_block_end=True, block_is_practice=b_is_practice))
+        events.append(Event(b_timestamp, block_id=abs(b_id), block_condition=b_condition, is_block_end=True, block_is_practice=b_is_practice))
 
     # add the meta block events
     meta_block_marker = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]

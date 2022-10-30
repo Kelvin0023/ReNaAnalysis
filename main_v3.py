@@ -107,37 +107,28 @@ if not is_loading_saved_analysis:
                          'eyetracking': {'data_array': temporal_filter_fixation(data['FixationDetection'][0][1], marker_mode='event'), 'data_timestamps':data['FixationDetection'][1], 'srate': 30},}
             events = get_events(event_markers, event_markers_timestamps, item_markers, item_marker_timestamps)
 
-            # add gaze events
-            data_eyetracking_egm, fixation_durations, normalized_fixation_count = get_gaze_ray_events(
-                item_markers, item_marker_timestamps, event_markers,
-                event_markers_timestamps, data_eyetracking_em, session_log,
-                item_codes, eyetracking_srate, verbose=1)
-            data_exg_egm, _, _ = get_gaze_ray_events(
-                item_markers, item_marker_timestamps, event_markers,
-                event_markers_timestamps, data_exg_em, session_log,
-                item_codes, exg_srate, verbose=1)
-            del data_eyetracking_em, data_exg_em
+            # TODO add fix detect marker using both I-DT and patch similarity
 
-            # add gaze behaviors
-            gaze_xy = eyetracking_data[
-                [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
-            gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
-            gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy, gaze_timestamps=eyetracking_timestamps, gaze_status=gaze_status)
-
-            fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
-
-            exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])
-            data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
-
-            eyetracking_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_eyetracking_egm[0])
-            data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, eyetracking_gb_markers])
-            del data_exg_egm, data_eyetracking_egm
-
-            # create channels based on the event channels added
-            exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
-            exg_egbm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 3
-            eyetracking_egbm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
-            eyetracking_egbm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 3
+            # # add gaze behaviors
+            # gaze_xy = eyetracking_data[
+            #     [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
+            # gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
+            # gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy, gaze_timestamps=eyetracking_timestamps, gaze_status=gaze_status)
+            #
+            # fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
+            #
+            # exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])
+            # data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
+            #
+            # eyetracking_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_eyetracking_egm[0])
+            # data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, eyetracking_gb_markers])
+            # del data_exg_egm, data_eyetracking_egm
+            #
+            # # create channels based on the event channels added
+            # exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
+            # exg_egbm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 3
+            # eyetracking_egbm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
+            # eyetracking_egbm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 3
 
             #########################
 

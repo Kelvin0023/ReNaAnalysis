@@ -49,7 +49,7 @@ def visualize_dtn(events):
     plt.show()
 
 
-def visualize_gazeray(events, block_id):
+def visualize_gazeray(events, block_id=None):
     plt.rcParams["figure.figsize"] = [40, 5]
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -61,6 +61,18 @@ def visualize_gazeray(events, block_id):
 
     (markers, stemlines, baseline) = plt.stem(gaze_intersects_dtn_timestamps, gaze_intersects_dtn, label='gaze intersect DTN')
     plt.setp(markers, marker='D', markersize=2, markeredgecolor="orange", markeredgewidth=2)
+
+    if block_id:
+        block_start_timestamp = [e.timestamp for e in events if e.is_block_start and e.block_id==block_id][0]
+        block_end_timestamp = [e.timestamp for e in events if e.is_block_end and e.block_id==block_id][0]
+
+        # also plot the dtns
+        gaze_intersects_dtn_timestamps = np.array([e.timestamp for e in events if e.gaze_intersect])
+        dtn_onsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset and e.block_id==block_id])
+        dtn_offsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset == False and e.block_id==block_id])
+        dtn_type = np.array([e.dtn for e in events if e.block_id==block_id])
+        [plt.axvspan(onset, offset, alpha=0.5, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
+        plt.xlim(block_start_timestamp, block_end_timestamp)
 
     plt.show()
 
