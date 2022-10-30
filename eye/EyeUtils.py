@@ -30,5 +30,5 @@ def temporal_filter_fixation(thresholded_sim_distance, marker_mode='viz', fixati
         else:
             fix_list_filtered[index_onset] = 1
             fix_list_filtered[index_offset] = 2
-    if verbose > 0: print('Detected {} fixations'.format(len(fix_onset_indices)))
+    if verbose > 0: print('Detected {} fixations from patch similarity'.format(len(fix_onset_indices)))
     return fix_list_filtered

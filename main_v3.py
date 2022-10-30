@@ -18,7 +18,7 @@ from utils.fs_utils import load_participant_session_dict, get_analysis_result_pa
 from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
-    read_file_lines_as_list, add_gaze_em_to_data, add_em_ts_to_data, rescale_merge_exg, create_gaze_behavior_events, \
+    read_file_lines_as_list, add_gaze_em_to_data, get_events, rescale_merge_exg, create_gaze_behavior_events, \
     extract_block_data, find_fixation_saccade_targets
 from params import *
 # analysis parameters ######################################################################################
@@ -104,8 +104,8 @@ if not is_loading_saved_analysis:
 
             data_dict = {'eyetracking': {'data_array':data['Unity.VarjoEyeTrackingComplete'][0], 'data_timestamps':data['Unity.VarjoEyeTrackingComplete'][1], 'srate': eyetracking_srate},
                          'exg': {'data_array':get_exg_data(data), 'data_timestamps':data['BioSemi'][1], 'srate': exg_srate},
-                         'eyetracking': {'data_array':temporal_filter_fixation(data['FixationDetection'][0][1], marker_mode='event'), 'data_timestamps':data['FixationDetection'][1], 'srate': 30},}
-            data_dict_em = add_em_ts_to_data(event_markers, event_markers_timestamps, data_dict, session_log, item_codes, eyetracking_srate)
+                         'eyetracking': {'data_array': temporal_filter_fixation(data['FixationDetection'][0][1], marker_mode='event'), 'data_timestamps':data['FixationDetection'][1], 'srate': 30},}
+            data_dict_em = get_events(event_markers, event_markers_timestamps, data_dict, session_log, item_codes, eyetracking_srate)
 
             # add gaze events
             data_eyetracking_egm, fixation_durations, normalized_fixation_count = add_gaze_em_to_data(

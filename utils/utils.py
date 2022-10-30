@@ -12,6 +12,7 @@ from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
 from params import *
+from utils.Event import Event, get_closest_event
 
 
 def flat2gen(alist):
@@ -76,9 +77,61 @@ def find_value_thresholding_interval(array, timestamps, value_threshold, time_th
                 print('exceed time tolerance ignoring interval')
     return out
 
-def add_em_ts_to_data(event_markers, event_marker_timestamps, data_dicts,
-                      session_log,
-                      item_codes, srate, pre_first_block_time=1, post_final_block_time=1):
+def get_practice_block_marker(block_marker, practice_length=4):
+    rtn = np.array([False] * len(block_marker))
+    rtn[:practice_length] = True
+    return rtn
+
+def get_block_events(event_markers, event_marker_timestamps):
+    events = []
+    block_ids = event_markers[eventmarker_preset["ChannelNames"].index('BlockIDStartEnd'), :]
+    block_id_timestamps = event_marker_timestamps[block_ids != 0]
+    block_ids = block_ids[block_ids != 0]
+
+    block_condition = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]
+    assert np.all(block_id_timestamps[::2] == event_marker_timestamps[np.logical_and(block_condition != 0,
+                                                                                     [bm in conditions.values() for bm
+                                                                                      in
+                                                                                      block_condition])])  # check the timestamps for the conditionBlockID matches that of conditionBlock conditions
+    block_conditions_timestamps = block_id_timestamps[::2]
+    block_condition = block_condition[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in
+                                                                block_condition])]  # check both non-zero (there is an event), and the marker is for a condition, i.e., not for change of metablocks
+    block_is_practice = get_practice_block_marker(block_condition)
+    # add the block starts
+    for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[::2], block_conditions_timestamps, block_condition, block_is_practice):
+        events.append(Event(b_timestamp, b_id, b_condition, is_block_start=True, block_is_practice=b_is_practice))
+
+    for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[1::2], block_conditions_timestamps, block_condition, block_is_practice):
+        events.append(Event(b_timestamp, b_id, b_condition, is_block_end=True, block_is_practice=b_is_practice))
+
+    return events
+
+def add_dtn_events(event_markers, event_marker_timestamps, block_events):
+    events = []
+
+    dtn = event_markers[eventmarker_preset["ChannelNames"].index('DTN'), :]
+    dtn_timestamps = event_marker_timestamps[dtn != 0]
+    item_ids = event_markers[eventmarker_preset["ChannelNames"].index('itemID'), dtn != 0]
+    obj_dists = event_markers[eventmarker_preset["ChannelNames"].index('objDistFromPlayer'), dtn != 0]
+    carousel_speed = event_markers[eventmarker_preset["ChannelNames"].index('CarouselSpeed'), dtn != 0]
+    carousel_angle = event_markers[eventmarker_preset["ChannelNames"].index('CarouselAngle'), dtn != 0]
+    dtn = dtn[dtn != 0]
+
+    for i, dtn_time in enumerate(dtn_timestamps):
+        condition = get_closest_event(block_events, dtn_time, 'block_condition', event_filter=lambda e: e.is_block_start)   # must be a block start event
+        is_practice = get_closest_event(block_events, dtn_time, 'is_practice', event_filter=lambda e: e.is_block_start)  # must be a block start event
+        block_id = get_closest_event(block_events, dtn_time, 'block_id', event_filter=lambda e: e.is_block_start)  # must be a block start event
+        e = Event(dtn_time, block_id, condition, dtn=dtn[i], block_is_practice=is_practice, item_id=item_ids[i],
+                            obj_dist=obj_dists[i])
+
+        if condition == conditions['Carousel']:
+            e.carousel_speed, e.carousel_angle = carousel_speed[i], carousel_angle[i]
+        events.append(e)
+    return events
+
+def get_events(event_markers, event_marker_timestamps, data_dicts,
+               session_log,
+               item_codes, srate, pre_first_block_time=1, post_final_block_time=1):
     """
     add LSL timestamps, event markers based on the session log to the data array
     also discard data that falls other side the first and the last block
@@ -95,66 +148,12 @@ def add_em_ts_to_data(event_markers, event_marker_timestamps, data_dicts,
     :param post_final_block_time:
     :return:
     """
+    events = []
 
-    for d in data_dicts.values():
-        d['event_marker'] = np.zeros(shape=(1, len(d['data_timestamps'])))
+    events += get_block_events(event_markers, event_marker_timestamps)  # get the block events
+    events += add_dtn_events(event_markers, event_marker_timestamps, events)
 
-    # get the block events
-    block_ids = event_markers[eventmarker_preset["ChannelNames"].index('BlockIDStartEnd'), :]
-    block_id_timestamps = event_marker_timestamps[block_ids != 0]
-    block_ids = block_ids[block_ids != 0]
-    block_marker = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]
-    assert np.all(block_id_timestamps[::2] == event_marker_timestamps[np.logical_and(block_marker != 0, [bm in conditions.values() for bm in block_marker])])  # check the timestamps for the conditionBlockID matches that of conditionBlock conditions
-    block_marker_timestamps = block_id_timestamps[::2]
-    block_marker = block_marker[np.logical_and(block_marker != 0, [bm in conditions.values() for bm in block_marker])]  # check both non-zero (there is an event), and the marker is for a condition, i.e., not for change of metablocks
-
-    # change the DTN markers based on which block they are in
-    dtn = event_markers[eventmarker_preset["ChannelNames"].index('DTN'), :]
-    dtn_timestamps = event_marker_timestamps[dtn != 0]
-    dtn = dtn[dtn != 0]
-    dtn_conditions = np.zeros(len(dtn_timestamps))
-    for i, dtn_time in enumerate(dtn_timestamps):
-        dtn_conditions[i] = block_marker[np.argmax(block_marker_timestamps[block_marker_timestamps < dtn_time])]
-
-
-    for type, timestamp, condition in zip(dtn, dtn_timestamps, dtn_conditions):
-        if condition == conditions['RSVP']:
-
-
-        data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
-
-    for i in range(event_markers.shape[1]):
-        event, info1, info2, info3 = event_markers[:, i]
-        data_event_marker_index = (np.abs(data_timestamps - event_marker_timestamps[i])).argmin()
-
-        if str(int(event)) in session_log.keys():  # for start-of-block events
-            # print('Processing block with ID: {0}'.format(event))
-            block_num = event
-            data_event_marker_array[3][data_event_marker_index] = START_OF_BLOCK_ENCODING  # encodes start of a block
-            if first_block_start_index is None: first_block_start_index = data_event_marker_index
-            continue
-        elif event_markers[0, i - 1] != 0 and event == 0:  # this is the end of a block
-            data_event_marker_array[3][data_event_marker_index] = END_OF_BLOCK_ENCODING  # encodes start of a block
-            final_block_end_index = data_event_marker_index
-            continue
-
-        if event in item_codes:  # for item events
-            targets = session_log[str(int(block_num))]['targets']
-            distractors = session_log[str(int(block_num))]['distractors']
-            novelties = session_log[str(int(block_num))]['novelties']
-
-            if event in distractors:
-                data_event_marker_array[3][data_event_marker_index] = event_ids_dict['EventMarker']['DistractorPops']
-            elif event in targets:
-                data_event_marker_array[3][data_event_marker_index] = event_ids_dict['EventMarker']['TargetPops']
-            elif event in novelties:
-                data_event_marker_array[3][data_event_marker_index] = event_ids_dict['EventMarker']['NoveltyPops']
-            data_event_marker_array[:3, data_event_marker_index] = info1, info2, info3
-
-    # remove the data before and after the last event
-    out = np.concatenate([np.expand_dims(data_timestamps, axis=0), data_array, data_event_marker_array], axis=0)
-    out = out[:, first_block_start_index - srate * pre_first_block_time:final_block_end_index + srate * post_final_block_time]
-    return out
+    return events
 
 def extract_block_data(_data, channel_names, srate, fixations, saccades, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
     # TODO update this v3 experiment
@@ -737,5 +736,3 @@ def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, d
     # len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
     return fixations_new
 
-def get_event_marker_condition_dtn(condition, dtn):
-    if condition == conditions['RSVP']:
