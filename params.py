@@ -23,7 +23,7 @@ event_viz = 'GazeRayIntersect'
 
 
 conditions = Bidict({'RSVP': 1, 'Carousel': 2, 'VS': 3, 'TS': 4})
-dtns = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
+dtnn_types = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
 meta_blocks = Bidict({'cp': 5, 'ip': 7})
 
 base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"

@@ -3,7 +3,7 @@ import math
 import numpy as np
 from matplotlib import pyplot as plt
 from params import *
-from utils.Event import Event, add_event_meta_info, get_events_between
+from utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info
 from copy import copy
 
 
@@ -54,10 +54,11 @@ def eyetracking_data_gaze_event_detection(eyetracking_data, eyetracking_timestam
     gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy,
                                                                                gaze_timestamps=eyetracking_timestamps,
                                                                                gaze_status=gaze_status)
-    fixations, saccades = add_event_info_to_gaze(fixations, saccades, eyetracking_timestamps, events)
+    fixations, saccades = add_event_info_to_gaze(fixations, events)
+    return fixations + saccades
 
 
-def add_event_info_to_gaze(fixations, saccades, eyetracking_timestamps, events, deviation_threshold=1e-2):
+def add_event_info_to_gaze(fixations, events):
     """
     process a dataset that has gaze behavior marker and gaze marker (gaze ray intersect with object), use the gaze marker to find
     first identify the gaze marker inside a fixation,
@@ -70,33 +71,24 @@ def add_event_info_to_gaze(fixations, saccades, eyetracking_timestamps, events, 
     presumably better synchronization
     @rtype: new lists of fixations and saccades
     """
+    fix_in_block = []
+    sac_in_block = []
     for f in fixations:
-        f = add_event_meta_info(f, events)
-        stim = 'null'
+        if is_event_in_block(f, events):
+            f = add_event_meta_info(f, events)
+            f.preceding_saccade = add_event_meta_info(f, events)
+            gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
 
-        gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
+            if len(gaze_intersect_events) > 0:
+                e = gaze_intersect_events[0]  # IMPORTANT pick the first gaze event
+                f = copy_item_info(f, e)
+                f.preceding_saccade = copy_item_info(f.preceding_saccade, e)
+            else:
+                f.preceding_saccade.dtn = dtnn_types['Null']
 
-        if np.abs(data_timestamp - onset_time).min() < deviation_threshold:
-            data_onset = np.abs(data_timestamp - onset_time).argmin()
-            data_offset = np.abs(data_timestamp - offset_time).argmin()
-            gm = gaze_markers[data_onset:data_offset]
-            unique_markers = [gm[i] for i in sorted(np.unique(gm, return_index=True)[1])]  # a sorted unique list
-            if len(unique_markers) == 2 and np.max(unique_markers) == 1:
-                stim = 'distractor'
-            elif len(unique_markers) == 2 and np.max(unique_markers) == 2:
-                stim = 'target'
-            elif len(unique_markers) == 2 and np.max(unique_markers) == 3:
-                stim = 'novelty'
-            elif len(unique_markers) > 2:  # TODO
-                stim = 'mixed'
-            temp = copy(f)
-            temp.preceding_saccade.to_stim = stim
-            temp.following_saccade.from_stim = stim
-            temp.stim = stim
-            fixations_new.append(temp)
-
-    # len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
-    return fixations_new
+            fix_in_block.append(f)
+            sac_in_block.append(f.preceding_saccade)
+    return fix_in_block, sac_in_block
 
 
 def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_status=None,
@@ -190,6 +182,7 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
         events[s.onset:s.offset] = SACCADE_CODE
     for f in fixations:
         events[f.onset:f.offset] = FIXATION_CODE
+    print("Detected {} fixation from I-DT with {}% glitch percentage".format(len(fixations), glitch_precentage * 100))
     return events, fixations, saccades, velocities
 
 

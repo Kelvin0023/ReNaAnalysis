@@ -18,10 +18,11 @@ from utils.fs_utils import load_participant_session_dict, get_analysis_result_pa
 from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
-    read_file_lines_as_list, get_gaze_ray_events, get_events, rescale_merge_exg, create_gaze_behavior_events, \
-    extract_block_data
+    read_file_lines_as_list, get_gaze_ray_events, get_events, rescale_merge_exg, extract_block_data
 from params import *
 # analysis parameters ######################################################################################
+from utils.viz_utils import visualize_gaze_events
+
 """
 Parameters (in the file /params.py):
 @param is_regenerate_ica: whether to regenerate ica for the EEG data, if yes, the script calculates the ica components
@@ -108,22 +109,8 @@ if not is_loading_saved_analysis:
             # TODO add fix detect marker using both I-DT and patch similarity
 
             # # add gaze behaviors
-            I_DT_gaze_events = eyetracking_data_gaze_event_detection(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
-
-            # fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
-            #
-            # exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])
-            # data_exg_egbm = np.concatenate([data_exg_egm, exg_gb_markers])
-            #
-            # eyetracking_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_eyetracking_egm[0])
-            # data_eyetracking_egbm = np.concatenate([data_eyetracking_egm, eyetracking_gb_markers])
-            # del data_exg_egm, data_eyetracking_egm
-            #
-            # # create channels based on the event channels added
-            # exg_egbm_channles = ['LSLTimestamp'] + eeg_channel_names + [ecg_ch_name] + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
-            # exg_egbm_channle_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim'] * 3 + ['stim'] * 3
-            # eyetracking_egbm_channels = ['LSLTimestamp'] + varjoEyetracking_channelNames + info_chns + ['EventMarker'] + ['GazeRayIntersect'] + ["GazeBehavior"]
-            # eyetracking_egbm_channel_types = ['misc'] + ['misc'] * len(varjoEyetracking_channelNames) + ['stim'] * 3 + ['stim'] * 3
+            events += eyetracking_data_gaze_event_detection(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
+            visualize_gaze_events(events, 0)
 
             #########################
 

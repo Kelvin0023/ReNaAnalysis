@@ -12,7 +12,8 @@ from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
 from params import *
-from utils.Event import Event, get_closest_event, get_indices_from_transfer_timestamps, add_event_meta_info
+from utils.Event import Event, get_closest_event_before, get_indices_from_transfer_timestamps, add_event_meta_info, \
+    get_block_startend_times
 
 
 def flat2gen(alist):
@@ -255,8 +256,7 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
     rtn = []
 
     # get block infos
-    block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
-    block_end_timestamps = [e.timestamp for e in events if e.is_block_end]
+    block_start_timestamps, block_end_timestamps = get_block_startend_times(events)
     block_conditions = [e.block_condition for e in events if e.is_block_start]
     block_ids = [e.block_id for e in events if e.is_block_start]
 
@@ -291,8 +291,8 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
                 e = Event(ts, gaze_intersect=True, block_condition=block_conditions[j], block_id=block_ids[j], dtn=i_b_dtn, item_id=i_b_iid,obj_dist=i_b_obj_dist)
 
                 if block_conditions[j] == conditions['Carousel']:
-                    e.carousel_speed = get_closest_event(events, ts, 'carousel_speed', lambda x: x.dtn_onffset)
-                    e.carousel_angle = get_closest_event(events, ts, 'carousel_angle', lambda x: x.dtn_onffset)
+                    e.carousel_speed = get_closest_event_before(events, ts, 'carousel_speed', lambda x: x.dtn_onffset)
+                    e.carousel_angle = get_closest_event_before(events, ts, 'carousel_angle', lambda x: x.dtn_onffset)
                 rtn.append(e)
     return rtn
 
@@ -577,82 +577,82 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_timestamps, deviation_threshold=1e-2, null_percentage=0.025, random_seed=42):
-    """
-    create a new event array that matches the sampling rate of the data timestamps
-    the arguements event_timestamps and data_timestamps must be from the same clock
-    @rtype: ndarray: the returned event array will be of the same length as the data_timestamps, and the event values are
-    synced with the data_timestamps
-    """
-    _event_array = np.zeros(data_timestamps.shape)
-    null_fixation = []
-    for f in fixations:
-        onset_time = gaze_timestamps[f.onset]
-        if onset_time > np.max(data_timestamps):
-            break
-        if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
-            nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-            if f.stim == 'distractor':
-                _event_array[nearest_data_index] = 6  # for fixation onset on distractor
-                f.epoched = True
-            elif f.stim == 'target':
-                _event_array[nearest_data_index] = 7  # for fixation onset on targets
-                f.epoched = True
-            elif f.stim == 'novelty':
-                _event_array[nearest_data_index] = 8  # for fixation onset on novelty
-                f.epoched = True
-            elif f.stim == 'null':  # for fixation onset on nothing
-                null_fixation.append(f)
-            elif f.stim is None or f.stim == 'mixed':
-                continue  # ignore fixation with unknown type
-            else:
-                raise Exception("Unknown fixation to_stim typ: {0}, this should never happen".format(f.stim))
-
-    random.seed(random_seed)
-    for f in random.sample(null_fixation, int(null_percentage * len(null_fixation))):
-        onset_time = gaze_timestamps[f.onset]
-        if onset_time > np.max(data_timestamps):
-            break
-        if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
-            nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-            _event_array[nearest_data_index] = 9  # for fixation onset
-            f.epoched = True
-
-    null_saccades = []
-    for s in saccades:
-        onset_time = gaze_timestamps[s.onset]
-        if onset_time > np.max(data_timestamps):
-            break
-        if s.from_stim == 'null' or s.to_stim == 'null':
-            null_saccades.append(s)
-            continue
-        if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
-            nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-
-            if s.to_stim == 'distractor':
-                _event_array[nearest_data_index] = 10  # for saccade onset to distractor
-                s.epoched = True
-            elif s.to_stim == 'target':
-                _event_array[nearest_data_index] = 11  # for saccade onset to targets
-                s.epoched = True
-            elif s.to_stim == 'novelty':
-                _event_array[nearest_data_index] = 12  # for saccade onset to novelty
-                s.epoched = True
-            elif s.to_stim is None or s.to_stim == 'mixed':
-                continue  # ignore saccade with unknown type
-            else:
-                raise Exception("Unknown saccade to_stim type {0}, this should never happen".format(s.to_stim))
-
-    # select a subset of null fixation and null saccade to add
-    for s in random.sample(null_saccades, int(null_percentage * len(null_saccades))):
-        onset_time = gaze_timestamps[s.onset]
-        if onset_time > np.max(data_timestamps):
-            break
-        if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
-            nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-            _event_array[nearest_data_index] = 13  # for saccade onset
-            s.epoched = True
-    # print('Found gaze behaviors')
-    return np.expand_dims(_event_array, axis=0)
+# def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_timestamps, deviation_threshold=1e-2, null_percentage=0.025, random_seed=42):
+#     """
+#     create a new event array that matches the sampling rate of the data timestamps
+#     the arguements event_timestamps and data_timestamps must be from the same clock
+#     @rtype: ndarray: the returned event array will be of the same length as the data_timestamps, and the event values are
+#     synced with the data_timestamps
+#     """
+#     _event_array = np.zeros(data_timestamps.shape)
+#     null_fixation = []
+#     for f in fixations:
+#         onset_time = gaze_timestamps[f.onset]
+#         if onset_time > np.max(data_timestamps):
+#             break
+#         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
+#             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
+#             if f.stim == 'distractor':
+#                 _event_array[nearest_data_index] = 6  # for fixation onset on distractor
+#                 f.epoched = True
+#             elif f.stim == 'target':
+#                 _event_array[nearest_data_index] = 7  # for fixation onset on targets
+#                 f.epoched = True
+#             elif f.stim == 'novelty':
+#                 _event_array[nearest_data_index] = 8  # for fixation onset on novelty
+#                 f.epoched = True
+#             elif f.stim == 'null':  # for fixation onset on nothing
+#                 null_fixation.append(f)
+#             elif f.stim is None or f.stim == 'mixed':
+#                 continue  # ignore fixation with unknown type
+#             else:
+#                 raise Exception("Unknown fixation to_stim typ: {0}, this should never happen".format(f.stim))
+#
+#     random.seed(random_seed)
+#     for f in random.sample(null_fixation, int(null_percentage * len(null_fixation))):
+#         onset_time = gaze_timestamps[f.onset]
+#         if onset_time > np.max(data_timestamps):
+#             break
+#         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
+#             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
+#             _event_array[nearest_data_index] = 9  # for fixation onset
+#             f.epoched = True
+#
+#     null_saccades = []
+#     for s in saccades:
+#         onset_time = gaze_timestamps[s.onset]
+#         if onset_time > np.max(data_timestamps):
+#             break
+#         if s.from_stim == 'null' or s.to_stim == 'null':
+#             null_saccades.append(s)
+#             continue
+#         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
+#             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
+#
+#             if s.to_stim == 'distractor':
+#                 _event_array[nearest_data_index] = 10  # for saccade onset to distractor
+#                 s.epoched = True
+#             elif s.to_stim == 'target':
+#                 _event_array[nearest_data_index] = 11  # for saccade onset to targets
+#                 s.epoched = True
+#             elif s.to_stim == 'novelty':
+#                 _event_array[nearest_data_index] = 12  # for saccade onset to novelty
+#                 s.epoched = True
+#             elif s.to_stim is None or s.to_stim == 'mixed':
+#                 continue  # ignore saccade with unknown type
+#             else:
+#                 raise Exception("Unknown saccade to_stim type {0}, this should never happen".format(s.to_stim))
+#
+#     # select a subset of null fixation and null saccade to add
+#     for s in random.sample(null_saccades, int(null_percentage * len(null_saccades))):
+#         onset_time = gaze_timestamps[s.onset]
+#         if onset_time > np.max(data_timestamps):
+#             break
+#         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
+#             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
+#             _event_array[nearest_data_index] = 13  # for saccade onset
+#             s.epoched = True
+#     # print('Found gaze behaviors')
+#     return np.expand_dims(_event_array, axis=0)
 
 
