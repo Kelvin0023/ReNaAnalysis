@@ -2,14 +2,15 @@ import math
 
 import numpy as np
 from matplotlib import pyplot as plt
+from params import *
+from utils.Event import Event, add_event_meta_info, get_events_between
+from copy import copy
 
-SACCADE_CODE = 1
-FIXATION_CODE = 2
 
-
-class Saccade:
+class Saccade(Event):
     def __init__(self, amplitude, duration, peak_velocity, average_velocity, onset, offset, onset_time, offset_time,
-                 peak):
+                 peak, detection_alg, *args, **kwargs):
+        super().__init__(onset_time, *args, **kwargs)
         self.amplitude = amplitude
         self.duration = duration
         self.peak_velocity = peak_velocity
@@ -21,12 +22,14 @@ class Saccade:
         self.onset_time = onset_time
         self.offset_time = offset_time
         self.peak = peak
+        self.detection_alg = detection_alg
         self.epoched = False
 
 
-class Fixation:
+class Fixation(Event):
     def __init__(self, duration, dispersion, preceding_saccade, following_saccade, onset, offset, onset_time,
-                 offset_time):
+                 offset_time, detection_alg, *args, **kwargs):
+        super().__init__(onset_time, *args, **kwargs)
         self.duration = duration
         self.dispersion = dispersion
         self.stim = None  # at what stimulus is the participant fixated on
@@ -36,12 +39,64 @@ class Fixation:
         self.offset = offset
         self.onset_time = onset_time
         self.offset_time = offset_time
+        self.detection_alg = detection_alg
         self.epoched = False
 
 
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
     return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+def eyetracking_data_gaze_event_detection(eyetracking_data, eyetracking_timestamps, events):
+    varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
+    gaze_xy = eyetracking_data[[varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
+    gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
+    gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy,
+                                                                               gaze_timestamps=eyetracking_timestamps,
+                                                                               gaze_status=gaze_status)
+    fixations, saccades = add_event_info_to_gaze(fixations, saccades, eyetracking_timestamps, events)
+
+
+def add_event_info_to_gaze(fixations, saccades, eyetracking_timestamps, events, deviation_threshold=1e-2):
+    """
+    process a dataset that has gaze behavior marker and gaze marker (gaze ray intersect with object), use the gaze marker to find
+    first identify the gaze marker inside a fixation,
+    if there is an gaze marker, find what stimulus type is that gaze marker
+        then we set the preceding saccade's destination to the stimulus type
+        then we set the following saccade's origin to the stimulus type
+    if there is no gaze marker, then this fixation is not on an object
+
+    note the function can run on either exg or eyetracking, we use exg here as it has higher sampling rate and gives
+    presumably better synchronization
+    @rtype: new lists of fixations and saccades
+    """
+    for f in fixations:
+        f = add_event_meta_info(f, events)
+        stim = 'null'
+
+        gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
+
+        if np.abs(data_timestamp - onset_time).min() < deviation_threshold:
+            data_onset = np.abs(data_timestamp - onset_time).argmin()
+            data_offset = np.abs(data_timestamp - offset_time).argmin()
+            gm = gaze_markers[data_onset:data_offset]
+            unique_markers = [gm[i] for i in sorted(np.unique(gm, return_index=True)[1])]  # a sorted unique list
+            if len(unique_markers) == 2 and np.max(unique_markers) == 1:
+                stim = 'distractor'
+            elif len(unique_markers) == 2 and np.max(unique_markers) == 2:
+                stim = 'target'
+            elif len(unique_markers) == 2 and np.max(unique_markers) == 3:
+                stim = 'novelty'
+            elif len(unique_markers) > 2:  # TODO
+                stim = 'mixed'
+            temp = copy(f)
+            temp.preceding_saccade.to_stim = stim
+            temp.following_saccade.from_stim = stim
+            temp.stim = stim
+            fixations_new.append(temp)
+
+    # len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
+    return fixations_new
 
 
 def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_status=None,
@@ -113,7 +168,7 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
         if velocities[peak] > saccade_min_peak and amplitude > saccade_min_amplitude:
             saccades.append(
                 Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset, gaze_timestamps[onset],
-                        gaze_timestamps[offset], peak))
+                        gaze_timestamps[offset], peak, detection_alg='I-DT'))
 
     # identify the fixations for all the intervals between saccades
     fixation_inteval_indices = [(saccades[i - 1].offset, saccades[i].onset) for i in
@@ -127,36 +182,8 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
             dispersion = np.max(_xy_deg, axis=1) - np.min(_xy_deg, axis=1)
             fixations.append(
                 Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset, gaze_timestamps[onset],
-                         gaze_timestamps[offset]))
-    # start = 800
-    # end = 1200
-    # plt.rcParams["figure.figsize"] = (20, 10)
-    # a = [s for s in saccades if s[0] > start and s[2] < end]
-    # plt.plot(gaze_timestamps[start:end], velocities[start:end])
-    # for s in a:
-    #     plt.axvspan(gaze_timestamps[s[0]], gaze_timestamps[s[2]], alpha = 0.5, color='r')
-    # plt.xlabel('Time (sec)')
-    # plt.ylabel('Velocity (deg/sec)')
-    # plt.show()
-    #
-    # start = 800
-    # end = 1200
-    # plt.rcParams["figure.figsize"] = (20, 10)
-    # a = [s for s in saccades if s[0] > start and s[2] < end]
-    # b = [f for f in fixation_inteval_indices if f[0] > start and f[1] < end]
-    # plt.plot(gaze_timestamps[start:end], velocities[start:end])
-    # for s in a:
-    #     plt.axvspan(gaze_timestamps[s[0]], gaze_timestamps[s[2]], alpha = 0.5, color='r')
-    # for f in b:
-    #     plt.axvspan(gaze_timestamps[f[0]], gaze_timestamps[f[1]], alpha = 0.5, color='g')
-    # plt.xlabel('Time (sec)')
-    # plt.ylabel('Velocity (deg/sec)')
-    # plt.show()
+                         gaze_timestamps[offset], detection_alg='I-DT'))
 
-    # plt.hist([s[3].amplitude for s in saccades])
-    # plt.show()
-    # plt.hist([s[3].amplitude for s in saccades])
-    # plt.show()
     glitch_precentage = np.sum(events == -1) / len(events)
 
     for s in saccades:

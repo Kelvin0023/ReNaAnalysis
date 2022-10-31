@@ -12,7 +12,7 @@ from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
 from params import *
-from utils.Event import Event, get_closest_event, get_indices_from_transfer_timestamps
+from utils.Event import Event, get_closest_event, get_indices_from_transfer_timestamps, add_event_meta_info
 
 
 def flat2gen(alist):
@@ -123,13 +123,9 @@ def get_dtn_events(event_markers, event_marker_timestamps, block_events):
     dtn = dtn[dtn != 0]
 
     for i, dtn_time in enumerate(dtn_timestamps):
-        condition = get_closest_event(block_events, dtn_time, 'block_condition', event_filter=lambda e: e.is_block_start)   # must be a block start event
-        is_practice = get_closest_event(block_events, dtn_time, 'is_practice', event_filter=lambda e: e.is_block_start)  # must be a block start event
-        block_id = get_closest_event(block_events, dtn_time, 'block_id', event_filter=lambda e: e.is_block_start)  # must be a block start event
-        e = Event(dtn_time, block_id=block_id, block_condition=condition, dtn=abs(dtn[i]), block_is_practice=is_practice, item_id=item_ids[i],
-                            obj_dist=obj_dists[i])
-
-        if condition == conditions['Carousel']:
+        e = Event(dtn_time, dtn=abs(dtn[i]), item_id=item_ids[i], obj_dist=obj_dists[i])
+        e = add_event_meta_info(e, block_events)
+        if e.condition == conditions['Carousel']:
             e.carousel_speed, e.carousel_angle = carousel_speed[i], carousel_angle[i]
 
         e.dtn_onffset = dtn[i] > 0
@@ -158,7 +154,7 @@ def get_events(event_markers, event_marker_timestamps, item_markers, item_marker
 
     events += get_block_events(event_markers, event_marker_timestamps)  # get the block events
     events += get_dtn_events(event_markers, event_marker_timestamps, events)  # dtn events needs the block events to know the conditions
-    events += get_gaze_ray_events(item_markers, item_marker_timestamps, event_markers, event_marker_timestamps, events)  # dtn events needs the block events to know the conditions
+    events += get_gaze_ray_events(item_markers, item_marker_timestamps, events)  # dtn events needs the block events to know the conditions
 
     # add gaze related events
     return events
@@ -238,7 +234,7 @@ def add_design_matrix_to_data(data_array, event_marker_index, srate, erp_window,
     return np.concatenate([data_array, design_matrix], axis=0), design_matrix, design_matrix_channel_names
 
 
-def get_gaze_ray_events(item_markers, item_marker_timestamps, event_markers, event_marker_timestamps, events, foveate_duration_threshold=FIXATION_MINIMAL_TIME):
+def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
     """
     the item marker has the gaze events for each object. Its channel represent different objects in each block
     @param item_markers:
@@ -297,11 +293,8 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, event_markers, eve
                 if block_conditions[j] == conditions['Carousel']:
                     e.carousel_speed = get_closest_event(events, ts, 'carousel_speed', lambda x: x.dtn_onffset)
                     e.carousel_angle = get_closest_event(events, ts, 'carousel_angle', lambda x: x.dtn_onffset)
-                events.append(e)
-
-
-    plt.plot(b_item_timestamps, b_gaze_ray_inter[1])
-
+                rtn.append(e)
+    return rtn
 
 
 def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, tmax, event_ids_dict, erp_window=(.0, .8), srate=200,
@@ -662,46 +655,4 @@ def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_times
     # print('Found gaze behaviors')
     return np.expand_dims(_event_array, axis=0)
 
-def find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_egm, deviation_threshold=1e-2):
-    """
-    process a dataset that has gaze behavior marker and gaze marker (gaze ray intersect with object), use the gaze marker to find
-    first identify the gaze marker inside a fixation,
-    if there is an gaze marker, find what stimulus type is that gaze marker
-        then we set the preceding saccade's destination to the stimulus type
-        then we set the following saccade's origin to the stimulus type
-    if there is no gaze marker, then this fixation is not on an object
-
-    note the function can run on either exg or eyetracking, we use exg here as it has higher sampling rate and gives
-    presumably better synchronization
-    @rtype: new lists of fixations and saccades
-    """
-    gaze_markers = data_egm[-1]
-    data_timestamp = data_egm[0]
-    fixations_new = []
-    for f in fixations:
-        # onset = f.preceding_saccade.onset
-        onset_time = eyetracking_timestamps[f.onset]
-        offset_time = eyetracking_timestamps[f.offset]
-        stim = 'null'
-        if np.abs(data_timestamp - onset_time).min() < deviation_threshold:
-            data_onset = np.abs(data_timestamp - onset_time).argmin()
-            data_offset = np.abs(data_timestamp - offset_time).argmin()
-            gm = gaze_markers[data_onset:data_offset]
-            unique_markers = [gm[i] for i in sorted(np.unique(gm, return_index=True)[1])]  # a sorted unique list
-            if len(unique_markers) == 2 and np.max(unique_markers) == 1:
-                stim = 'distractor'
-            elif len(unique_markers) == 2 and np.max(unique_markers) == 2:
-                stim = 'target'
-            elif len(unique_markers) == 2 and np.max(unique_markers) == 3:
-                stim = 'novelty'
-            elif len(unique_markers) > 2:  # TODO
-                stim = 'mixed'
-            temp = copy(f)
-            temp.preceding_saccade.to_stim = stim
-            temp.following_saccade.from_stim = stim
-            temp.stim = stim
-            fixations_new.append(temp)
-
-    # len([f for f in fixations_new if f.stim == 'target']) / len(fixations_new)
-    return fixations_new
 

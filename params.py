@@ -23,11 +23,12 @@ event_viz = 'GazeRayIntersect'
 
 
 conditions = Bidict({'RSVP': 1, 'Carousel': 2, 'VS': 3, 'TS': 4})
+dtns = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
 meta_blocks = Bidict({'cp': 5, 'ip': 7})
 
-# base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
+base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
-base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 eventmarker_preset_path = 'presets/ReNaEventMarker.json'
@@ -80,3 +81,6 @@ RSVP-pop:
 # events = Bidict(dict([(e, i) for i, e in enumerate(events)]))
 
 item_marker_names = ['itemDTNType', 'ItemIndexInBlock', 'itemID', 'foveateAngle', 'isInFrustum', 'isGazeRayIntersected', 'distFromPlayer', 'transform.rotation.x', 'transform.rotation.y', 'transform.rotation.z']
+
+SACCADE_CODE = 1
+FIXATION_CODE = 2

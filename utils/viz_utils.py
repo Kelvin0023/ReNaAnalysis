@@ -77,3 +77,35 @@ def visualize_gazeray(events, block_id=None):
     plt.show()
 
 
+def visualize_gaze_events(event, block_id=None):
+    pass
+    # start = 800
+    # end = 1200
+    # plt.rcParams["figure.figsize"] = (20, 10)
+    # a = [s for s in saccades if s[0] > start and s[2] < end]
+    # plt.plot(gaze_timestamps[start:end], velocities[start:end])
+    # for s in a:
+    #     plt.axvspan(gaze_timestamps[s[0]], gaze_timestamps[s[2]], alpha = 0.5, color='r')
+    # plt.xlabel('Time (sec)')
+    # plt.ylabel('Velocity (deg/sec)')
+    # plt.show()
+    #
+    # start = 800
+    # end = 1200
+    # plt.rcParams["figure.figsize"] = (20, 10)
+    # a = [s for s in saccades if s[0] > start and s[2] < end]
+    # b = [f for f in fixation_inteval_indices if f[0] > start and f[1] < end]
+    # plt.plot(gaze_timestamps[start:end], velocities[start:end])
+    # for s in a:
+    #     plt.axvspan(gaze_timestamps[s[0]], gaze_timestamps[s[2]], alpha = 0.5, color='r')
+    # for f in b:
+    #     plt.axvspan(gaze_timestamps[f[0]], gaze_timestamps[f[1]], alpha = 0.5, color='g')
+    # plt.xlabel('Time (sec)')
+    # plt.ylabel('Velocity (deg/sec)')
+    # plt.show()
+
+    # plt.hist([s[3].amplitude for s in saccades])
+    # plt.show()
+    # plt.hist([s[3].amplitude for s in saccades])
+    # plt.show()
+#    plt.plot(b_item_timestamps, b_gaze_ray_inter[1])

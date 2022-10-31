@@ -27,6 +27,22 @@ class Event:
         self.is_practice = kwargs['is_practice'] if 'is_practice' in kwargs.keys() else None
 
 
+def add_event_meta_info(event, events):
+    """
+    return the meta event info from events for a specific event, including its condition, is or is not practice and block ID
+    :param event:
+    :param events:
+    :return:
+    """
+    event.condition = get_closest_event(events, event.timestamp, 'block_condition',
+                                  event_filter=lambda e: e.is_block_start)  # must be a block start event
+    event.is_practice = get_closest_event(events, event.timestamp, 'is_practice',
+                                    event_filter=lambda e: e.is_block_start)  # must be a block start event
+    event.block_id = get_closest_event(events, event.timestamp, 'block_id',
+                                 event_filter=lambda e: e.is_block_start)  # must be a block start event
+    return event
+
+
 def get_closest_event(events, timestamp, attribute, event_filter: callable):
     filter_events = np.array([e for e in events if event_filter(e)])
     events_timestamps = np.array([e.timestamp for e in filter_events])
@@ -34,8 +50,16 @@ def get_closest_event(events, timestamp, attribute, event_filter: callable):
     closest_event: Event = filter_events[np.argmax(events_timestamps[events_timestamps < timestamp])]
     return closest_event.__getattribute__(attribute)
 
+def get_events_between(start_time, end_time, events, event_filter: callable):
+    filter_events = np.array([e for e in events if event_filter(e)])
+    events_timestamps = np.array([e.timestamp for e in filter_events])
+
+    rtn_events = filter_events[np.logical_and(events_timestamps > start_time, events_timestamps < end_time)]
+    return rtn_events
+
 def add_event_to_data(data_array, data_timestamp, event_filter: callable):
-    pass
+    events = np.zeros(data_timestamp.shape)
+    # TODO
 
 def get_indices_from_transfer_timestamps(target_timestamps, source_timestamps):
     """

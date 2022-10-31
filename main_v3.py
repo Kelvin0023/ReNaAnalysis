@@ -12,14 +12,14 @@ import numpy as np
 import mne
 
 from eye.EyeUtils import temporal_filter_fixation
-from eye.eyetracking import gaze_event_detection
+from eye.eyetracking import gaze_event_detection, eyetracking_data_gaze_event_detection
 from utils.data_utils import get_exg_data
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
 from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, get_gaze_ray_events, get_events, rescale_merge_exg, create_gaze_behavior_events, \
-    extract_block_data, find_fixation_saccade_targets
+    extract_block_data
 from params import *
 # analysis parameters ######################################################################################
 """
@@ -77,6 +77,7 @@ participant_condition_block_dict = defaultdict(dict)
 condition_gaze_statistics = defaultdict(lambda: defaultdict(list))
 condition_gaze_behaviors = defaultdict(lambda: defaultdict(list))
 
+
 # preload all the .dats or .p
 if not is_loading_saved_analysis:
 
@@ -94,13 +95,10 @@ if not is_loading_saved_analysis:
 
             # markers
             event_markers_timestamps = data['Unity.ReNa.EventMarkers'][1]
+            event_markers = data['Unity.ReNa.EventMarkers'][0]
+
             item_markers = data['Unity.ReNa.ItemMarkers'][0]
             item_marker_timestamps = data['Unity.ReNa.ItemMarkers'][1]
-
-            # data
-            varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
-
-            event_markers = data['Unity.ReNa.EventMarkers'][0]
 
             data_dict = {'eyetracking': {'data_array':data['Unity.VarjoEyeTrackingComplete'][0], 'data_timestamps':data['Unity.VarjoEyeTrackingComplete'][1], 'srate': eyetracking_srate},
                          'exg': {'data_array':get_exg_data(data), 'data_timestamps':data['BioSemi'][1], 'srate': exg_srate},
@@ -110,11 +108,8 @@ if not is_loading_saved_analysis:
             # TODO add fix detect marker using both I-DT and patch similarity
 
             # # add gaze behaviors
-            # gaze_xy = eyetracking_data[
-            #     [varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
-            # gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
-            # gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy, gaze_timestamps=eyetracking_timestamps, gaze_status=gaze_status)
-            #
+            I_DT_gaze_events = eyetracking_data_gaze_event_detection(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
+
             # fixations = find_fixation_saccade_targets(fixations, saccades, eyetracking_timestamps, data_exg_egm)
             #
             # exg_gb_markers = create_gaze_behavior_events(fixations, saccades, eyetracking_timestamps, data_exg_egm[0])
