@@ -96,23 +96,15 @@ if not is_loading_saved_analysis:
             item_codes = list(item_catalog.values())
 
             # markers
-            event_markers_timestamps = data['Unity.ReNa.EventMarkers'][1]
-            event_markers = data['Unity.ReNa.EventMarkers'][0]
-
-            item_markers = data['Unity.ReNa.ItemMarkers'][0]
-            item_marker_timestamps = data['Unity.ReNa.ItemMarkers'][1]
-
-            events = get_item_events(event_markers, event_markers_timestamps, item_markers, item_marker_timestamps)
+            events = get_item_events(data['Unity.ReNa.EventMarkers'][0], data['Unity.ReNa.EventMarkers'][1], data['Unity.ReNa.ItemMarkers'][0], data['Unity.ReNa.ItemMarkers'][1])
 
             # add gaze behaviors from I-DT
             events += gaze_event_detection_I_DT(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
             # add gaze behaviors from patch sim
-            events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
+            # events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
 
-            visualize_gaze_events(events, 6)
-
-            #########################
+            visualize_gaze_events(events, 2)
 
             # generate the epochs
             _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,

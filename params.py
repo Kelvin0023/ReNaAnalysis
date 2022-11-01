@@ -30,7 +30,7 @@ meta_blocks = Bidict({'cp': 5, 'ip': 7})
 base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-data_directory = "Subjects"
+data_directory = "Subjects-Test"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 eventmarker_preset_path = 'presets/ReNaEventMarker.json'
 # load presets
