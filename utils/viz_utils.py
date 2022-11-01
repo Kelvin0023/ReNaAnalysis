@@ -28,27 +28,25 @@ def visualiza_session(events):
     plt.title('Session Conditions')
     plt.show()
 
-def visualize_dtn(events):
+def visualize_dtn(events, block_id):
     plt.rcParams["figure.figsize"] = [40, 5]
 
-    meta_block_timestamps = [e.timestamp for e in events if e.meta_block]
-    meta_blocks = [e.meta_block for e in events if e.meta_block]
-
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
-    block_conditions = [e.block_condition for e in events if e.is_block_start]
+    block_conditions = np.array([e.block_condition for e in events if e.is_block_start])
 
-    dtn_timestamps = [e.timestamp for e in events if e.dtn and e.dtn_onffset]
-    dtns = [e.dtn for e in events if e.dtn and e.dtn_onffset]
+    plt.stem(block_start_timestamps, block_conditions, label='block start conditions')
 
-    (markers, stemlines, baseline) = plt.stem(block_start_timestamps, block_conditions, label='block start conditions')
-    (markers, stemlines, baseline) = plt.stem(dtn_timestamps, dtns, linefmt='orange', markerfmt='D', label='Distractor/Target/Novelty')
-    plt.setp(markers, marker='D', markersize=2, markeredgecolor="orange", markeredgewidth=2)
+    if block_id:
+        block_start_timestamp = [e.timestamp for e in events if e.is_block_start and e.block_id==block_id][0]
+        block_end_timestamp = [e.timestamp for e in events if e.is_block_end and e.block_id==block_id][0]
 
-    (markers, stemlines, baseline) = plt.stem(meta_block_timestamps, meta_blocks, linefmt='cyan', markerfmt='D', label='meta blocks')
-    plt.setp(markers, marker='D', markersize=2, markeredgecolor="cyan", markeredgewidth=2)
-
+        # also plot the dtns
+        dtn_onsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset and e.block_id==block_id])
+        dtn_offsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset == False and e.block_id==block_id])
+        dtn_type = np.array([e.dtn for e in events if e.block_id==block_id])
+        [plt.axvspan(onset, offset, alpha=0.5, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
+        plt.xlim(block_start_timestamp, block_end_timestamp)
     plt.legend()
-    plt.title('Session DTN')
     plt.show()
 
 
@@ -99,7 +97,7 @@ def visualize_gaze_events(events, block_id=None):
 
         dtn_onsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset and e.block_id==block_id])
         dtn_offsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset == False and e.block_id==block_id])
-        dtn_type = np.array([e.dtn for e in events if e.block_id==block_id])
+        dtn_type = np.array([e.dtn for e in events if e.block_id == block_id])
         [plt.axvspan(onset, offset, alpha=0.5, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
 
         detected_fixations = get_events_between(block_start_timestamp, block_end_timestamp, events, lambda x: type(x) == Fixation)

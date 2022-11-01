@@ -110,7 +110,7 @@ if not is_loading_saved_analysis:
 
             # # add gaze behaviors
             events += eyetracking_data_gaze_event_detection(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
-            visualize_gaze_events(events, 0)
+            visualize_gaze_events(events, 6)
 
             #########################
 

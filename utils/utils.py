@@ -265,6 +265,9 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
 
     block_item_markers = [(item_markers[:, start:end], item_marker_timestamps[start:end])for start, end in zip(item_block_start_idx, item_block_end_idx)]
     for j, (b_item_markers, b_item_timestamps) in enumerate(block_item_markers):
+        # if j == 4:
+        #     print("this is the end of the practice rounds")
+
         b_gazeray = b_item_markers[item_marker_names.index('isGazeRayIntersected')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
         b_itemids = b_item_markers[item_marker_names.index('itemID')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
         b_dtns = b_item_markers[item_marker_names.index('itemDTNType')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
@@ -275,20 +278,29 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
 
         for i_b_gr, i_b_iid, i_b_dtn, i_b_obj_dist in zip(b_gazeray, b_itemids, b_dtns, b_obj_dist):
             if np.any(i_b_gr != 0):
-                ts = b_item_timestamps[i_b_gr != 0][0]
+
+                ts = b_item_timestamps[i_b_gr != 0][0]  # take the first timestamp where gaze ray intersects
+
+                # if debug and j >= 5:
+                #     temp = np.unique(i_b_dtn)[np.unique(i_b_dtn) != 0][0]
+                #     print("Gaze ray intersect item DTN is {}, preceding event marker is {}".format(temp, event_marker_dtn))
+                #     if temp != event_marker_dtn:
+                #         print('hi')
+
                 i_b_obj_dist = i_b_obj_dist[i_b_gr!=0][0]
 
                 i_b_iid = i_b_iid[i_b_gr != 0]
                 i_b_dtn = i_b_dtn[i_b_gr != 0]
                 assert np.all(i_b_iid == i_b_iid)
-                assert np.all(i_b_dtn == i_b_dtn)
                 i_b_iid = i_b_iid[0]
-                i_b_dtn = i_b_dtn[0]
+
+                i_b_dtn = np.unique(i_b_dtn)[np.unique(i_b_dtn) != 0][0]
 
                 # i_b_gr = i_b_gr[i_b_gr!=0][0]
 
+
                 # TODO only keep the first gaze ray event for now, not taking diff because gaze ray intersect is too discrete
-                e = Event(ts, gaze_intersect=True, block_condition=block_conditions[j], block_id=block_ids[j], dtn=i_b_dtn, item_id=i_b_iid,obj_dist=i_b_obj_dist)
+                e = Event(ts, gaze_intersect=True, block_condition=block_conditions[j], block_id=block_ids[j], dtn=i_b_dtn, item_id=i_b_iid + 1,obj_dist=i_b_obj_dist)
 
                 if block_conditions[j] == conditions['Carousel']:
                     e.carousel_speed = get_closest_event_before(events, ts, 'carousel_speed', lambda x: x.dtn_onffset)

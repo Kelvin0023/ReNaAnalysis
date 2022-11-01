@@ -26,9 +26,9 @@ conditions = Bidict({'RSVP': 1, 'Carousel': 2, 'VS': 3, 'TS': 4})
 dtnn_types = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
 meta_blocks = Bidict({'cp': 5, 'ip': 7})
 
-base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
+# base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
-# base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 eventmarker_preset_path = 'presets/ReNaEventMarker.json'
@@ -84,3 +84,5 @@ item_marker_names = ['itemDTNType', 'ItemIndexInBlock', 'itemID', 'foveateAngle'
 
 SACCADE_CODE = 1
 FIXATION_CODE = 2
+
+debug = True
