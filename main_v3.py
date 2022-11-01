@@ -12,13 +12,13 @@ import numpy as np
 import mne
 
 from eye.EyeUtils import temporal_filter_fixation
-from eye.eyetracking import gaze_event_detection, eyetracking_data_gaze_event_detection
+from eye.eyetracking import gaze_event_detection, gaze_event_detection_I_DT, gaze_event_detection_PatchSim
 from utils.data_utils import get_exg_data
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
 from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
-    read_file_lines_as_list, get_gaze_ray_events, get_events, rescale_merge_exg, extract_block_data
+    read_file_lines_as_list, get_gaze_ray_events, get_item_events, rescale_merge_exg, extract_block_data
 from params import *
 # analysis parameters ######################################################################################
 from utils.viz_utils import visualize_gaze_events
@@ -80,6 +80,7 @@ condition_gaze_behaviors = defaultdict(lambda: defaultdict(list))
 
 
 # preload all the .dats or .p
+
 if not is_loading_saved_analysis:
 
     participant_session_file_path_dict = load_participant_session_dict(participant_session_file_path_dict, preloaded_dats_path)
@@ -101,15 +102,14 @@ if not is_loading_saved_analysis:
             item_markers = data['Unity.ReNa.ItemMarkers'][0]
             item_marker_timestamps = data['Unity.ReNa.ItemMarkers'][1]
 
-            data_dict = {'eyetracking': {'data_array':data['Unity.VarjoEyeTrackingComplete'][0], 'data_timestamps':data['Unity.VarjoEyeTrackingComplete'][1], 'srate': eyetracking_srate},
-                         'exg': {'data_array':get_exg_data(data), 'data_timestamps':data['BioSemi'][1], 'srate': exg_srate},
-                         'eyetracking': {'data_array': temporal_filter_fixation(data['FixationDetection'][0][1], marker_mode='event'), 'data_timestamps':data['FixationDetection'][1], 'srate': 30},}
-            events = get_events(event_markers, event_markers_timestamps, item_markers, item_marker_timestamps)
+            events = get_item_events(event_markers, event_markers_timestamps, item_markers, item_marker_timestamps)
 
-            # TODO add fix detect marker using both I-DT and patch similarity
+            # add gaze behaviors from I-DT
+            events += gaze_event_detection_I_DT(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
+            # add gaze behaviors from patch sim
+            events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
-            # # add gaze behaviors
-            events += eyetracking_data_gaze_event_detection(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
+
             visualize_gaze_events(events, 6)
 
             #########################

@@ -15,7 +15,7 @@ from utils.fs_utils import load_participant_session_dict
 from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
-    read_file_lines_as_list, get_gaze_ray_events, get_events, rescale_merge_exg, create_gaze_behavior_events, \
+    read_file_lines_as_list, get_gaze_ray_events, get_item_events, rescale_merge_exg, create_gaze_behavior_events, \
     extract_block_data, find_fixation_saccade_targets
 
 # analysis parameters ######################################################################################
@@ -183,16 +183,16 @@ if not is_epochs_preloaded:
 
                 # identify the events and add event array to the data array for both eyetracking and exg
                 # add events
-                data_eyetracking_em = get_events(event_markers,
-                                                 event_markers_timestamps,
-                                                 eyetracking_data,
-                                                 eyetracking_timestamps, session_log,
-                                                 item_codes, eyetracking_srate)
-                data_exg_em = get_events(event_markers,
-                                         event_markers_timestamps,
-                                         exg_data,
-                                         exg_timestamps, session_log,
-                                         item_codes, exg_srate)
+                data_eyetracking_em = get_item_events(event_markers,
+                                                      event_markers_timestamps,
+                                                      eyetracking_data,
+                                                      eyetracking_timestamps, session_log,
+                                                      item_codes, eyetracking_srate)
+                data_exg_em = get_item_events(event_markers,
+                                              event_markers_timestamps,
+                                              exg_data,
+                                              exg_timestamps, session_log,
+                                              item_codes, exg_srate)
 
                 # add gaze events
                 data_eyetracking_egm, fixation_durations, normalized_fixation_count = get_gaze_ray_events(

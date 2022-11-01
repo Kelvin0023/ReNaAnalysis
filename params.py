@@ -18,17 +18,18 @@ color_dict = {
               'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'orange', 'FixationNull': 'grey',
               'Saccade2Distractor': 'blue', 'Saccade2Target': 'red', 'Saccade2Novelty': 'orange', 'Saccade2Null': 'yellow'}
 
+dtn_color_dict = {1: 'blue', 2: 'red', 3: 'orange', 4: 'grey'}
 
 event_viz = 'GazeRayIntersect'
 
 
-conditions = Bidict({'RSVP': 1, 'Carousel': 2, 'VS': 3, 'TS': 4})
+conditions = Bidict({'RSVP': 1., 'Carousel': 2., 'VS': 3., 'TS': 4.})
 dtnn_types = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
 meta_blocks = Bidict({'cp': 5, 'ip': 7})
 
-# base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
+base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
-base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 eventmarker_preset_path = 'presets/ReNaEventMarker.json'

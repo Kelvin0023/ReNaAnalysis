@@ -2,6 +2,8 @@ import math
 
 import numpy as np
 from matplotlib import pyplot as plt
+
+from eye.EyeUtils import temporal_filter_fixation
 from params import *
 from utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info
 from copy import copy
@@ -47,7 +49,7 @@ def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
-def eyetracking_data_gaze_event_detection(eyetracking_data, eyetracking_timestamps, events):
+def gaze_event_detection_I_DT(eyetracking_data, eyetracking_timestamps, events):
     varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
     gaze_xy = eyetracking_data[[varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
     gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
@@ -217,3 +219,24 @@ def plot_gaze_events_overlay(start_time, end_time, gaze_timestamps, saccades, fi
     plt.ylabel('Velocity (deg/sec)')
     plt.legend()
     plt.show()
+
+
+def gaze_event_detection_PatchSim(ps_fixation_detection_data, ps_fixation_detection_timestamps, events):
+    fix_list_filtered = temporal_filter_fixation(ps_fixation_detection_data[1], marker_mode='marker', verbose=0)
+
+    onset_timestamps = ps_fixation_detection_timestamps[fix_list_filtered == 1]
+    offet_timestamps = ps_fixation_detection_timestamps[fix_list_filtered == 2]
+
+    fixation_events = []
+    for onset_ts, offset_ts in zip(onset_timestamps, offet_timestamps):
+        f = Fixation(offset_ts - onset_ts, None, None, None, None, None, onset_ts, offset_ts, "Patch-Sim")
+        gaze_intersect_events = get_events_between(onset_ts, offset_ts, events, event_filter=lambda x: x.gaze_intersect is not None)
+        if len(gaze_intersect_events) > 0:
+            e = gaze_intersect_events[0]  # IMPORTANT pick the first gaze event
+            f = copy_item_info(f, e)
+        else:
+            f.dtn = dtnn_types['Null']
+        fixation_events.append(f)
+    print('Detected {} fixations from Patch similarity based fixation detection'.format(
+        int(np.sum(fix_list_filtered[fix_list_filtered == 1]))))
+    return fixation_events

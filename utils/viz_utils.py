@@ -2,8 +2,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from eye.eyetracking import Fixation, Saccade
-from utils.Event import get_events_between
-
+from utils.Event import get_events_between, get_block_start_event
+from params import *
 
 def visualiza_session(events):
     plt.rcParams["figure.figsize"] = [40, 3.5]
@@ -78,18 +78,17 @@ def visualize_gazeray(events, block_id=None):
     plt.show()
 
 
-def visualize_gaze_events(events, block_id=None):
-    plt.rcParams["figure.figsize"] = [40, 5]
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=0.2, pathSim_fix_y = 0.3):
+    f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
     block_conditions = np.array([e.block_condition for e in events if e.is_block_start])
     gaze_intersects_dtn_timestamps = np.array([e.timestamp for e in events if e.gaze_intersect])
     gaze_intersects_dtn = np.array([e.dtn for e in events if e.gaze_intersect])
 
-    (markers, stemlines, baseline) = plt.stem(block_start_timestamps, block_conditions, label='block start conditions')
+    (markers, stemlines, baseline) = ax.stem(block_start_timestamps, block_conditions, label='block start conditions')
 
-    (markers, stemlines, baseline) = plt.stem(gaze_intersects_dtn_timestamps, gaze_intersects_dtn, label='gaze intersect DTN')
-    plt.setp(markers, marker='D', markersize=2, markeredgecolor="orange", markeredgewidth=2)
+    ax.scatter(gaze_intersects_dtn_timestamps, len(gaze_intersects_dtn_timestamps) * [gaze_intersect_y], marker='D', c=[dtn_color_dict[x] for x in gaze_intersects_dtn], label='gaze intersect DTN')
 
     if block_id:
         block_start_timestamp = [e.timestamp for e in events if e.is_block_start and e.block_id==block_id][0]
@@ -98,18 +97,21 @@ def visualize_gaze_events(events, block_id=None):
         dtn_onsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset and e.block_id==block_id])
         dtn_offsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset == False and e.block_id==block_id])
         dtn_type = np.array([e.dtn for e in events if e.block_id == block_id])
-        [plt.axvspan(onset, offset, alpha=0.5, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
+        [plt.axvspan(onset, offset, alpha=0.25, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
 
-        detected_fixations = get_events_between(block_start_timestamp, block_end_timestamp, events, lambda x: type(x) == Fixation)
-        fix_onset_times = [e.onset_time for e in detected_fixations]
-        fix_offset_times = [e.offset_time for e in detected_fixations]
+        draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
+        draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'Patch-Sim' and block_start_timestamp < x.timestamp < block_end_timestamp, pathSim_fix_y)
 
-        (markers, stemlines, baseline) = plt.stem(fix_onset_times, len(fix_offset_times) * [.5], label='fixation onsets')
-        plt.setp(markers, marker='o', markersize=2, markeredgecolor="cyan", markeredgewidth=4)
-        (markers, stemlines, baseline) = plt.stem(fix_offset_times, len(fix_offset_times) * [.5], label='fixation offsets')
-        plt.setp(markers, marker='x', markersize=2, markeredgecolor="magenta", markeredgewidth=2)
-
-        plt.xlim(block_start_timestamp, block_end_timestamp)
-
-    plt.legend()
+        ax.set_xlim(block_start_timestamp, block_end_timestamp)
+        ax.set_title("Block ID {}, condition {}".format(block_id, get_block_start_event(block_id, events).block_condition))
+    ax.legend()
     plt.show()
+
+
+def draw_fixations(ax, events, event_filter, fix_y):
+    filtered_events = [e for e in events if event_filter(e)]
+    fix_onset_times = [e.onset_time for e in filtered_events]
+    fix_offset_times = [e.offset_time for e in filtered_events]
+    fix_dtn = [e.dtn for e in filtered_events]
+    for f_onset_ts, f_offset_ts, f_dtn in zip(fix_onset_times, fix_offset_times, fix_dtn):
+        ax.hlines(y=fix_y, xmin=f_onset_ts, xmax=f_offset_ts, linewidth=4, colors=dtn_color_dict[f_dtn])

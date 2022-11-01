@@ -12,7 +12,7 @@ from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
 from params import *
-from utils.Event import Event, get_closest_event_before, get_indices_from_transfer_timestamps, add_event_meta_info, \
+from utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, add_event_meta_info, \
     get_block_startend_times
 
 
@@ -134,7 +134,7 @@ def get_dtn_events(event_markers, event_marker_timestamps, block_events):
         events.append(e)
     return events
 
-def get_events(event_markers, event_marker_timestamps, item_markers, item_marker_timestamps):
+def get_item_events(event_markers, event_marker_timestamps, item_markers, item_marker_timestamps):
     """
     add LSL timestamps, event markers based on the session log to the data array
     also discard data that falls other side the first and the last block
@@ -159,6 +159,7 @@ def get_events(event_markers, event_marker_timestamps, item_markers, item_marker
 
     # add gaze related events
     return events
+
 
 def extract_block_data(_data, channel_names, srate, fixations, saccades, pre_block_time=.5, post_block_time=.5):  # event markers is the third last row
     # TODO update this v3 experiment
@@ -303,8 +304,8 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
                 e = Event(ts, gaze_intersect=True, block_condition=block_conditions[j], block_id=block_ids[j], dtn=i_b_dtn, item_id=i_b_iid + 1,obj_dist=i_b_obj_dist)
 
                 if block_conditions[j] == conditions['Carousel']:
-                    e.carousel_speed = get_closest_event_before(events, ts, 'carousel_speed', lambda x: x.dtn_onffset)
-                    e.carousel_angle = get_closest_event_before(events, ts, 'carousel_angle', lambda x: x.dtn_onffset)
+                    e.carousel_speed = get_closest_event_attribute_before(events, ts, 'carousel_speed', lambda x: x.dtn_onffset)
+                    e.carousel_angle = get_closest_event_attribute_before(events, ts, 'carousel_angle', lambda x: x.dtn_onffset)
                 rtn.append(e)
     return rtn
 
