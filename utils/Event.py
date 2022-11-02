@@ -17,7 +17,7 @@ class Event:
 
         # distractor, target, novelty or null
         self.dtn = kwargs['dtn'] if 'dtn' in kwargs.keys() else None
-        self.dtn_onffset = kwargs['dtn_onffset'] if 'dtn_onffset' in kwargs.keys() else None
+        self.dtn_onffset = kwargs['dtn_onffset'] if 'dtn_onffset' in kwargs.keys() else None  # only event marker will have this field
 
         # object related markers
         self.item_id = kwargs['item_id'] if 'itemID' in kwargs.keys() else None

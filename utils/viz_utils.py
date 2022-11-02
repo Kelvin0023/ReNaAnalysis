@@ -78,7 +78,7 @@ def visualize_gazeray(events, block_id=None):
     plt.show()
 
 
-def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=0.2, pathSim_fix_y = 0.3):
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, pathSim_fix_y = 1):
     f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -96,7 +96,7 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
 
         dtn_onsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset and e.block_id==block_id])
         dtn_offsets_ts = np.array([e.timestamp for e in events if e.dtn_onffset == False and e.block_id==block_id])
-        dtn_type = np.array([e.dtn for e in events if e.block_id == block_id])
+        dtn_type = np.array([e.dtn for e in events if e.block_id == block_id and e.dtn_onffset])
         [plt.axvspan(onset, offset, alpha=0.25, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
 
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
