@@ -3,7 +3,7 @@ import json
 
 import mne
 
-from utils.classes import Bidict
+from utils.Bidict import Bidict
 
 base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
@@ -11,12 +11,12 @@ base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 # data_directory = "Subjects-Test"
 data_directory = "Subjects-Test-IncompleteBlock"
 
-event_ids_dict = {'EventMarker': {'DistractorPops': 1, 'TargetPops': 2, 'NoveltyPops': 3},
-            'GazeRayIntersect': {'GazeRayIntersectsDistractor': 4, 'GazeRayIntersectsTarget': 5, 'GazeRayIntersectsNovelty': 6},
-            'GazeBehavior': {'FixationDistractor': 7, 'FixationTarget': 8, 'FixationNovelty': 9, 'FixationNull': 10,
-                              'Saccade2Distractor': 11, 'Saccade2Target': 12, 'Saccade2Novelty': 13,
-                              'Saccade2Null': 14},
-                  }  # event_ids_for_interested_epochs
+# event_ids_dict = {'EventMarker': {'DistractorPops': 1, 'TargetPops': 2, 'NoveltyPops': 3},
+#             'GazeRayIntersect': {'GazeRayIntersectsDistractor': 4, 'GazeRayIntersectsTarget': 5, 'GazeRayIntersectsNovelty': 6},
+#             'GazeBehavior': {'FixationDistractor': 7, 'FixationTarget': 8, 'FixationNovelty': 9, 'FixationNull': 10,
+#                               'Saccade2Distractor': 11, 'Saccade2Target': 12, 'Saccade2Novelty': 13,
+#                               'Saccade2Null': 14},
+#                   }  # event_ids_for_interested_epochs
 color_dict = {
               'DistractorPops': 'blue', 'TargetPops': 'red', 'NoveltyPops': 'orange',
               'Fixation': 'blue', 'Saccade': 'orange',
@@ -65,9 +65,9 @@ FIXATION_MINIMAL_TIME = 1e-3 * 141.42135623730952
 START_OF_BLOCK_ENCODING = 4
 END_OF_BLOCK_ENCODING = 5
 
-ITEM_TYPE_ENCODING = {event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']: 'distractor',
-                      event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']: 'target',
-                      event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty']: 'novelty'}
+# ITEM_TYPE_ENCODING = {event_ids_dict['GazeRayIntersect']['GazeRayIntersectsDistractor']: 'distractor',
+#                       event_ids_dict['GazeRayIntersect']['GazeRayIntersectsTarget']: 'target',
+#                       event_ids_dict['GazeRayIntersect']['GazeRayIntersectsNovelty']: 'novelty'}
 
 
 '''
@@ -87,5 +87,7 @@ item_marker_names = ['itemDTNType', 'ItemIndexInBlock', 'itemID', 'foveateAngle'
 
 SACCADE_CODE = 1
 FIXATION_CODE = 2
+
+num_items_per_constrainted_block = 30
 
 debug = True

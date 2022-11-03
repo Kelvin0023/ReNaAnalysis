@@ -5,7 +5,8 @@ from matplotlib import pyplot as plt
 
 from eye.EyeUtils import temporal_filter_fixation
 from params import *
-from utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info
+from utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info, \
+    get_overlapping_events
 from copy import copy
 
 
@@ -79,10 +80,11 @@ def add_event_info_to_gaze(fixations, events):
         if is_event_in_block(f, events):
             f = add_event_meta_info(f, events)
             f.preceding_saccade = add_event_meta_info(f, events)
-            gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
+            # gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
+            overlapping_gaze_intersects = get_overlapping_events(f.onset_time, f.offset_time, events, lambda x: type(x) == GazeRayIntersect)
 
-            if len(gaze_intersect_events) > 0:
-                e = gaze_intersect_events[0]  # IMPORTANT pick the first gaze event
+            if len(overlapping_gaze_intersects) > 0:
+                e = overlapping_gaze_intersects[0]  # IMPORTANT pick the first gaze event
                 f = copy_item_info(f, e)
                 f.preceding_saccade = copy_item_info(f.preceding_saccade, e)
             else:
@@ -230,9 +232,9 @@ def gaze_event_detection_PatchSim(ps_fixation_detection_data, ps_fixation_detect
     fixation_events = []
     for onset_ts, offset_ts in zip(onset_timestamps, offet_timestamps):
         f = Fixation(offset_ts - onset_ts, None, None, None, None, None, onset_ts, offset_ts, "Patch-Sim")
-        gaze_intersect_events = get_events_between(onset_ts, offset_ts, events, event_filter=lambda x: x.gaze_intersect is not None)
-        if len(gaze_intersect_events) > 0:
-            e = gaze_intersect_events[0]  # IMPORTANT pick the first gaze event
+        overlapping_gaze_intersects = get_overlapping_events(f.onset_time, f.offset_time, events, lambda x: type(x) == GazeRayIntersect)
+        if len(overlapping_gaze_intersects) > 0:
+            e = overlapping_gaze_intersects[0]  # IMPORTANT pick the first gaze event
             f = copy_item_info(f, e)
         else:
             f.dtn = dtnn_types['Null']
@@ -240,3 +242,10 @@ def gaze_event_detection_PatchSim(ps_fixation_detection_data, ps_fixation_detect
     print('Detected {} fixations from Patch similarity based fixation detection'.format(
         int(np.sum(fix_list_filtered[fix_list_filtered == 1]))))
     return fixation_events
+
+
+class GazeRayIntersect(Event):
+    def __init__(self, timestamp, onset_time, offset_time, *args, **kwargs):
+        super().__init__(timestamp, *args, **kwargs)
+        self.onset_time = onset_time
+        self.offset_time = offset_time

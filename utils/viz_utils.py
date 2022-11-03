@@ -1,8 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from eye.eyetracking import Fixation, Saccade
-from utils.Event import get_events_between, get_block_start_event, GazeRayIntersect
+from eye.eyetracking import Fixation, Saccade, GazeRayIntersect
+from utils.Event import get_events_between, get_block_start_event
 from params import *
 
 def visualiza_session(events):

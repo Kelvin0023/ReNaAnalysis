@@ -13,9 +13,9 @@ import mne
 
 from eye.EyeUtils import temporal_filter_fixation
 from eye.eyetracking import gaze_event_detection, gaze_event_detection_I_DT, gaze_event_detection_PatchSim
+from utils.RenaDataFrame import RenaDataFrame
 from utils.data_utils import get_exg_data
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
-from params import event_ids_dict, event_viz
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, get_gaze_ray_events, get_item_events, rescale_merge_exg, extract_block_data
@@ -81,6 +81,8 @@ condition_gaze_behaviors = defaultdict(lambda: defaultdict(list))
 
 # preload all the .dats or .p
 
+rdf = RenaDataFrame()
+
 if not is_loading_saved_analysis:
 
     participant_session_file_path_dict = load_participant_session_dict(participant_session_file_path_dict, preloaded_dats_path)
@@ -104,97 +106,99 @@ if not is_loading_saved_analysis:
             events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
             visualize_gaze_events(events, 6)
+            rdf.add_participant_session(data, events, participant_index, session_index)
 
-            # generate the epochs
-            _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,
-                                                           eyetracking_egbm_channels, eyetracking_egbm_channel_types, tmin_pupil, tmax_pupil,
-                                                           event_ids_dict)
+event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+colors = ['blue', 'red']
+rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors)
 
-            _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
-                data_exg_egbm,
-                exg_egbm_channles,
-                exg_egbm_channle_types,
-                session_ICA_path,
-                tmin_eeg, tmax_eeg,
-                event_ids_dict,
-                is_regenerate_ica=is_regenerate_ica,
-                bad_channels=participant_badchannel_dict[
-                    participant_index] if participant_index in participant_badchannel_dict.keys() else None)
-
-            #########################
-
-            # extract block data
-            _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visualization outside of the loop
-            # _blocks_exg = extract_block_data(data_exg_egbm, exg_egbm_channles, exg_srate, fixations, saccades)
-            del data_eyetracking_egbm, data_exg_egbm
-
-            # record gaze statistics
-            if fixation_durations is not None and normalized_fixation_count is not None:
-                if 'durations' in condition_gaze_statistics[condition_name].keys():
-                    condition_gaze_statistics[condition_name]['durations'] = dict([(event_type, duration_list +
-                                                                                    condition_gaze_statistics[
-                                                                                        condition_name][
-                                                                                        'durations'][event_type])
-                                                                                   for event_type, duration_list in
-                                                                                   fixation_durations.items()])
-                else:
-                    condition_gaze_statistics[condition_name]['durations'] = fixation_durations
-                if 'counts' in condition_gaze_statistics[condition_name].keys():
-                    condition_gaze_statistics[condition_name]['counts'] = dict([(event_type, 0.5 * (
-                            norm_count + condition_gaze_statistics[condition_name]['counts'][event_type])) for
-                                                                                event_type, norm_count in
-                                                                                normalized_fixation_count.items()])
-                else:
-                    condition_gaze_statistics[condition_name]['counts'] = normalized_fixation_count
-
-            # Add to gaze behaviors
-            condition_gaze_behaviors[condition_name]['fixations'] = condition_gaze_behaviors[condition_name]['fixations'] + fixations
-            condition_gaze_behaviors[condition_name]['saccades'] = condition_gaze_behaviors[condition_name]['saccades'] + saccades
-
-            # Add the new epochs to the epoch dictionary
-            if condition_name not in participant_condition_epoch_dict[participant_index].keys():
-                participant_condition_epoch_dict[participant_index][condition_name] = (
-                    _epochs_pupil, _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array)
-            else:
-                participant_condition_epoch_dict[participant_index][condition_name] = (
-                    mne.concatenate_epochs(
-                        [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
-                    mne.concatenate_epochs(
-                        [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_exg]),
-                    mne.concatenate_epochs(
-                        [participant_condition_epoch_dict[participant_index][condition_name][2],
-                         _epochs_eeg_ICA_cleaned]),
-                    np.concatenate(
-                        [participant_condition_epoch_dict[participant_index][condition_name][3], labels_array]
-                    )
-                )
-            # Add the new blocks to the block dictionary
-            # if condition_name not in participant_condition_block_dict[participant_index].keys():
-            #     participant_condition_block_dict[participant_index][condition_name] = (
-            #         _blocks_eyetracking, _blocks_exg)
-            # else:
-            #     participant_condition_block_dict[participant_index][condition_name] = (
-            #         participant_condition_block_dict[participant_index][condition_name][0] + _blocks_eyetracking,
-            #         participant_condition_block_dict[participant_index][condition_name][1] + _blocks_exg
-            #     )
-
-            # continue to the next condition
-            # continue to the next session
-        # continue to the next participant
-
-    if is_save_loaded_data:
-        pickle.dump(participant_condition_epoch_dict, open(preloaded_epoch_path, 'wb'))
-        # pickle.dump(participant_condition_block_dict, open(preloaded_epoch_path, 'wb'))
-        pickle.dump(condition_gaze_statistics, open(gaze_statistics_path, 'wb'))
-        pickle.dump(condition_gaze_behaviors, open(gaze_behavior_path, 'wb'))
-
-else:  # if epochs are preloaded and saved
-    print("Loading preloaded epochs ...")
-    participant_condition_epoch_dict = pickle.load(open(preloaded_epoch_path, 'rb'))
-    condition_gaze_statistics = pickle.load(open(gaze_statistics_path, 'rb'))
-    condition_gaze_behaviors = pickle.load(open(gaze_behavior_path, 'rb'))
-    dats_loading_end_time = time.time()
-    print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
+# _epochs_pupil, _ = generate_pupil_event_epochs(data, events)
+#
+# _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
+#     data_exg_egbm,
+#     exg_egbm_channles,
+#     exg_egbm_channle_types,
+#     session_ICA_path,
+#     tmin_eeg, tmax_eeg,
+#     event_ids_dict,
+#     is_regenerate_ica=is_regenerate_ica,
+#     bad_channels=participant_badchannel_dict[
+#         participant_index] if participant_index in participant_badchannel_dict.keys() else None)
+#
+#
+#             # extract block data
+#             _blocks_eyetracking = extract_block_data(data_eyetracking_egbm, eyetracking_egbm_channels, eyetracking_srate, fixations, saccades)  # TODO move block visualization outside of the loop
+#             # _blocks_exg = extract_block_data(data_exg_egbm, exg_egbm_channles, exg_srate, fixations, saccades)
+#             del data_eyetracking_egbm, data_exg_egbm
+#
+#             # record gaze statistics
+#             if fixation_durations is not None and normalized_fixation_count is not None:
+#                 if 'durations' in condition_gaze_statistics[condition_name].keys():
+#                     condition_gaze_statistics[condition_name]['durations'] = dict([(event_type, duration_list +
+#                                                                                     condition_gaze_statistics[
+#                                                                                         condition_name][
+#                                                                                         'durations'][event_type])
+#                                                                                    for event_type, duration_list in
+#                                                                                    fixation_durations.items()])
+#                 else:
+#                     condition_gaze_statistics[condition_name]['durations'] = fixation_durations
+#                 if 'counts' in condition_gaze_statistics[condition_name].keys():
+#                     condition_gaze_statistics[condition_name]['counts'] = dict([(event_type, 0.5 * (
+#                             norm_count + condition_gaze_statistics[condition_name]['counts'][event_type])) for
+#                                                                                 event_type, norm_count in
+#                                                                                 normalized_fixation_count.items()])
+#                 else:
+#                     condition_gaze_statistics[condition_name]['counts'] = normalized_fixation_count
+#
+#             # Add to gaze behaviors
+#             condition_gaze_behaviors[condition_name]['fixations'] = condition_gaze_behaviors[condition_name]['fixations'] + fixations
+#             condition_gaze_behaviors[condition_name]['saccades'] = condition_gaze_behaviors[condition_name]['saccades'] + saccades
+#
+#             # Add the new epochs to the epoch dictionary
+#             if condition_name not in participant_condition_epoch_dict[participant_index].keys():
+#                 participant_condition_epoch_dict[participant_index][condition_name] = (
+#                     _epochs_pupil, _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array)
+#             else:
+#                 participant_condition_epoch_dict[participant_index][condition_name] = (
+#                     mne.concatenate_epochs(
+#                         [participant_condition_epoch_dict[participant_index][condition_name][0], _epochs_pupil]),
+#                     mne.concatenate_epochs(
+#                         [participant_condition_epoch_dict[participant_index][condition_name][1], _epochs_exg]),
+#                     mne.concatenate_epochs(
+#                         [participant_condition_epoch_dict[participant_index][condition_name][2],
+#                          _epochs_eeg_ICA_cleaned]),
+#                     np.concatenate(
+#                         [participant_condition_epoch_dict[participant_index][condition_name][3], labels_array]
+#                     )
+#                 )
+#             # Add the new blocks to the block dictionary
+#             # if condition_name not in participant_condition_block_dict[participant_index].keys():
+#             #     participant_condition_block_dict[participant_index][condition_name] = (
+#             #         _blocks_eyetracking, _blocks_exg)
+#             # else:
+#             #     participant_condition_block_dict[participant_index][condition_name] = (
+#             #         participant_condition_block_dict[participant_index][condition_name][0] + _blocks_eyetracking,
+#             #         participant_condition_block_dict[participant_index][condition_name][1] + _blocks_exg
+#             #     )
+#
+#             # continue to the next condition
+#             # continue to the next session
+#         # continue to the next participant
+#
+#     if is_save_loaded_data:
+#         pickle.dump(participant_condition_epoch_dict, open(preloaded_epoch_path, 'wb'))
+#         # pickle.dump(participant_condition_block_dict, open(preloaded_epoch_path, 'wb'))
+#         pickle.dump(condition_gaze_statistics, open(gaze_statistics_path, 'wb'))
+#         pickle.dump(condition_gaze_behaviors, open(gaze_behavior_path, 'wb'))
+#
+# else:  # if epochs are preloaded and saved
+#     print("Loading preloaded epochs ...")
+#     participant_condition_epoch_dict = pickle.load(open(preloaded_epoch_path, 'rb'))
+#     condition_gaze_statistics = pickle.load(open(gaze_statistics_path, 'rb'))
+#     condition_gaze_behaviors = pickle.load(open(gaze_behavior_path, 'rb'))
+#     dats_loading_end_time = time.time()
+#     print("Loading data took {0} seconds".format(dats_loading_end_time - start_time))
 
 # if condition_gaze_statistics is not None:
 #     for condition_name in eventMarker_conditionIndex_dict.keys():

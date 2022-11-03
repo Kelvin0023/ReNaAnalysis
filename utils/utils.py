@@ -10,11 +10,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mne import find_events, Epochs
 
-from eye.eyetracking import Saccade
+from eye.eyetracking import Saccade, GazeRayIntersect
 from params import *
 from utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, \
     add_event_meta_info, \
-    get_block_startend_times, GazeRayIntersect
+    get_block_startend_times, get_last_block_end_time
 
 
 def flat2gen(alist):
@@ -126,11 +126,14 @@ def get_dtn_events(event_markers, event_marker_timestamps, block_events):
     events = []
 
     dtn = event_markers[eventmarker_preset["ChannelNames"].index('DTN'), :]
-    dtn_timestamps = event_marker_timestamps[dtn != 0]
-    item_ids = event_markers[eventmarker_preset["ChannelNames"].index('itemID'), dtn != 0]
-    obj_dists = event_markers[eventmarker_preset["ChannelNames"].index('objDistFromPlayer'), dtn != 0]
-    carousel_speed = event_markers[eventmarker_preset["ChannelNames"].index('CarouselSpeed'), dtn != 0]
-    carousel_angle = event_markers[eventmarker_preset["ChannelNames"].index('CarouselAngle'), dtn != 0]
+    mask = np.logical_and(event_marker_timestamps < get_last_block_end_time(block_events), dtn != 0)
+
+    dtn_timestamps = event_marker_timestamps[mask]
+
+    item_ids = event_markers[eventmarker_preset["ChannelNames"].index('itemID'), mask]
+    obj_dists = event_markers[eventmarker_preset["ChannelNames"].index('objDistFromPlayer'), mask]
+    carousel_speed = event_markers[eventmarker_preset["ChannelNames"].index('CarouselSpeed'), mask]
+    carousel_angle = event_markers[eventmarker_preset["ChannelNames"].index('CarouselAngle'), mask]
     dtn = dtn[dtn != 0]
 
     for i, dtn_time in enumerate(dtn_timestamps):
@@ -140,7 +143,6 @@ def get_dtn_events(event_markers, event_marker_timestamps, block_events):
             e.carousel_speed, e.carousel_angle = carousel_speed[i], carousel_angle[i]
 
         e.dtn_onffset = dtn[i] > 0
-
         events.append(e)
     return events
 
@@ -312,7 +314,7 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
     return rtn
 
 
-def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, tmax, event_ids_dict, erp_window=(.0, .8), srate=200,
+def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_ids, erp_window=(.0, .8), srate=200,
                                 verbose='WARNING'):  # use a fixed sampling rate for the sampling rate to match between recordings
     mne.set_log_level(verbose=verbose)
 
@@ -320,24 +322,23 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, tmin, 
         data_channels,
         sfreq=srate,
         ch_types=data_channel_types)  # with 3 additional info markers
-    raw = mne.io.RawArray(data_, info)
+    raw = mne.io.RawArray(data_.transpose(), info)
 
     # only keep events that are in the block
     epochs_pupil_all = []
     labels_array_all = []
-    for stim_channel, event_ids in event_ids_dict.items():
-        found_events = mne.find_events(raw, stim_channel=stim_channel)
-        unique_events = np.unique(found_events[:, 2])
-        events = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in unique_events])
-        # pupil epochs
-        if len(events) > 0:
-            epochs_pupil = Epochs(raw, events=found_events, event_id=events, tmin=tmin,
-                                  tmax=tmax,
-                                  baseline=(-0.5, 0.0),
-                                  preload=True,
-                                  verbose=False, picks=['left_pupil_size', 'right_pupil_size'])
-            epochs_pupil_all.append(epochs_pupil)
-            labels_array_all.append(epochs_pupil.events[:, 2])
+
+    found_events = mne.find_events(raw, stim_channel='stim')
+    # pupil epochs
+    epochs_pupil = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin_pupil,
+                          tmax=tmax_pupil,
+                          baseline=(-0.5, 0.0),
+                          preload=True,
+                          verbose=False,
+                          picks=['pupil_left', 'pupil_right'])
+    epochs_pupil_all.append(epochs_pupil)
+    labels_array_all.append(epochs_pupil.events[:, 2])
+
     epochs_pupil_all = mne.concatenate_epochs(epochs_pupil_all)
     labels_array_all = np.concatenate(labels_array_all)
     return epochs_pupil_all, labels_array_all
@@ -462,52 +463,48 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
     return epochs_all, epochs_ica_cleaned_all, labels_array_all, raw, raw_ica_recon
 
 
-def visualize_pupil_epochs(epochs, event_groups, tmin, tmax, title, srate=200, verbose='INFO', fig_size=(25.6, 14.4), gaze_behavior=None):
+def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
     plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
-    for event_name, events in event_groups.items():
-        try:
-            y = epochs[event_name].get_data()
-        except KeyError:  # meaning this event does not exist in these epochs
-            continue
+    for (e_name, e_id), c in zip(event_ids.items(), colors):
+        y = epochs[e_name].get_data()
         y = interpolate_epoch_zeros(y)  # remove nan
         y = interpolate_epochs_nan(y)  # remove nan
         assert np.sum(np.isnan(y)) == 0
         if len(y) == 0:
-            print("visualize_pupil_epochs: all epochs bad, skipping {0}".format(events))
+            print("visualize_pupil_epochs: all epochs bad, skipping")
             continue
         y = np.mean(y, axis=1)  # average left and right
         y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
 
         y_mean = np.mean(y, axis=0)
-        y_mean = y_mean - y_mean[int(abs(tmin) * srate)]  # baseline correct
+        # y_mean = y_mean - y_mean[int(abs(tmin) * srate)]  # baseline correct
         y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
         y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
 
-        time_vector = np.linspace(tmin, tmax, y.shape[-1])
-        color = color_dict[event_name]
+        time_vector = np.linspace(tmin_pupil_viz, tmax_pupil_viz, y.shape[-1])
         if not (np.any(np.isnan(y1)) or np.any(np.isnan(y2))):
-            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color,
+            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=c,
                              interpolate=True,
                              alpha=0.5)
-        plt.plot(time_vector, y_mean, c=color,
-                 label='{0}, N={1}'.format(event_name, y.shape[0]))
+        plt.plot(time_vector, y_mean, c=c,
+                 label='{0}, N={1}'.format(e_name, y.shape[0]))
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
     plt.legend()
 
     # plot gaze behavior if any
-    if gaze_behavior:
-        if type(gaze_behavior[0]) is Saccade:
-            durations = [x.duration for x in gaze_behavior if x.epoched]
-            plt.twinx()
-            n, bins, patches = plt.hist(durations, bins=10)
-            plt.ylim(top=max(n) / 0.2)
-            plt.ylabel('Saccade duration histogram')
+    # if gaze_behavior:
+    #     if type(gaze_behavior[0]) is Saccade:
+    #         durations = [x.duration for x in gaze_behavior if x.epoched]
+    #         plt.twinx()
+    #         n, bins, patches = plt.hist(durations, bins=10)
+    #         plt.ylim(top=max(n) / 0.2)
+    #         plt.ylabel('Saccade duration histogram')
 
     plt.legend()
-    plt.title(title)
+    plt.title("")
     plt.show()
 
 
@@ -669,5 +666,4 @@ def append_list_lines_to_file(l, path):
 #             s.epoched = True
 #     # print('Found gaze behaviors')
 #     return np.expand_dims(_event_array, axis=0)
-
 

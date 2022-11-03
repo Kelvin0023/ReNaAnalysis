@@ -1,5 +1,5 @@
 import numpy as np
-
+from params import *
 
 class Event:
     def __init__(self, timestamp, *args, **kwargs):
@@ -26,13 +26,6 @@ class Event:
         self.carousel_angle = kwargs['carousel_angle'] if 'CarouselAngle' in kwargs.keys() else None
 
         self.likert = kwargs['Likert'] if 'Likert' in kwargs.keys() else None  # TODO to be added
-
-
-class GazeRayIntersect(Event):
-    def __init__(self, timestamp, onset_time, offset_time, *args, **kwargs):
-        super().__init__(timestamp, *args, **kwargs)
-        self.onset_time = onset_time
-        self.offset_time = offset_time
 
 
 class FoveateAngleCrossing(Event):
@@ -91,15 +84,30 @@ def get_overlapping_events(start_time, end_time, events, event_filter: callable)
     @return:
     """
     filter_events = np.array([e for e in events if event_filter(e)])
-    events_timestamps = np.array([e.onset_time for e in filter_events])
-    events_timestamps = np.array([e.onset_time for e in filter_events])
+    onset_times = np.array([e.onset_time for e in filter_events])
+    offset_times = np.array([e.offset_time for e in filter_events])
 
-def add_event_to_data(data_array, data_timestamp, marker, event_filter: callable):
-    events = np.zeros(data_timestamp.shape)
-    filter_events = np.array([e for e in events if event_filter(e)])
+    after_start_event_mask = np.logical_and(onset_times >= start_time, onset_times <= end_time)
+    before_start_event_mask = np.logical_and(offset_times <= end_time, offset_times >= start_time)
+    return filter_events[np.logical_or(after_start_event_mask, before_start_event_mask)]
 
 
-    # TODO
+def add_events_to_data(data_array, data_timestamp, events, event_names, event_filters, deviate=10e-3):
+    event_array = np.zeros(data_timestamp.shape)
+    event_ids = {}
+    deviant = 0
+    for i, e_filter in enumerate(event_filters):
+        filtered_events = np.array([e for e in events if e_filter(e)])
+        event_ts = [e.timestamp for e in filtered_events]
+
+        event_data_indices = [np.argmin(np.abs(data_timestamp - t)) for t in event_ts if np.min(np.abs(data_timestamp - t)) < deviate]
+        deviate_event_count = len(event_ts) - len(event_data_indices)
+        if deviate_event_count > 0: print("Removing {} devicate events".format(deviate_event_count))
+        deviant += deviate_event_count
+
+        event_array[event_data_indices] = i + 1
+        event_ids[event_names[i]] = i + 1
+    return np.concatenate([data_array, np.expand_dims(event_array, axis=1)], axis=1), event_ids, deviant
 
 def get_indices_from_transfer_timestamps(target_timestamps, source_timestamps):
     """
@@ -136,3 +144,11 @@ def get_block_start_event(block_id, events):
     filter_events = np.array([e for e in events if e.is_block_start and e.block_id==block_id])
     assert len(filter_events) == 1
     return filter_events[0]
+
+def check_contraint_block_counts(events, epoch_count):
+    contraint_block_events = [e for e in events if e.is_block_start == True and (e.block_condition == conditions['Carousel'] or e.block_condition == conditions['RSVP'])]
+    assert epoch_count == len(contraint_block_events) * num_items_per_constrainted_block
+
+def get_last_block_end_time(events):
+    filter_events = [e for e in events if e.is_block_end]
+    return filter_events[-1].timestamp
