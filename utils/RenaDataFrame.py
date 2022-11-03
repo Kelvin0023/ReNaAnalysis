@@ -43,7 +43,7 @@ class RenaDataFrame:
 
             pupil_data_with_events, self.pupil_event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_preset["StreamName"]][1], events, event_names, event_filters)
             epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], self.pupil_event_ids)
-            check_contraint_block_counts(events, deviant + len(epochs_pupil))
+            check_contraint_block_counts(events, deviant + len(epochs_pupil))  # TODO only taken into account constraint conditions
             self.pupil_epochs = epochs_pupil if self.pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, self.pupil_epochs])
 
     def viz_pupil_epochs(self, event_names, event_filters, colors, participant=None, session=None, regen_epochs=False):

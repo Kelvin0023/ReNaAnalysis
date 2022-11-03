@@ -479,7 +479,7 @@ def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO',
         y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
 
         y_mean = np.mean(y, axis=0)
-        # y_mean = y_mean - y_mean[int(abs(tmin) * srate)]  # baseline correct
+        y_mean = y_mean - y_mean[int(abs(tmin_pupil_viz) * srate)]  # baseline correct
         y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
         y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
 
