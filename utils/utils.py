@@ -12,8 +12,9 @@ from mne import find_events, Epochs
 
 from eye.eyetracking import Saccade
 from params import *
-from utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, add_event_meta_info, \
-    get_block_startend_times
+from utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, \
+    add_event_meta_info, \
+    get_block_startend_times, GazeRayIntersect
 
 
 def flat2gen(alist):
@@ -287,35 +288,27 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
         # b_foveate_angle = b_foveate_angle * np.pi / 180
 
         for i_b_gr, i_b_iid, i_b_dtn, i_b_obj_dist in zip(b_gazeray, b_itemids, b_dtns, b_obj_dist):
-            if np.any(i_b_gr != 0):
+            if np.any(i_b_gr != 0):  # if gaze happen on this object
+                gaze_ray_diff = np.diff(np.concatenate([[0.], i_b_gr]))
+                gaze_ray_onset_times = b_item_timestamps[gaze_ray_diff == 1]
+                gaze_ray_offset_times = b_item_timestamps[gaze_ray_diff == -1]
 
-                ts = b_item_timestamps[i_b_gr != 0][0]  # take the first timestamp where gaze ray intersects
+                if len(gaze_ray_onset_times) > len(gaze_ray_offset_times) and gaze_ray_onset_times[-1] > gaze_ray_offset_times[-1]:  # if the last gaze ray started without offset, then put the offset at the end of the block
+                    print("Gaze ray onset without offset")
+                    gaze_ray_offset_times = np.concatenate([gaze_ray_offset_times, [b_item_timestamps[-1]]])
 
-                # if debug and j >= 5:
-                #     temp = np.unique(i_b_dtn)[np.unique(i_b_dtn) != 0][0]
-                #     print("Gaze ray intersect item DTN is {}, preceding event marker is {}".format(temp, event_marker_dtn))
-                #     if temp != event_marker_dtn:
-                #         print('hi')
-
-                i_b_obj_dist = i_b_obj_dist[i_b_gr!=0][0]
-
-                i_b_iid = i_b_iid[i_b_gr != 0]
-                i_b_dtn = i_b_dtn[i_b_gr != 0]
-                assert np.all(i_b_iid == i_b_iid)
-                i_b_iid = i_b_iid[0]
-
-                i_b_dtn = np.unique(i_b_dtn)[np.unique(i_b_dtn) != 0][0]
-
-                # i_b_gr = i_b_gr[i_b_gr!=0][0]
-
+                gaze_ray_onset_item_ids = i_b_iid[gaze_ray_diff == 1]
+                item_dtns = np.unique(i_b_dtn[i_b_dtn!=0])
+                assert len(item_dtns) == 1
+                gaze_ray_onset_dist = i_b_obj_dist[gaze_ray_diff == 1]
 
                 # TODO only keep the first gaze ray event for now, not taking diff because gaze ray intersect is too discrete
-                e = Event(ts, gaze_intersect=True, block_condition=block_conditions[j], block_id=block_ids[j], dtn=i_b_dtn, item_id=i_b_iid + 1,obj_dist=i_b_obj_dist)
-
-                if block_conditions[j] == conditions['Carousel']:
-                    e.carousel_speed = get_closest_event_attribute_before(events, ts, 'carousel_speed', lambda x: x.dtn_onffset)
-                    e.carousel_angle = get_closest_event_attribute_before(events, ts, 'carousel_angle', lambda x: x.dtn_onffset)
-                rtn.append(e)
+                for onset_time, offset_time, item_id, item_distance in zip(gaze_ray_onset_times, gaze_ray_offset_times, gaze_ray_onset_item_ids, gaze_ray_onset_dist):
+                    e = GazeRayIntersect(onset_time, onset_time, offset_time, block_condition=block_conditions[j], block_id=block_ids[j], dtn=item_dtns[0], item_id=item_id, obj_dist=item_distance)
+                    if block_conditions[j] == conditions['Carousel']:
+                        e.carousel_speed = get_closest_event_attribute_before(events, onset_time, 'carousel_speed', lambda x: x.dtn_onffset)
+                        e.carousel_angle = get_closest_event_attribute_before(events, onset_time, 'carousel_angle', lambda x: x.dtn_onffset)
+                    rtn.append(e)
     return rtn
 
 

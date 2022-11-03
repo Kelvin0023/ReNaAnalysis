@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from eye.eyetracking import Fixation, Saccade
-from utils.Event import get_events_between, get_block_start_event
+from utils.Event import get_events_between, get_block_start_event, GazeRayIntersect
 from params import *
 
 def visualiza_session(events):
@@ -83,12 +83,10 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
     block_conditions = np.array([e.block_condition for e in events if e.is_block_start])
-    gaze_intersects_dtn_timestamps = np.array([e.timestamp for e in events if e.gaze_intersect])
-    gaze_intersects_dtn = np.array([e.dtn for e in events if e.gaze_intersect])
 
     (markers, stemlines, baseline) = ax.stem(block_start_timestamps, block_conditions, label='block start conditions')
 
-    ax.scatter(gaze_intersects_dtn_timestamps, len(gaze_intersects_dtn_timestamps) * [gaze_intersect_y], marker='D', c=[dtn_color_dict[x] for x in gaze_intersects_dtn], label='gaze intersect DTN')
+    # ax.scatter(gaze_intersects_dtn_timestamps, len(gaze_intersects_dtn_timestamps) * [gaze_intersect_y], marker='D', c=[dtn_color_dict[x] for x in gaze_intersects_dtn], label='gaze intersect DTN')
 
     if block_id:
         block_start_timestamp = [e.timestamp for e in events if e.is_block_start and e.block_id==block_id][0]
@@ -99,6 +97,7 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
         dtn_type = np.array([e.dtn for e in events if e.block_id == block_id and e.dtn_onffset])
         [plt.axvspan(onset, offset, alpha=0.25, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
 
+        draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'Patch-Sim' and block_start_timestamp < x.timestamp < block_end_timestamp, pathSim_fix_y)
 

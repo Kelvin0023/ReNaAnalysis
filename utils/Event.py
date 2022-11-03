@@ -25,12 +25,22 @@ class Event:
         self.carousel_speed = kwargs['carousel_speed'] if 'CarouselSpeed' in kwargs.keys() else None
         self.carousel_angle = kwargs['carousel_angle'] if 'CarouselAngle' in kwargs.keys() else None
 
-        # gaze ray information
-        self.gaze_intersect = kwargs['gaze_intersect'] if 'gaze_intersect' in kwargs.keys() else None
-        # gaze behavior are a separate class Fixation and Saccades
-
         self.likert = kwargs['Likert'] if 'Likert' in kwargs.keys() else None  # TODO to be added
 
+
+class GazeRayIntersect(Event):
+    def __init__(self, timestamp, onset_time, offset_time, *args, **kwargs):
+        super().__init__(timestamp, *args, **kwargs)
+        self.onset_time = onset_time
+        self.offset_time = offset_time
+
+
+class FoveateAngleCrossing(Event):
+    def __init__(self, timestamp, onset_time, offset_time, threshold, *args, **kwargs):
+        super().__init__(timestamp, *args, **kwargs)
+        self.onset_time = onset_time
+        self.offset_time = offset_time
+        self.threshold = threshold
 
 def add_event_meta_info(event, events):
     """
@@ -75,6 +85,14 @@ def get_events_between(start_time, end_time, events, event_filter: callable):
     rtn_events = list(filter_events[np.logical_and(events_timestamps > start_time, events_timestamps < end_time)])
     return rtn_events
 
+def get_overlapping_events(start_time, end_time, events, event_filter: callable):
+    """
+    given events must have onset and offset in fields
+    @return:
+    """
+    filter_events = np.array([e for e in events if event_filter(e)])
+    events_timestamps = np.array([e.onset_time for e in filter_events])
+    events_timestamps = np.array([e.onset_time for e in filter_events])
 
 def add_event_to_data(data_array, data_timestamp, marker, event_filter: callable):
     events = np.zeros(data_timestamp.shape)
