@@ -103,7 +103,7 @@ if not is_loading_saved_analysis:
             # add gaze behaviors from patch sim
             events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
-            visualize_gaze_events(events, 2)
+            visualize_gaze_events(events, 6)
 
             # generate the epochs
             _epochs_pupil, _ = generate_pupil_event_epochs(data_eyetracking_egbm,

@@ -90,9 +90,18 @@ def get_block_events(event_markers, event_marker_timestamps):
     block_ids = block_ids[block_ids != 0]
 
     block_condition = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]
-    assert np.all(block_id_timestamps[::2] == event_marker_timestamps[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in block_condition])])  # check the timestamps for the conditionBlockID matches that of conditionBlock conditions
-    block_conditions_timestamps = block_id_timestamps[::2]
+    block_conditions_timestamps = event_marker_timestamps[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in block_condition])]
     block_condition = block_condition[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in block_condition])]  # check both non-zero (there is an event), and the marker is for a condition, i.e., not for change of metablocks
+
+    # check if the last block is complete
+    if block_ids[-1] > 0:
+        block_ids = block_ids[:-1]
+        block_id_timestamps = block_id_timestamps[:-1]
+        block_condition = block_condition[:-1]
+        block_conditions_timestamps = block_conditions_timestamps[:-1]
+
+    assert np.all(block_id_timestamps[::2] == block_conditions_timestamps)  # check the timestamps for the conditionBlockID matches that of conditionBlock conditions
+
     block_is_practice = get_practice_block_marker(block_condition)
     # add the block starts
     for b_id, b_timestamp, b_condition, b_is_practice in zip(block_ids[::2], block_id_timestamps[::2], block_condition, block_is_practice):
