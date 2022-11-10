@@ -12,22 +12,11 @@ import matplotlib.pyplot as plt
 from eye.EyeUtils import prepare_image_for_sim_score, temporal_filter_fixation
 
 
-def add_bounding_box(a, x, y, width, height, color):
-    copy = np.copy(a)
-    image_height = a.shape[0]
-    image_width = a.shape[1]
-    bounding_box = (np.max([0, x - int(width/2)]), np.max([0, y - int(height/2)]), width, height)
+# image_folder = 'C:/Recordings/ReNaUnityCameraCapture_10-12-2022-02-19-52'
+image_folder = "D:/Dropbox/Dropbox/ReNa/FinalSet_GIW/out/1_2_ballcatch"
 
-    copy[bounding_box[1], bounding_box[0]:bounding_box[0] + bounding_box[2]] = color
-    copy[bounding_box[1]:bounding_box[1] + bounding_box[3], bounding_box[0]] = color
-
-    copy[np.min([image_height-1, bounding_box[1] + bounding_box[3]]), bounding_box[0]:bounding_box[0] + bounding_box[2]] = color
-    copy[bounding_box[1]:bounding_box[1] + bounding_box[3], np.min([image_width-1, bounding_box[0] + bounding_box[2]])] = color
-    return copy
-
-image_folder = 'C:/Recordings/ReNaUnityCameraCapture_10-12-2022-02-19-52'
 gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
-video_name = 'PatchComparison.mp4'
+video_name = 'PatchBasedFixationDetection.mp4'
 
 similarity_threshold = .02
 
@@ -115,6 +104,9 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     if i == video_frame_count:
         break
 
+distance_list = np.array(distance_list)
+thresholded_sim_distance = np.ones(len(distance_list))
+thresholded_sim_distance[distance_list > similarity_threshold] = 0
 # duration thresholding
 fix_list_filtered = temporal_filter_fixation(thresholded_sim_distance, marker_mode='viz')
 
@@ -131,16 +123,16 @@ for i, (fix, img, patch_boundary) in enumerate(zip(fix_list_filtered, images_wit
     images_with_bb[i] = img_modified
 
 clip = ImageSequenceClip.ImageSequenceClip(images_with_bb, fps=video_fps)
-clip.write_videofile(video_name)
+clip.write_videofile(os.path.join(image_folder, video_name))
 
 
 viz_time = 10
-
+viz_start_index = 3800
 fig = plt.gcf()
 fig.set_size_inches(30, 10.5)
 plt.rcParams['font.size'] = '24'
-plt.plot(np.linspace(0, viz_time, viz_time * fps), distance_list[:viz_time * fps], linewidth=5, label='Fovea Patch Distance')
-plt.plot(np.linspace(0, viz_time, viz_time * fps), fix_list_filtered[:viz_time * fps], linewidth=10, label='Fixation')
+plt.plot(np.linspace(0, viz_time, viz_time * fps), distance_list[viz_start_index:viz_start_index+viz_time * fps], linewidth=5, label='Fovea Patch Distance')
+plt.plot(np.linspace(0, viz_time, viz_time * fps), fix_list_filtered[viz_start_index:viz_start_index+viz_time * fps], linewidth=10, label='Fixation')
 plt.title('Example similarity distance sequence')
 plt.ylabel("Similarity distance between previous and this frame")
 plt.xlabel("Time (seconds)")

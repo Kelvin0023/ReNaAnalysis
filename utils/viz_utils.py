@@ -108,6 +108,19 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
     plt.show()
 
 
+def add_bounding_box(a, x, y, width, height, color):
+    copy = np.copy(a)
+    image_height = a.shape[0]
+    image_width = a.shape[1]
+    bounding_box = (np.max([0, x - int(width/2)]), np.max([0, y - int(height/2)]), width, height)
+
+    copy[bounding_box[1], bounding_box[0]:bounding_box[0] + bounding_box[2]] = color
+    copy[bounding_box[1]:bounding_box[1] + bounding_box[3], bounding_box[0]] = color
+
+    copy[np.min([image_height-1, bounding_box[1] + bounding_box[3]]), bounding_box[0]:bounding_box[0] + bounding_box[2]] = color
+    copy[bounding_box[1]:bounding_box[1] + bounding_box[3], np.min([image_width-1, bounding_box[0] + bounding_box[2]])] = color
+    return copy
+
 def draw_fixations(ax, events, event_filter, fix_y):
     filtered_events = [e for e in events if event_filter(e)]
     fix_onset_times = [e.onset_time for e in filtered_events]
