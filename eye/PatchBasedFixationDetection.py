@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 from eye.EyeUtils import prepare_image_for_sim_score, temporal_filter_fixation
 
 
-# image_folder = 'C:/Recordings/ReNaUnityCameraCapture_10-12-2022-02-19-52'
-image_folder = "D:/Dropbox/Dropbox/ReNa/FinalSet_GIW/out/1_2_ballcatch"
+image_folder = 'D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall/10-25-2022/ReNaUnityCameraCapture_10-25-2022-18-12-02'
+# image_folder = "D:/Dropbox/Dropbox/ReNa/FinalSet_GIW/out/1_2_ballcatch"
 
 gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
 video_name = 'PatchBasedFixationDetection.mp4'
@@ -58,7 +58,6 @@ loss_fn_alex = lpips.LPIPS(net='alex')  # best forward scores
 images_with_bb = []
 previous_img_patch = None
 distance_list = []
-thresholded_sim_distance = []
 patch_boundaries = []
 for i, image in enumerate(images[video_start_frame:]):  # iterate through the images
     print('Processing {0} of {1} images'.format(i + 1, video_frame_count), end='\r', flush=True)
@@ -84,7 +83,6 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
         distance = loss_fn_alex(img_tensor, previous_img_tensor).item()
         img_modified = cv2.putText(img_modified, "%.2f" % distance, center, cv2.FONT_HERSHEY_SIMPLEX, 1, center_color, 2, cv2.LINE_AA)
         distance_list.append(distance)
-        thresholded_sim_distance.append(0 if distance > similarity_threshold else 1)
     previous_img_patch = img_patch
     # if i % 10 == 0:
     #     plt.imshow(img_patch)
