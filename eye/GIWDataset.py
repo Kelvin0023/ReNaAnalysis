@@ -18,15 +18,15 @@ participant_index = loaded['ProcessData'].PrIdx  #
 trial_index = loaded['ProcessData'].TrIdx  #
 trial_index = loaded['ProcessData'].TrIdx  #
 # scene_res = np.flip(data.SceneResolution)
-scene_res = data.SceneResolution
 
 scene_frame_nums = data.SceneFrameNo
 unique_scene_frame_nums = np.unique(scene_frame_nums)
 true_labels = data.Labels
+scene_res = data.SceneResolution
 PORs = data.POR
-PORs[:, 1] = 1 - PORs[:, 1]
-
+# PORs[:, 1] = 1 - PORs[:, 1]
 PORs_pixel = np.stack([PORs[:, 0] * scene_res[0], PORs[:, 1] * scene_res[1]], axis=1)
+PORs_pixel = np.flip(PORs_pixel, axis=1)
 video_frames = video_file_to_frame_array(scene_video_path)
 
 # iterate through the scene frames and save the video frames
@@ -39,8 +39,7 @@ video_frames = video_file_to_frame_array(scene_video_path)
 gaze_info = []
 for i, frame_num in enumerate(unique_scene_frame_nums):
     data_i = np.argwhere(scene_frame_nums == frame_num)[0, 0]  # get the first index with the matching frame number; there will be a few entries with match frame number because the eye-tracker's sampling rate is much higher than that of the scene camera
+    # gaze_info.append([i] + np.flip(PORs_pixel[data_i]).tolist() + [true_labels[i]])
     gaze_info.append([i] + np.flip(PORs_pixel[data_i]).tolist() + [true_labels[i]])
 gaze_info = np.array(gaze_info)
-
-
 np.savetxt(os.path.join(output_path, "GazeInfo.csv"), gaze_info, delimiter=",")

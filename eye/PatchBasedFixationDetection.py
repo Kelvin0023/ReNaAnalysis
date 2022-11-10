@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 from eye.EyeUtils import prepare_image_for_sim_score, temporal_filter_fixation
 
 
-image_folder = 'D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall/10-25-2022/ReNaUnityCameraCapture_10-25-2022-18-12-02'
-# image_folder = "D:/Dropbox/Dropbox/ReNa/FinalSet_GIW/out/1_2_ballcatch"
+# image_folder = 'D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall/10-25-2022/ReNaUnityCameraCapture_10-25-2022-18-12-02'
+image_folder = "D:/Dropbox/Dropbox/ReNa/FinalSet_GIW/out/1_2_ballcatch"
 
 gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
 video_name = 'PatchBasedFixationDetection.mp4'
@@ -24,8 +24,7 @@ fixation_y_value = -1e-2
 fps = 30
 video_fps = 30
 video_start_frame = 0
-video_frame_count = 5300  # this is 20 seconds
-plot_time = video_frame_count - fps
+video_frame_count = None
 
 patch_size = 63, 111  # width, height
 fovs = 115, 90  # horizontal, vertical, in degrees
@@ -39,6 +38,9 @@ center_color = (255, 0, 0)
 fovea_color = (0, 255, 0)
 parafovea_color = (0, 0, 255)
 peripheri_color = (0, 255, 255)
+
+is_flipping_y = True
+y_axis = 0
 # END OF USER PARAMETERS ###############################################################
 
 # read the gaze info csv
@@ -59,14 +61,15 @@ images_with_bb = []
 previous_img_patch = None
 distance_list = []
 patch_boundaries = []
+if video_frame_count is None: video_frame_count = len(images[video_start_frame:])
 for i, image in enumerate(images[video_start_frame:]):  # iterate through the images
     print('Processing {0} of {1} images'.format(i + 1, video_frame_count), end='\r', flush=True)
     img = cv2.imread(os.path.join(image_folder, image))  # read in the image
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # convert from BGR to RGB
     img_modified = img.copy()
-    gaze_coordinate = gaze_info.iloc[i, :].values  # get the gaze coordinate for this image
+    gaze_coordinate = gaze_info.iloc[video_start_frame+i, :].values  # get the gaze coordinate for this image
     gaze_x, gaze_y = int(gaze_coordinate[1]), int(gaze_coordinate[2])  # the gaze coordinate
-    gaze_y = image_size[1] - gaze_y  # because CV's y zero is at the bottom of the screen
+    if is_flipping_y: gaze_y = image_size[y_axis] - gaze_y  # because CV's y zero is at the bottom of the screen
     center = gaze_x, gaze_y
 
     img_patch_x_min = int(np.min([np.max([0, gaze_x - patch_size[0] / 2]), image_size[0] - patch_size[0]]))
@@ -84,9 +87,6 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
         img_modified = cv2.putText(img_modified, "%.2f" % distance, center, cv2.FONT_HERSHEY_SIMPLEX, 1, center_color, 2, cv2.LINE_AA)
         distance_list.append(distance)
     previous_img_patch = img_patch
-    # if i % 10 == 0:
-    #     plt.imshow(img_patch)
-    #     plt.show()
 
     # draw the patch rectangle
     cv2.circle(img_modified, center, 1, center_color, 2)
@@ -98,8 +98,7 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     cv2.ellipse(img_modified, center, axis, 0, 0, 360, peripheri_color, thickness=4)
 
     images_with_bb.append(img_modified)
-    # video.write(img)
-    if i == video_frame_count:
+    if i + 1 == video_frame_count:
         break
 
 distance_list = np.array(distance_list)
@@ -124,8 +123,8 @@ clip = ImageSequenceClip.ImageSequenceClip(images_with_bb, fps=video_fps)
 clip.write_videofile(os.path.join(image_folder, video_name))
 
 
-viz_time = 10
-viz_start_index = 3800
+viz_time = 29
+viz_start_index = 0
 fig = plt.gcf()
 fig.set_size_inches(30, 10.5)
 plt.rcParams['font.size'] = '24'
