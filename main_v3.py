@@ -112,7 +112,7 @@ event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
 colors = ['blue', 'red']
 rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors)
-
+print("")
 # _epochs_pupil, _ = generate_pupil_event_epochs(data, events)
 #
 # _epochs_exg, _epochs_eeg_ICA_cleaned, labels_array, _, _ = generate_eeg_event_epochs(
