@@ -15,17 +15,19 @@ class RenaDataFrame:
         self.eeg_epochs = None
 
     def add_participant_session(self, data, events, participant, session_index, bad_channels, ica_path):
+        self.participant_session_dict[(participant, session_index)] = data, events, bad_channels, ica_path
 
-        if 'BioSemi'in data.keys():
-            print("Preprocessing EEG data")
-            eeg_raw, eeg_ica_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, bad_channels=bad_channels)
-            data['BioSemi'] = {'raw': eeg_raw, 'ica': eeg_ica_raw, 'timestamps': downsampled_timestamps}
+    def preprocess(self):
+        for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items():
+            if 'BioSemi'in data.keys():
+                print("Preprocessing EEG data")
+                eeg_raw, eeg_ica_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, bad_channels=bad_channels)
+                data['BioSemi'] = {'raw': eeg_raw, 'ica': eeg_ica_raw, 'timestamps': downsampled_timestamps}
 
-        self.participant_session_dict[(participant, session_index)] = data, events
-
-    def get_data_events(self, participant=None, session=None):
+    def get_data_events(self, participant=None, session=None) -> dict:
         if participant is None and session is None:
-            return self.participant_session_dict
+            rtn = dict([((p, s), (data, events)) for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items()])
+            return rtn
 
         raise NotImplemented("picking a single participant is not supported yet")
         keys = self.participant_session_dict.keys()

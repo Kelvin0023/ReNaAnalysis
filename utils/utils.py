@@ -355,7 +355,6 @@ def generate_eeg_event_epochs(raw, event_ids, erp_window=(.0, .8)):
     return epochs, epochs.events[:, 2]
 
 
-
 def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
     plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
