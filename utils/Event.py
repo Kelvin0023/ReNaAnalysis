@@ -1,4 +1,8 @@
+from typing import Union
+
 import numpy as np
+from mne.io import RawArray
+
 from params import *
 
 class Event:
@@ -92,7 +96,7 @@ def get_overlapping_events(start_time, end_time, events, event_filter: callable)
     return filter_events[np.logical_or(after_start_event_mask, before_start_event_mask)]
 
 
-def add_events_to_data(data_array, data_timestamp, events, event_names, event_filters, deviate=10e-3):
+def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, events, event_names, event_filters, deviate=25e-2):
     event_array = np.zeros(data_timestamp.shape)
     event_ids = {}
     deviant = 0
@@ -107,7 +111,16 @@ def add_events_to_data(data_array, data_timestamp, events, event_names, event_fi
 
         event_array[event_data_indices] = i + 1
         event_ids[event_names[i]] = i + 1
-    return np.concatenate([data_array, np.expand_dims(event_array, axis=1)], axis=1), event_ids, deviant
+    if type(data_array) is np.ndarray:
+        rtn = np.concatenate([data_array, np.expand_dims(event_array, axis=1)], axis=1)
+    elif type(data_array) is RawArray:
+        print()
+        stim_index = data_array.ch_names.index('stim')
+        rtn = data_array.copy()
+        rtn._data[stim_index, :] = event_array
+    else:
+        raise Exception(f'Unsupported data type {type(data_array)}')
+    return rtn, event_ids, deviant
 
 def get_indices_from_transfer_timestamps(target_timestamps, source_timestamps):
     """

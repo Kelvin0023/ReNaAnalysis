@@ -321,12 +321,8 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
     info = mne.create_info(
         data_channels,
         sfreq=srate,
-        ch_types=data_channel_types)  # with 3 additional info markers
+        ch_types=data_channel_types)
     raw = mne.io.RawArray(data_.transpose(), info)
-
-    # only keep events that are in the block
-    epochs_pupil_all = []
-    labels_array_all = []
 
     found_events = mne.find_events(raw, stim_channel='stim')
     # pupil epochs
@@ -336,12 +332,7 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
                           preload=True,
                           verbose=False,
                           picks=['pupil_left', 'pupil_right'])
-    epochs_pupil_all.append(epochs_pupil)
-    labels_array_all.append(epochs_pupil.events[:, 2])
-
-    epochs_pupil_all = mne.concatenate_epochs(epochs_pupil_all)
-    labels_array_all = np.concatenate(labels_array_all)
-    return epochs_pupil_all, labels_array_all
+    return epochs_pupil, epochs_pupil.events[:, 2]
 
 
 def rescale_merge_exg(data_array_EEG, data_array_ECG):
@@ -351,41 +342,142 @@ def rescale_merge_exg(data_array_EEG, data_array_ECG):
     data_array = np.concatenate([data_array_EEG, data_array_ECG])
     return data_array
 
-def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path, tmin, tmax, event_ids_dict, erp_window=(.0, .8), srate=2048, verbose='CRITICAL',
-                              is_regenerate_ica=False, is_ica_selection_inclusive=True, lowcut=1, highcut=50., resample_srate=128, bad_channels=None):
+def generate_eeg_event_epochs(raw, event_ids, erp_window=(.0, .8)):
+    found_events = mne.find_events(raw, stim_channel='stim')
+    # pupil epochs
+    epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin_eeg, tmax=tmax_eeg,
+                      baseline=(-0.1, 0.0),
+                      preload=True,
+                      verbose=False,
+                      picks='eeg',
+                    reject=reject)
+
+    return epochs, epochs.events[:, 2]
+
+
+
+def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
+    plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
-    biosemi_64_montage = mne.channels.make_standard_montage('biosemi64')
+    # epochs = epochs.apply_baseline((0.0, 0.0))
+    for (e_name, e_id), c in zip(event_ids.items(), colors):
+        y = epochs[e_name].get_data()
+        y = interpolate_epoch_zeros(y)  # remove nan
+        y = interpolate_epochs_nan(y)  # remove nan
+        assert np.sum(np.isnan(y)) == 0
+        if len(y) == 0:
+            print("visualize_pupil_epochs: all epochs bad, skipping")
+            continue
+        y = np.mean(y, axis=1)  # average left and right
+        y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
+
+        y_mean = np.mean(y, axis=0)
+        y_mean = y_mean - y_mean[int(abs(tmin_pupil_viz) * srate)]  # baseline correct
+        y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+        y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
+
+        time_vector = np.linspace(tmin_pupil_viz, tmax_pupil_viz, y.shape[-1])
+        if not (np.any(np.isnan(y1)) or np.any(np.isnan(y2))):
+            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=c,
+                             interpolate=True,
+                             alpha=0.5)
+        plt.plot(time_vector, y_mean, c=c,
+                 label='{0}, N={1}'.format(e_name, y.shape[0]))
+    plt.xlabel('Time (sec)')
+    plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
+    plt.legend()
+
+    plt.legend()
+    plt.title("")
+    plt.show()
+
+
+# TODO visualize_eeg_epochs
+def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True, gaze_behavior=None):
+    mne.set_log_level(verbose=verbose)
+    plt.rcParams["figure.figsize"] = fig_size
+
+    if is_plot_timeseries:
+        for ch in eeg_picks:
+            for (event_name, events), c in zip(event_groups.items(), colors):
+                try:
+                    y = epochs.crop(tmin_eeg_viz, tmax_eeg_viz)[event_name].pick_channels([ch]).get_data().squeeze(1)
+                except KeyError:  # meaning this event does not exist in these epochs
+                    continue
+                y_mean = np.mean(y, axis=0)
+                y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
+                y2 = y_mean - scipy.stats.sem(y, axis=0)
+
+                time_vector = np.linspace(tmin_eeg_viz, tmax_eeg_viz, y.shape[-1])
+                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=c, interpolate=True, alpha=0.5)
+                plt.plot(time_vector, y_mean, c=c, label='{0}, N={1}'.format(event_name, y.shape[0]))
+            plt.xlabel('Time (sec)')
+            plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
+            plt.legend()
+
+            # plot gaze behavior if any
+            if gaze_behavior:
+                if type(gaze_behavior[0]) is Saccade:
+                    durations = [x.duration for x in gaze_behavior if x.epoched]
+                    plt.twinx()
+                    n, bins, patches = plt.hist(durations, bins=10)
+                    plt.ylim(top=max(n) / 0.2)
+                    plt.ylabel('Saccade duration histogram')
+
+            plt.legend()
+            plt.title('{0} - Channel {1}'.format(title, ch))
+            if out_dir:
+                plt.savefig(os.path.join(out_dir, '{0} - Channel {1}.png'.format(title, ch)))
+                plt.clf()
+            else:
+                plt.show()
+
+    # get the min and max for plotting the topomap
+    if is_plot_topo_map:
+        evoked = epochs.average()
+        vmax_EEG = np.max(evoked.get_data())
+        vmin_EEG = np.min(evoked.get_data())
+
+        for event_name, events in event_groups.items():
+            try:
+                epochs[events].average().plot_topomap(times=np.linspace(tmin, tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
+            except KeyError:  # meaning this event does not exist in these epochs
+                continue
+
+def flatten_list(l):
+    return [item for sublist in l for item in sublist]
+
+def read_file_lines_as_list(path):
+    with open(path, 'r') as filehandle:
+        out = [line.rstrip() for line in filehandle.readlines()]
+    return out
+
+def append_list_lines_to_file(l, path):
+    with open(path, 'a') as filehandle:
+        filehandle.writelines("%s\n" % x for x in l)
+
+def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., resample_srate=128, bad_channels=None, is_ica_selection_inclusive=True, n_worker=16):
+    eeg_data = data[0][1:65, :]  # take only the EEG channels
+    ecg_data = data[0][65:67, :]
+    exg_data = rescale_merge_exg(eeg_data, ecg_data)
+    data_channels = ['timestamps'] + eeg_channel_names + [ecg_ch_name] + ['stim']
+    data_channel_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim']
     info = mne.create_info(
         data_channels,
         sfreq=srate,
-        ch_types=data_channle_types)  # with 3 additional info markers and design matrix
-    raw = mne.io.RawArray(data_, info)
-    raw.set_montage(biosemi_64_montage)
-    raw, _ = mne.set_eeg_reference(raw, 'average',
-                                   projection=False)
-    # import matplotlib as mpl
-    # import matplotlib.pyplot as plt
-    # mpl.use('Qt5Agg')
-    # raw.plot(scalings='auto')
-    if bad_channels:
+        ch_types=data_channel_types)  # with 3 additional info markers and design matrix
+    raw = mne.io.RawArray(np.concatenate([timestamps[None, :], exg_data, np.zeros([1, len(timestamps)])], axis=0), info)
+    raw.set_montage(eeg_montage)
+    raw, _ = mne.set_eeg_reference(raw, 'average', projection=False)
+
+    if bad_channels is not None: # TODO data pipeline does not give bad channels to this function right now
         raw.info['bads'] = bad_channels
         raw.interpolate_bads(method={'eeg': 'MNE'}, verbose='INFO')
 
-    raw = raw.filter(l_freq=lowcut, h_freq=highcut)  # bandpass filter
-    raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto')
-    raw = raw.resample(resample_srate)
+    raw = raw.filter(l_freq=lowcut, h_freq=highcut, n_jobs=n_worker)  # bandpass filter
+    raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_worker)
+    raw = raw.resample(resample_srate, n_jobs=n_worker)
 
-    # recreate raw with design matrix
-    data_array_with_dm, design_matrix, dm_ch_names = add_design_matrix_to_data(raw.get_data(), -4, resample_srate, erp_window=erp_window)
-
-    info = mne.create_info(
-        data_channels + dm_ch_names,
-        sfreq=resample_srate,
-        ch_types=data_channle_types + len(dm_ch_names) * ['stim'])  # with 3 additional info markers and design matrix
-    raw = mne.io.RawArray(data_array_with_dm, info)
-    raw.set_montage(biosemi_64_montage)
-
-    # check if ica for this participant and session exists, create one if not
     if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
         ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
         ica.fit(raw, picks='eeg')
@@ -429,241 +521,9 @@ def generate_eeg_event_epochs(data_, data_channels, data_channle_types, ica_path
     # raw.plot(scalings='auto')
     # reconst_raw.plot(show_scrollbars=False, scalings='auto')
 
-    reject = dict(eeg=600.)  # DO NOT reject or we will have a mismatch between EEG and pupil
-    # only keep events that are in the block
+    return raw, raw_ica_recon, raw.get_data(picks='timestamps')[0]  # return includes the timestamps squeezing the first dimension
 
-    epochs_all = []
-    epochs_ica_cleaned_all = []
-    labels_array_all = []
-    for stim_channel, event_ids in event_ids_dict.items():
-        found_events = mne.find_events(raw, stim_channel=stim_channel)
-        unique_events = np.unique(found_events[:, 2])
-        events = dict([(event_name, event_code) for event_name, event_code in event_ids.items() if event_code in unique_events])
-        if len(events) > 0:
-            epochs = Epochs(raw, events=found_events, event_id=events, tmin=tmin,
-                            tmax=tmax,
-                            baseline=(-0.1, 0.0),
-                            preload=True,
-                            verbose=False,
-                            reject=reject)
-
-            epochs_ICA_cleaned = Epochs(raw_ica_recon, events=found_events, event_id=events,
-                                        tmin=tmin,
-                                        tmax=tmax,
-                                        baseline=(-0.1, 0.0),
-                                        preload=True,
-                                        verbose=False,
-                                        reject=reject)
-            epochs_all.append(epochs)
-            epochs_ica_cleaned_all.append(epochs_ICA_cleaned)
-            labels_array_all.append(epochs.events[:, 2])
-    epochs_all = mne.concatenate_epochs(epochs_all)
-    epochs_ica_cleaned_all = mne.concatenate_epochs(epochs_ica_cleaned_all)
-    labels_array_all = np.concatenate(labels_array_all)
-    return epochs_all, epochs_ica_cleaned_all, labels_array_all, raw, raw_ica_recon
-
-
-def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
-    plt.rcParams["figure.figsize"] = fig_size
-    mne.set_log_level(verbose=verbose)
-    # epochs = epochs.apply_baseline((0.0, 0.0))
-    for (e_name, e_id), c in zip(event_ids.items(), colors):
-        y = epochs[e_name].get_data()
-        y = interpolate_epoch_zeros(y)  # remove nan
-        y = interpolate_epochs_nan(y)  # remove nan
-        assert np.sum(np.isnan(y)) == 0
-        if len(y) == 0:
-            print("visualize_pupil_epochs: all epochs bad, skipping")
-            continue
-        y = np.mean(y, axis=1)  # average left and right
-        y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-
-        y_mean = np.mean(y, axis=0)
-        y_mean = y_mean - y_mean[int(abs(tmin_pupil_viz) * srate)]  # baseline correct
-        y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-        y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
-
-        time_vector = np.linspace(tmin_pupil_viz, tmax_pupil_viz, y.shape[-1])
-        if not (np.any(np.isnan(y1)) or np.any(np.isnan(y2))):
-            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=c,
-                             interpolate=True,
-                             alpha=0.5)
-        plt.plot(time_vector, y_mean, c=c,
-                 label='{0}, N={1}'.format(e_name, y.shape[0]))
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
-    plt.legend()
-
-    # plot gaze behavior if any
-    # if gaze_behavior:
-    #     if type(gaze_behavior[0]) is Saccade:
-    #         durations = [x.duration for x in gaze_behavior if x.epoched]
-    #         plt.twinx()
-    #         n, bins, patches = plt.hist(durations, bins=10)
-    #         plt.ylim(top=max(n) / 0.2)
-    #         plt.ylabel('Saccade duration histogram')
-
-    plt.legend()
-    plt.title("")
-    plt.show()
-
-
-def visualize_eeg_epochs(epochs, event_groups, tmin, tmax, picks, title, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True, gaze_behavior=None):
-    mne.set_log_level(verbose=verbose)
-    plt.rcParams["figure.figsize"] = fig_size
-
-    if is_plot_timeseries:
-        for ch in picks:
-            for event_name, events in event_groups.items():
-                try:
-                    y = epochs.crop(tmin, tmax)[event_name].pick_channels([ch]).get_data().squeeze(1)
-                except KeyError:  # meaning this event does not exist in these epochs
-                    continue
-                y_mean = np.mean(y, axis=0)
-                y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
-                y2 = y_mean - scipy.stats.sem(y, axis=0)
-
-                time_vector = np.linspace(tmin, tmax, y.shape[-1])
-                color = color_dict[event_name]
-                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=color,
-                                 interpolate=True,
-                                 alpha=0.5)
-                plt.plot(time_vector, y_mean, c=color,
-                         label='{0}, N={1}'.format(event_name, y.shape[0]))
-            plt.xlabel('Time (sec)')
-            plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
-            plt.legend()
-
-            # plot gaze behavior if any
-            if gaze_behavior:
-                if type(gaze_behavior[0]) is Saccade:
-                    durations = [x.duration for x in gaze_behavior if x.epoched]
-                    plt.twinx()
-                    n, bins, patches = plt.hist(durations, bins=10)
-                    plt.ylim(top=max(n) / 0.2)
-                    plt.ylabel('Saccade duration histogram')
-
-            plt.legend()
-            plt.title('{0} - Channel {1}'.format(title, ch))
-            if out_dir:
-                plt.savefig(os.path.join(out_dir, '{0} - Channel {1}.png'.format(title, ch)))
-                plt.clf()
-            else:
-                plt.show()
-
-    # get the min and max for plotting the topomap
-    if is_plot_topo_map:
-        evoked = epochs.average()
-        vmax_EEG = np.max(evoked.get_data())
-        vmin_EEG = np.min(evoked.get_data())
-
-        for event_name, events in event_groups.items():
-            try:
-                epochs[events].average().plot_topomap(times=np.linspace(tmin, tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
-            except KeyError:  # meaning this event does not exist in these epochs
-                continue
-
-# def generate_condition_sequence(event_markers, event_marker_timestamps, data_array, data_timestamps, data_channel_names,
-#                                 session_log,
-#                                 item_codes,
-#                                 srate=200):  # use a fixed sampling rate for the sampling rate to match between recordings
-#     # interpolate nan's
-#     data_event_marker_array = add_em_ts_to_data(event_markers,
-#                                                 event_marker_timestamps,
-#                                                 data_array,
-#                                                 data_timestamps, session_log,
-#                                                 item_codes, srate)
-#     block_sequences = extract_block_data(data_event_marker_array, srate)
-#     return block_sequences
-
-
-def flatten_list(l):
-    return [item for sublist in l for item in sublist]
-
-def read_file_lines_as_list(path):
-    with open(path, 'r') as filehandle:
-        out = [line.rstrip() for line in filehandle.readlines()]
-    return out
-
-def append_list_lines_to_file(l, path):
-    with open(path, 'a') as filehandle:
-        filehandle.writelines("%s\n" % x for x in l)
-
-# def create_gaze_behavior_events(fixations, saccades, gaze_timestamps, data_timestamps, deviation_threshold=1e-2, null_percentage=0.025, random_seed=42):
-#     """
-#     create a new event array that matches the sampling rate of the data timestamps
-#     the arguements event_timestamps and data_timestamps must be from the same clock
-#     @rtype: ndarray: the returned event array will be of the same length as the data_timestamps, and the event values are
-#     synced with the data_timestamps
-#     """
-#     _event_array = np.zeros(data_timestamps.shape)
-#     null_fixation = []
-#     for f in fixations:
-#         onset_time = gaze_timestamps[f.onset]
-#         if onset_time > np.max(data_timestamps):
-#             break
-#         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
-#             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-#             if f.stim == 'distractor':
-#                 _event_array[nearest_data_index] = 6  # for fixation onset on distractor
-#                 f.epoched = True
-#             elif f.stim == 'target':
-#                 _event_array[nearest_data_index] = 7  # for fixation onset on targets
-#                 f.epoched = True
-#             elif f.stim == 'novelty':
-#                 _event_array[nearest_data_index] = 8  # for fixation onset on novelty
-#                 f.epoched = True
-#             elif f.stim == 'null':  # for fixation onset on nothing
-#                 null_fixation.append(f)
-#             elif f.stim is None or f.stim == 'mixed':
-#                 continue  # ignore fixation with unknown type
-#             else:
-#                 raise Exception("Unknown fixation to_stim typ: {0}, this should never happen".format(f.stim))
-#
-#     random.seed(random_seed)
-#     for f in random.sample(null_fixation, int(null_percentage * len(null_fixation))):
-#         onset_time = gaze_timestamps[f.onset]
-#         if onset_time > np.max(data_timestamps):
-#             break
-#         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
-#             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-#             _event_array[nearest_data_index] = 9  # for fixation onset
-#             f.epoched = True
-#
-#     null_saccades = []
-#     for s in saccades:
-#         onset_time = gaze_timestamps[s.onset]
-#         if onset_time > np.max(data_timestamps):
-#             break
-#         if s.from_stim == 'null' or s.to_stim == 'null':
-#             null_saccades.append(s)
-#             continue
-#         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
-#             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-#
-#             if s.to_stim == 'distractor':
-#                 _event_array[nearest_data_index] = 10  # for saccade onset to distractor
-#                 s.epoched = True
-#             elif s.to_stim == 'target':
-#                 _event_array[nearest_data_index] = 11  # for saccade onset to targets
-#                 s.epoched = True
-#             elif s.to_stim == 'novelty':
-#                 _event_array[nearest_data_index] = 12  # for saccade onset to novelty
-#                 s.epoched = True
-#             elif s.to_stim is None or s.to_stim == 'mixed':
-#                 continue  # ignore saccade with unknown type
-#             else:
-#                 raise Exception("Unknown saccade to_stim type {0}, this should never happen".format(s.to_stim))
-#
-#     # select a subset of null fixation and null saccade to add
-#     for s in random.sample(null_saccades, int(null_percentage * len(null_saccades))):
-#         onset_time = gaze_timestamps[s.onset]
-#         if onset_time > np.max(data_timestamps):
-#             break
-#         if np.min(np.abs(data_timestamps - onset_time)) < deviation_threshold:
-#             nearest_data_index = (np.abs(data_timestamps - onset_time)).argmin()
-#             _event_array[nearest_data_index] = 13  # for saccade onset
-#             s.epoched = True
-#     # print('Found gaze behaviors')
-#     return np.expand_dims(_event_array, axis=0)
-
+def check_out_of_range():
+    maxs = np.array([x.max() for x in a])
+    mins = np.array([x.min() for x in a])
+    b = np.logical_and(maxs > 100e-6, mins < 100e-6)

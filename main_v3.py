@@ -12,7 +12,7 @@ import numpy as np
 import mne
 
 from eye.EyeUtils import temporal_filter_fixation
-from eye.eyetracking import gaze_event_detection, gaze_event_detection_I_DT, gaze_event_detection_PatchSim
+from eye.eyetracking import gaze_event_detection, gaze_event_detection_I_VT, gaze_event_detection_PatchSim
 from utils.RenaDataFrame import RenaDataFrame
 from utils.data_utils import get_exg_data
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
@@ -92,7 +92,8 @@ if not is_loading_saved_analysis:
         # print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
         for session_index, session_files in session_dict.items():
             print("Processing participant-code[{0}]: {4} of {1}, session {2} of {3}".format(int(participant_index),len(participant_session_file_path_dict),session_index + 1,len(session_dict), p_i + 1))
-            data, item_catalog_path, session_log_path, session_ICA_path = session_files
+            data, item_catalog_path, session_log_path, session_bad_eeg_channels_path, session_ICA_path = session_files
+            session_bad_eeg_channels = open(session_bad_eeg_channels_path, 'r').read().split(' ') if os.path.exists(session_bad_eeg_channels_path) else None
             item_catalog = json.load(open(item_catalog_path))
             session_log = json.load(open(session_log_path))
             item_codes = list(item_catalog.values())
@@ -101,17 +102,18 @@ if not is_loading_saved_analysis:
             events = get_item_events(data['Unity.ReNa.EventMarkers'][0], data['Unity.ReNa.EventMarkers'][1], data['Unity.ReNa.ItemMarkers'][0], data['Unity.ReNa.ItemMarkers'][1])
 
             # add gaze behaviors from I-DT
-            events += gaze_event_detection_I_DT(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
+            events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
             # add gaze behaviors from patch sim
             events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
-            visualize_gaze_events(events, 6)
-            rdf.add_participant_session(data, events, participant_index, session_index)
+            # visualize_gaze_events(events, 6)
+            rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels, session_ICA_path)  # also preprocess the EEG data
 
 event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
 colors = ['blue', 'red']
 rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors)
+rdf.viz_eeg_epochs(["Distractor", "Target"], event_filters, colors)
 print("")
 # _epochs_pupil, _ = generate_pupil_event_epochs(data, events)
 #

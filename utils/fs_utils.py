@@ -12,11 +12,11 @@ from utils.utils import flatten_list, read_file_lines_as_list
 def load_participant_session_dict(participant_session_dict, preloaded_dats_path):
     print("Preloading .dats")  # TODO parallelize loading of .dats
     for p_i, (participant_index, session_dict) in enumerate(participant_session_dict.items()):
-        print("Working on participant-code[{0}]: {2} of {1}".format(int(participant_index),
+        print("Loading on participant-code[{0}]: {2} of {1}".format(int(participant_index),
                                                                     len(participant_session_dict), p_i + 1))
         for session_index, session_files in session_dict.items():
             print("Session {0} of {1}".format(session_index + 1, len(session_dict)))
-            data_path, item_catalog_path, session_log_path, session_ICA_path = session_files
+            data_path, _, _, _, _= session_files
             if os.path.exists(
                     data_path.replace('dats', 'p')):  # load pickle if it's available as it is faster than dats
                 data = pickle.load(open(data_path.replace('dats', 'p'), 'rb'))
@@ -72,6 +72,6 @@ def get_data_file_paths(base_root, data_directory):
                                                                   x in ['{0}.dats'.format(i),
                                                                         '{0}_ReNaItemCatalog.json'.format(i),
                                                                         '{0}_ReNaSessionLog.json'.format(i),
-                                                                        '{0}_ParticipantSessionICA'.format(
-                                                                            i)]]  # file path for ICA solution and
+                                                                        '{0}_badchannels'.format(i),
+                                                                        '{0}_ParticipantSessionICA'.format(i)]]
     return participant_list, participant_session_file_path_dict, participant_badchannel_dict

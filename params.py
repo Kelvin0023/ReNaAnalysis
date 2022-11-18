@@ -5,9 +5,9 @@ import mne
 
 from utils.Bidict import Bidict
 
-base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
+# base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-# base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 # data_directory = "Subjects-Test"
 # data_directory = "Subjects-Test-IncompleteBlock"
@@ -35,9 +35,11 @@ dtnn_types = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
 meta_blocks = Bidict({'cp': 5, 'ip': 7})
 
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
+eeg_preset_path = 'presets/BioSemi.json'
 eventmarker_preset_path = 'presets/ReNaEventMarker.json'
 # load presets
 varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
+eeg_preset = json.load(open(eeg_preset_path))
 eventmarker_preset = json.load(open(eventmarker_preset_path))
 
 tmin_pupil = -1
@@ -56,6 +58,7 @@ exg_srate = 2048
 
 eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 
+eeg_montage = mne.channels.make_standard_montage('biosemi64')
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
 ecg_ch_name='ECG00'
 
@@ -91,4 +94,7 @@ FIXATION_CODE = 2
 
 num_items_per_constrainted_block = 30
 
+reject = dict(eeg=100e-6)  # DO NOT reject or we will have a mismatch between EEG and pupil
+
+is_regenerate_ica = False
 debug = True

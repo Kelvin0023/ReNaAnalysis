@@ -50,7 +50,7 @@ def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
-def gaze_event_detection_I_DT(eyetracking_data, eyetracking_timestamps, events):
+def gaze_event_detection_I_VT(eyetracking_data, eyetracking_timestamps, events):
     varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
     gaze_xy = eyetracking_data[[varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
     gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
@@ -117,8 +117,6 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
     event types: -1: noise or glitch; 1: saccade; 2: fixation
     """
     events = np.zeros(gaze_timestamps.shape)
-    plt.plot(np.linspace(0, 5, 200 * 5), gaze_xy[0, :200 * 5])
-    plt.plot(np.linspace(0, 5, 200 * 5), gaze_xy[1, :200 * 5])
     if gaze_status is not None: events[
         gaze_status != 2] = -1  # remove points where the status is invalid from the eyetracker
     saccades = []  # items are tuple of three: saccade onset index, saccade peak velocity index, saccade offset index, Saccade object,
