@@ -50,10 +50,18 @@ def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
-def gaze_event_detection_I_VT(eyetracking_data, eyetracking_timestamps, events):
+def gaze_event_detection_I_VT(eyetracking_data_timestamps, events, headtracking_data_timestamps=None):
+    eyetracking_data, eyetracking_timestamps = eyetracking_data_timestamps
     varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
     gaze_xy = eyetracking_data[[varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
     gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
+
+    if headtracking_data_timestamps is not None:
+        headtracking_data, head_tracker_timestamps = headtracking_data_timestamps
+        yaw_pitch_indices = headtracker_preset['ChannelNames'].index("Head Yaw"), headtracker_preset['ChannelNames'].index("Head Pitch")
+        head_rotation_xy = headtracking_data[yaw_pitch_indices, :]
+        # upsample the head-tracking data to match that of gaze tracking
+
     gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy,
                                                                                gaze_timestamps=eyetracking_timestamps,
                                                                                gaze_status=gaze_status)

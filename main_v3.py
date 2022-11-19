@@ -102,7 +102,8 @@ if not is_loading_saved_analysis:
             events = get_item_events(data['Unity.ReNa.EventMarkers'][0], data['Unity.ReNa.EventMarkers'][1], data['Unity.ReNa.ItemMarkers'][0], data['Unity.ReNa.ItemMarkers'][1])
 
             # add gaze behaviors from I-DT
-            events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'][0], data['Unity.VarjoEyeTrackingComplete'][1], events)
+            events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events)
+            # events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events, headtracking_data_timestamps=data['Unity.HeadTracker'])
             # add gaze behaviors from patch sim
             events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
@@ -114,8 +115,8 @@ colors = ['blue', 'red']
 
 event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors, participant=1, session=1)
-rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors, participant=[0, 1], session=[0, 1])
+# rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors, participant='1', session=1)
+rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors, participant=['0', '1'], session=[0, 1])
 rdf.viz_eeg_epochs(["Distractor", "Target"], event_filters, colors)
 
 

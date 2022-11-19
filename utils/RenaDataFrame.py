@@ -38,16 +38,16 @@ class RenaDataFrame:
             return rtn
 
         keys = self.participant_session_dict.keys()
-        if type(participant) is int:  # single participant index is given
-            keys = [k for k in keys if participant in k]
+        if type(participant) is str:  # single participant index is given
+            keys = [(p, s) for p, s in keys if participant == p]
         elif type(participant) is list:
-            keys = [k for k in keys if k[0] in participant]
+            keys = [(p, s) for p, s in keys if p in participant]
         else:
             raise TypeError("Unsupported participant type, must be int or list or None")
         if type(session) is int:  # single participant index is given
-            keys = [k for k in keys if session in k]
+            keys = [(p, s) for p, s in keys if session == s]
         elif type(session) is list:
-            keys = [k for k in keys if k[0] in session]
+            keys = [(p, s) for p, s in keys if s in session]
         else:
             raise TypeError("Unsupported session type, must be int, list or None")
         rtn = dict([((p, s), (data, events)) for (p, s), (data, events, _, _) in self.participant_session_dict.items() if (p, s) in keys])
@@ -64,7 +64,7 @@ class RenaDataFrame:
         """
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
-
+        self.pupil_epochs = None  # clear epochs
         for (p, s), (data, events) in ps_dict.items():
             print('Getting pupil epochs for participant {} session {}'.format(p, s))
             eye_data = data[varjoEyetracking_preset["StreamName"]][0]
@@ -74,13 +74,14 @@ class RenaDataFrame:
 
             pupil_data_with_events, self.pupil_event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_preset["StreamName"]][1], events, event_names, event_filters)
             epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], self.pupil_event_ids)
-            check_contraint_block_counts(events, deviant + len(epochs_pupil))  # TODO only taken into account constraint conditions
+            # check_contraint_block_counts(events, deviant + len(epochs_pupil))  # TODO only taken into account constraint conditions
             self.pupil_epochs = epochs_pupil if self.pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, self.pupil_epochs])
+        return self.pupil_epochs
 
     def get_eeg_epochs(self, event_names, event_filters, participant=None, session=None):
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
-
+        self.eeg_epochs = None  # clear epochs
         for (p, s), (data, events) in ps_dict.items():
             print('Getting EEG epochs for participant {} session {}'.format(p, s))
 
@@ -89,17 +90,15 @@ class RenaDataFrame:
             epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, self.eeg_event_ids)
             # check_contraint_block_counts(events, deviant + len(epochs))  # TODO only taken into account constraint conditions
             self.eeg_epochs = epochs if self.eeg_epochs is None else mne.concatenate_epochs([epochs, self.eeg_epochs])
+        return self.eeg_epochs
 
-
-    def viz_pupil_epochs(self, event_names, event_filters, colors, participant=None, session=None, regen_epochs=False):
+    def viz_pupil_epochs(self, event_names, event_filters, colors, participant=None, session=None):
         assert len(event_filters) == len(colors)
-        if self.pupil_epochs == None or regen_epochs:
-            self.get_pupil_epochs(event_names, event_filters, participant, session)
+        self.get_pupil_epochs(event_names, event_filters, participant, session)
 
         visualize_pupil_epochs(self.pupil_epochs, self.pupil_event_ids, colors)
 
-    def viz_eeg_epochs(self, event_names, event_filters, colors, participant=None, session=None, regen_epochs=False):
+    def viz_eeg_epochs(self, event_names, event_filters, colors, participant=None, session=None):
         assert len(event_filters) == len(colors)
-        if self.eeg_epochs == None or regen_epochs:
-            self.get_eeg_epochs(event_names, event_filters, participant, session)
+        self.get_eeg_epochs(event_names, event_filters, participant, session)
         visualize_eeg_epochs(self.eeg_epochs, self.eeg_event_ids, colors)

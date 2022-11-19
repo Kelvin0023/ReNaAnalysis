@@ -37,10 +37,12 @@ meta_blocks = Bidict({'cp': 5, 'ip': 7})
 varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
 eeg_preset_path = 'presets/BioSemi.json'
 eventmarker_preset_path = 'presets/ReNaEventMarker.json'
+headtracker_preset_path = 'presets/UnityHeadTracking.json'
 # load presets
 varjoEyetracking_preset = json.load(open(varjoEyetrackingComplete_preset_path))
 eeg_preset = json.load(open(eeg_preset_path))
 eventmarker_preset = json.load(open(eventmarker_preset_path))
+headtracker_preset = json.load(open(headtracker_preset_path))
 
 tmin_pupil = -1
 tmax_pupil = 3.

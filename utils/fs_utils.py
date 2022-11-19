@@ -24,7 +24,7 @@ def load_participant_session_dict(participant_session_dict, preloaded_dats_path)
                 print("dats file found, a .p file will be saved after streaming in for faster loading time next time")
                 data = RNStream(data_path).stream_in(ignore_stream=('monitor1'), jitter_removal=False)
                 # if data is a .dats, save .p after loading for faster processing next time
-                pickle.dump(data, open(data_path.replace('dats', 'p'), 'rb'))
+                pickle.dump(data, open(data_path.replace('dats', 'p'), 'wb'))
 
             participant_session_dict[participant_index][session_index][0] = data
     # save the preloaded .dats
