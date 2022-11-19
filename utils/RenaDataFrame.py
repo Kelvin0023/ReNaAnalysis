@@ -37,11 +37,22 @@ class RenaDataFrame:
             rtn = dict([((p, s), (data, events)) for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items()])
             return rtn
 
-        raise NotImplemented("picking a single participant is not supported yet")
         keys = self.participant_session_dict.keys()
-        if type(participant) == int:  # single participant index is given
-            # TODO
+        if type(participant) is int:  # single participant index is given
             keys = [k for k in keys if participant in k]
+        elif type(participant) is list:
+            keys = [k for k in keys if k[0] in participant]
+        else:
+            raise TypeError("Unsupported participant type, must be int or list or None")
+        if type(session) is int:  # single participant index is given
+            keys = [k for k in keys if session in k]
+        elif type(session) is list:
+            keys = [k for k in keys if k[0] in session]
+        else:
+            raise TypeError("Unsupported session type, must be int, list or None")
+        rtn = dict([((p, s), (data, events)) for (p, s), (data, events, _, _) in self.participant_session_dict.items() if (p, s) in keys])
+        return rtn
+
 
     def get_pupil_epochs(self, event_names, event_filters, participant=None, session=None):
         """
@@ -82,7 +93,6 @@ class RenaDataFrame:
 
     def viz_pupil_epochs(self, event_names, event_filters, colors, participant=None, session=None, regen_epochs=False):
         assert len(event_filters) == len(colors)
-
         if self.pupil_epochs == None or regen_epochs:
             self.get_pupil_epochs(event_names, event_filters, participant, session)
 
@@ -90,7 +100,6 @@ class RenaDataFrame:
 
     def viz_eeg_epochs(self, event_names, event_filters, colors, participant=None, session=None, regen_epochs=False):
         assert len(event_filters) == len(colors)
-
         if self.eeg_epochs == None or regen_epochs:
             self.get_eeg_epochs(event_names, event_filters, participant, session)
         visualize_eeg_epochs(self.eeg_epochs, self.eeg_event_ids, colors)

@@ -12,16 +12,20 @@ from utils.utils import flatten_list, read_file_lines_as_list
 def load_participant_session_dict(participant_session_dict, preloaded_dats_path):
     print("Preloading .dats")  # TODO parallelize loading of .dats
     for p_i, (participant_index, session_dict) in enumerate(participant_session_dict.items()):
-        print("Loading on participant-code[{0}]: {2} of {1}".format(int(participant_index),
+        print("Loading data for participant-code[{0}]: {2} of {1}".format(int(participant_index),
                                                                     len(participant_session_dict), p_i + 1))
         for session_index, session_files in session_dict.items():
-            print("Session {0} of {1}".format(session_index + 1, len(session_dict)))
+            print("Session-code [{0}]: {0} of {1}".format(session_index, session_index + 1, len(session_dict)))
             data_path, _, _, _, _= session_files
             if os.path.exists(
                     data_path.replace('dats', 'p')):  # load pickle if it's available as it is faster than dats
                 data = pickle.load(open(data_path.replace('dats', 'p'), 'rb'))
             else:
+                print("dats file found, a .p file will be saved after streaming in for faster loading time next time")
                 data = RNStream(data_path).stream_in(ignore_stream=('monitor1'), jitter_removal=False)
+                # if data is a .dats, save .p after loading for faster processing next time
+                pickle.dump(data, open(data_path.replace('dats', 'p'), 'rb'))
+
             participant_session_dict[participant_index][session_index][0] = data
     # save the preloaded .dats
     # print("Saving preloaded sessions...")
