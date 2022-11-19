@@ -5,7 +5,7 @@ import numpy as np
 from params import *
 from utils.Event import add_events_to_data, check_contraint_block_counts
 from utils.utils import generate_pupil_event_epochs, visualize_pupil_epochs, rescale_merge_exg, \
-    generate_eeg_event_epochs, preprocess_session_eeg, visualize_eeg_epochs
+    generate_eeg_event_epochs, preprocess_session_eeg, visualize_eeg_epochs, validate_get_epoch_args
 
 
 class RenaDataFrame:
@@ -13,6 +13,8 @@ class RenaDataFrame:
         self.participant_session_dict = {}
         self.pupil_epochs = None
         self.eeg_epochs = None
+        self.pupil_event_ids = None
+        self.eeg_event_ids = None
 
     def add_participant_session(self, data, events, participant, session_index, bad_channels, ica_path):
         self.participant_session_dict[(participant, session_index)] = data, events, bad_channels, ica_path
@@ -22,9 +24,15 @@ class RenaDataFrame:
             if 'BioSemi'in data.keys():
                 print("Preprocessing EEG data")
                 eeg_raw, eeg_ica_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, bad_channels=bad_channels)
-                data['BioSemi'] = {'raw': eeg_raw, 'ica': eeg_ica_raw, 'timestamps': downsampled_timestamps}
+                data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'ica': eeg_ica_raw, 'timestamps': downsampled_timestamps}
 
     def get_data_events(self, participant=None, session=None) -> dict:
+        """
+
+        :param participant:
+        :param session:
+        :return: a dictionary with key being (participant, session), value is (data: dict, events: list of Event)
+        """
         if participant is None and session is None:
             rtn = dict([((p, s), (data, events)) for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items()])
             return rtn
@@ -37,15 +45,14 @@ class RenaDataFrame:
 
     def get_pupil_epochs(self, event_names, event_filters, participant=None, session=None):
         """
-        event_filters: list of callables
-        @param event_filters:
+        event_filters:
+        @param event_filters: list of callables, each corresponding to the event name
         @param participant:
         @param session:
         @return:
         """
+        validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
-        self.pupil_epochs = None
-        self.pupil_event_ids = None
 
         for (p, s), (data, events) in ps_dict.items():
             print('Getting pupil epochs for participant {} session {}'.format(p, s))
@@ -60,9 +67,8 @@ class RenaDataFrame:
             self.pupil_epochs = epochs_pupil if self.pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, self.pupil_epochs])
 
     def get_eeg_epochs(self, event_names, event_filters, participant=None, session=None):
+        validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
-        self.eeg_epochs = None
-        self.eeg_event_ids = None
 
         for (p, s), (data, events) in ps_dict.items():
             print('Getting EEG epochs for participant {} session {}'.format(p, s))
@@ -72,6 +78,7 @@ class RenaDataFrame:
             epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, self.eeg_event_ids)
             # check_contraint_block_counts(events, deviant + len(epochs))  # TODO only taken into account constraint conditions
             self.eeg_epochs = epochs if self.eeg_epochs is None else mne.concatenate_epochs([epochs, self.eeg_epochs])
+
 
     def viz_pupil_epochs(self, event_names, event_filters, colors, participant=None, session=None, regen_epochs=False):
         assert len(event_filters) == len(colors)

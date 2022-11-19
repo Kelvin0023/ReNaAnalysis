@@ -522,7 +522,8 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, hig
 
     return raw, raw_ica_recon, raw.get_data(picks='timestamps')[0]  # return includes the timestamps squeezing the first dimension
 
-def check_out_of_range():
-    maxs = np.array([x.max() for x in a])
-    mins = np.array([x.min() for x in a])
-    b = np.logical_and(maxs > 100e-6, mins < 100e-6)
+def validate_get_epoch_args(event_names, event_filters):
+    try:
+        assert len(event_filters) == len(event_names)
+    except AssertionError:
+        raise ValueError('Number of event names must match the number of event filters')
