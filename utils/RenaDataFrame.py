@@ -11,10 +11,6 @@ from utils.utils import generate_pupil_event_epochs, visualize_pupil_epochs, res
 class RenaDataFrame:
     def __init__(self):
         self.participant_session_dict = {}
-        self.pupil_epochs = None
-        self.eeg_epochs = None
-        self.pupil_event_ids = None
-        self.eeg_event_ids = None
 
     def add_participant_session(self, data, events, participant, session_index, bad_channels, ica_path):
         self.participant_session_dict[(participant, session_index)] = data, events, bad_channels, ica_path
@@ -22,7 +18,7 @@ class RenaDataFrame:
     def preprocess(self):
         for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items():
             if 'BioSemi'in data.keys():
-                print("Preprocessing EEG data")
+                print(f"Preprocessing EEG for participant {p}, session {s}")
                 eeg_raw, eeg_ica_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, bad_channels=bad_channels)
                 data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'ica': eeg_ica_raw, 'timestamps': downsampled_timestamps}
 
@@ -42,12 +38,16 @@ class RenaDataFrame:
             keys = [(p, s) for p, s in keys if participant == p]
         elif type(participant) is list:
             keys = [(p, s) for p, s in keys if p in participant]
+        elif participant is None:
+            pass
         else:
             raise TypeError("Unsupported participant type, must be int or list or None")
         if type(session) is int:  # single participant index is given
             keys = [(p, s) for p, s in keys if session == s]
         elif type(session) is list:
             keys = [(p, s) for p, s in keys if s in session]
+        elif session is None:
+            pass
         else:
             raise TypeError("Unsupported session type, must be int, list or None")
         rtn = dict([((p, s), (data, events)) for (p, s), (data, events, _, _) in self.participant_session_dict.items() if (p, s) in keys])
@@ -64,7 +64,8 @@ class RenaDataFrame:
         """
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
-        self.pupil_epochs = None  # clear epochs
+        pupil_epochs = None  # clear epochs
+        event_ids = None
         for (p, s), (data, events) in ps_dict.items():
             print('Getting pupil epochs for participant {} session {}'.format(p, s))
             eye_data = data[varjoEyetracking_preset["StreamName"]][0]
@@ -72,33 +73,29 @@ class RenaDataFrame:
             pupil_right_data = eye_data[varjoEyetracking_preset["ChannelNames"].index('right_pupil_size'), :]
             pupil_data = np.concatenate([np.expand_dims(pupil_left_data, axis=1), np.expand_dims(pupil_right_data, axis=1)], axis=1)
 
-            pupil_data_with_events, self.pupil_event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_preset["StreamName"]][1], events, event_names, event_filters)
-            epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], self.pupil_event_ids)
+            pupil_data_with_events, event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_preset["StreamName"]][1], events, event_names, event_filters)
+            epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids)
             # check_contraint_block_counts(events, deviant + len(epochs_pupil))  # TODO only taken into account constraint conditions
-            self.pupil_epochs = epochs_pupil if self.pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, self.pupil_epochs])
-        return self.pupil_epochs
+            pupil_epochs = epochs_pupil if pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs])
+        return pupil_epochs, event_ids
 
     def get_eeg_epochs(self, event_names, event_filters, participant=None, session=None):
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
-        self.eeg_epochs = None  # clear epochs
+        eeg_epochs = None  # clear epochs
+        event_ids = None
+
         for (p, s), (data, events) in ps_dict.items():
             print('Getting EEG epochs for participant {} session {}'.format(p, s))
 
-            eeg_data_with_events, self.eeg_event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
+            eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
 
-            epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, self.eeg_event_ids)
+            epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids)
             # check_contraint_block_counts(events, deviant + len(epochs))  # TODO only taken into account constraint conditions
-            self.eeg_epochs = epochs if self.eeg_epochs is None else mne.concatenate_epochs([epochs, self.eeg_epochs])
-        return self.eeg_epochs
+            eeg_epochs = epochs if eeg_epochs is None else mne.concatenate_epochs([epochs, eeg_epochs])
+        return eeg_epochs, event_ids
 
-    def viz_pupil_epochs(self, event_names, event_filters, colors, participant=None, session=None):
-        assert len(event_filters) == len(colors)
-        self.get_pupil_epochs(event_names, event_filters, participant, session)
+    def event_discriminant_analysis(self, event_names, event_filters):
 
-        visualize_pupil_epochs(self.pupil_epochs, self.pupil_event_ids, colors)
-
-    def viz_eeg_epochs(self, event_names, event_filters, colors, participant=None, session=None):
-        assert len(event_filters) == len(colors)
-        self.get_eeg_epochs(event_names, event_filters, participant, session)
-        visualize_eeg_epochs(self.eeg_epochs, self.eeg_event_ids, colors)
+        # TODO
+        pass

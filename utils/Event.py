@@ -105,12 +105,16 @@ def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, 
         event_ts = [e.timestamp for e in filtered_events]
 
         event_data_indices = [np.argmin(np.abs(data_timestamp - t)) for t in event_ts if np.min(np.abs(data_timestamp - t)) < deviate]
-        deviate_event_count = len(event_ts) - len(event_data_indices)
-        if deviate_event_count > 0: print("Removing {} devicate events".format(deviate_event_count))
-        deviant += deviate_event_count
 
-        event_array[event_data_indices] = i + 1
-        event_ids[event_names[i]] = i + 1
+        if len(event_data_indices) > 0:
+            deviate_event_count = len(event_ts) - len(event_data_indices)
+            if deviate_event_count > 0: print("Removing {} devicate events".format(deviate_event_count))
+            deviant += deviate_event_count
+
+            event_array[event_data_indices] = i + 1
+            event_ids[event_names[i]] = i + 1
+        else:
+            print(f'Unable to find event with name {event_names[i]}, skipping')
     if type(data_array) is np.ndarray:
         rtn = np.concatenate([data_array, np.expand_dims(event_array, axis=1)], axis=1)
     elif type(data_array) is RawArray:

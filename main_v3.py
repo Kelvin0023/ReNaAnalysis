@@ -18,7 +18,8 @@ from utils.data_utils import get_exg_data
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
 from utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
-    read_file_lines_as_list, get_gaze_ray_events, get_item_events, rescale_merge_exg, extract_block_data
+    read_file_lines_as_list, get_gaze_ray_events, get_item_events, rescale_merge_exg, extract_block_data, \
+    viz_pupil_epochs, viz_eeg_epochs
 from params import *
 # analysis parameters ######################################################################################
 from utils.viz_utils import visualize_gaze_events
@@ -110,15 +111,17 @@ if not is_loading_saved_analysis:
             # visualize_gaze_events(events, 6)
             rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels, session_ICA_path)  # also preprocess the EEG data
 
-# rdf.preprocess()
-colors = ['blue', 'red']
+rdf.preprocess()
+colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
 event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-# rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors, participant='1', session=1)
-rdf.viz_pupil_epochs(["Distractor", "Target"], event_filters, colors, participant=['0', '1'], session=[0, 1])
-rdf.viz_eeg_epochs(["Distractor", "Target"], event_filters, colors)
-
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
+viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
+viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant=['0', '1'], session=[0, 1])
+viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
+viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
+viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
 
 
 end_time = time.time()

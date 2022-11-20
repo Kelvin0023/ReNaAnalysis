@@ -359,7 +359,7 @@ def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO',
     plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
-    for (e_name, e_id), c in zip(event_ids.items(), colors):
+    for e_name, e_id in event_ids.items():
         y = epochs[e_name].get_data()
         y = interpolate_epoch_zeros(y)  # remove nan
         y = interpolate_epochs_nan(y)  # remove nan
@@ -377,10 +377,10 @@ def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO',
 
         time_vector = np.linspace(tmin_pupil_viz, tmax_pupil_viz, y.shape[-1])
         if not (np.any(np.isnan(y1)) or np.any(np.isnan(y2))):
-            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=c,
+            plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=colors[e_name],
                              interpolate=True,
                              alpha=0.5)
-        plt.plot(time_vector, y_mean, c=c,
+        plt.plot(time_vector, y_mean, c=colors[e_name],
                  label='{0}, N={1}'.format(e_name, y.shape[0]))
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
@@ -398,7 +398,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, v
 
     if is_plot_timeseries:
         for ch in eeg_picks:
-            for (event_name, events), c in zip(event_groups.items(), colors):
+            for event_name, events in event_groups.items():
                 try:
                     y = epochs.crop(tmin_eeg_viz, tmax_eeg_viz)[event_name].pick_channels([ch]).get_data().squeeze(1)
                 except KeyError:  # meaning this event does not exist in these epochs
@@ -408,8 +408,8 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, v
                 y2 = y_mean - scipy.stats.sem(y, axis=0)
 
                 time_vector = np.linspace(tmin_eeg_viz, tmax_eeg_viz, y.shape[-1])
-                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=c, interpolate=True, alpha=0.5)
-                plt.plot(time_vector, y_mean, c=c, label='{0}, N={1}'.format(event_name, y.shape[0]))
+                plt.fill_between(time_vector, y1, y2, where=y2 <= y1, facecolor=colors[event_name], interpolate=True, alpha=0.5)
+                plt.plot(time_vector, y_mean, c=colors[event_name], label='{0}, N={1}'.format(event_name, y.shape[0]))
             plt.xlabel('Time (sec)')
             plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
             plt.legend()
@@ -439,7 +439,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, v
 
         for event_name, events in event_groups.items():
             try:
-                epochs[events].average().plot_topomap(times=np.linspace(tmin, tmax, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
+                epochs[events].average().plot_topomap(times=np.linspace(tmin_eeg_viz, tmax_eeg_viz, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
             except KeyError:  # meaning this event does not exist in these epochs
                 continue
 
@@ -471,7 +471,7 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, hig
 
     if bad_channels is not None: # TODO data pipeline does not give bad channels to this function right now
         raw.info['bads'] = bad_channels
-        raw.interpolate_bads(method={'eeg': 'MNE'}, verbose='INFO')
+        raw.interpolate_bads(method={'eeg': 'spline'}, verbose='INFO')
 
     raw = raw.filter(l_freq=lowcut, h_freq=highcut, n_jobs=n_worker)  # bandpass filter
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_worker)
@@ -527,3 +527,11 @@ def validate_get_epoch_args(event_names, event_filters):
         assert len(event_filters) == len(event_names)
     except AssertionError:
         raise ValueError('Number of event names must match the number of event filters')
+
+def viz_pupil_epochs(rdf, event_names, event_filters, colors, participant=None, session=None):
+    pupil_epochs, pupil_event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant, session)
+    visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors)
+
+def viz_eeg_epochs(rdf, event_names, event_filters, colors, participant=None, session=None):
+    eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
+    visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors)
