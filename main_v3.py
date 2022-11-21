@@ -104,7 +104,7 @@ if not is_loading_saved_analysis:
 
             # add gaze behaviors from I-DT
             events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events)
-            # events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events, headtracking_data_timestamps=data['Unity.HeadTracker'])
+            events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events, headtracking_data_timestamps=data['Unity.HeadTracker'])
             # add gaze behaviors from patch sim
             events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 

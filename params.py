@@ -8,8 +8,8 @@ from utils.Bidict import Bidict
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-data_directory = "Subjects"
-# data_directory = "Subjects-Test"
+# data_directory = "Subjects"
+data_directory = "Subjects-Test"
 # data_directory = "Subjects-Test-IncompleteBlock"
 
 # event_ids_dict = {'EventMarker': {'DistractorPops': 1, 'TargetPops': 2, 'NoveltyPops': 3},

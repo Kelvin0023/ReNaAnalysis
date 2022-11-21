@@ -58,18 +58,19 @@ def gaze_event_detection_I_VT(eyetracking_data_timestamps, events, headtracking_
     gaze_xy = eyetracking_data[[varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
     gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
 
+    head_rotation_xy_eyesampled = None
     if headtracking_data_timestamps is not None:
+        print("Processing headtracking data")
         headtracking_data, head_tracker_timestamps = headtracking_data_timestamps
         yaw_pitch_indices = headtracker_preset['ChannelNames'].index("Head Yaw"), headtracker_preset['ChannelNames'].index("Head Pitch")
         head_rotation_xy = headtracking_data[yaw_pitch_indices, :]
-        # upsample the head-tracking data to match that of gaze tracking
-        headtracking_srate = 1 / np.mean(np.diff(head_tracker_timestamps))
-
-        scipy.interpolate.interp1d()
+        # find the closest head tracking data point for each eyetracking point
+        head_rotation_xy_eyesampled = scipy.signal.resample(head_rotation_xy, len(eyetracking_timestamps),axis=1)
 
     gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy,
                                                                                gaze_timestamps=eyetracking_timestamps,
-                                                                               gaze_status=gaze_status)
+                                                                               gaze_status=gaze_status,
+                                                                               head_rotation=head_rotation_xy_eyesampled)
     fixations, saccades = add_event_info_to_gaze(fixations, events)
     return fixations + saccades
 
@@ -110,7 +111,7 @@ def add_event_info_to_gaze(fixations, events):
 
 def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_status=None,
                          saccade_min_peak=6, saccade_min_amplitude=2, saccade_spacing=20e-3, saccade_min_sample=2,
-                         fixation_min_sample=2, glitch_threshold=1000):
+                         fixation_min_sample=2, glitch_threshold=1000, head_rotation=None):
     """
     gaze event detection based on Velocity Threshold Identification (I-VT)
     inspirations:
@@ -136,6 +137,11 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
     fixations = []  # items are tuple of three: saccade onset index, saccade peak velocity index, saccade offset index, Saccade object,
 
     gaze_xy_deg = (180 / math.pi) * np.arcsin(gaze_xy) if gaze_xy_format == 'ratio' else gaze_xy
+
+    detection_alg = 'I-DT' if head_rotation is None else 'I-DT-Head'
+    if head_rotation is not None:
+        gaze_xy_deg = gaze_xy_deg + head_rotation
+
 
     # calculate eye velocity in degrees
     dxy = np.diff(gaze_xy_deg, axis=1, prepend=gaze_xy_deg[:, :1])
@@ -175,7 +181,7 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
         if velocities[peak] > saccade_min_peak and amplitude > saccade_min_amplitude:
             saccades.append(
                 Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset, gaze_timestamps[onset],
-                        gaze_timestamps[offset], peak, detection_alg='I-DT'))
+                        gaze_timestamps[offset], peak, detection_alg=detection_alg))
 
     # identify the fixations for all the intervals between saccades
     fixation_inteval_indices = [(saccades[i - 1].offset, saccades[i].onset) for i in
@@ -189,7 +195,7 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
             dispersion = np.max(_xy_deg, axis=1) - np.min(_xy_deg, axis=1)
             fixations.append(
                 Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset, gaze_timestamps[onset],
-                         gaze_timestamps[offset], detection_alg='I-DT'))
+                         gaze_timestamps[offset], detection_alg=detection_alg))
 
     glitch_precentage = np.sum(events == -1) / len(events)
 
