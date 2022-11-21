@@ -33,6 +33,19 @@ class RenaDataFrame:
             rtn = dict([((p, s), (data, events)) for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items()])
             return rtn
 
+        keys = self.get_filtered_particiapnt_session_key(participant, session)
+        rtn = dict([((p, s), (data, events)) for (p, s), (data, events, _, _) in self.participant_session_dict.items() if (p, s) in keys])
+        return rtn
+
+    def get_event(self, participant, session):
+        try:
+            assert type(participant) is str and type(session) is int
+        except AssertionError:
+            raise TypeError(f"Wrong type for participant {type(participant)} or session {type(session)}")
+        keys = self.get_filtered_particiapnt_session_key(participant, session)
+        return self.participant_session_dict[keys[0]][1]
+
+    def get_filtered_particiapnt_session_key(self, participant=None, session=None):
         keys = self.participant_session_dict.keys()
         if type(participant) is str:  # single participant index is given
             keys = [(p, s) for p, s in keys if participant == p]
@@ -50,10 +63,7 @@ class RenaDataFrame:
             pass
         else:
             raise TypeError("Unsupported session type, must be int, list or None")
-        rtn = dict([((p, s), (data, events)) for (p, s), (data, events, _, _) in self.participant_session_dict.items() if (p, s) in keys])
-        return rtn
-
-
+        return keys
     def get_pupil_epochs(self, event_names, event_filters, participant=None, session=None):
         """
         event_filters:

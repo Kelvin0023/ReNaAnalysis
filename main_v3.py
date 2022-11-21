@@ -108,7 +108,7 @@ if not is_loading_saved_analysis:
             # add gaze behaviors from patch sim
             events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
-            # visualize_gaze_events(events, 6)
+            visualize_gaze_events(events, 6)
             rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels, session_ICA_path)  # also preprocess the EEG data
 
 rdf.preprocess()
@@ -117,10 +117,9 @@ colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
-viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
-viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant=['0', '1'], session=[0, 1])
+# viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
 viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
-viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
+# viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
 viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
 
 

@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+import scipy
 from matplotlib import pyplot as plt
 
 from eye.EyeUtils import temporal_filter_fixation
@@ -62,6 +63,9 @@ def gaze_event_detection_I_VT(eyetracking_data_timestamps, events, headtracking_
         yaw_pitch_indices = headtracker_preset['ChannelNames'].index("Head Yaw"), headtracker_preset['ChannelNames'].index("Head Pitch")
         head_rotation_xy = headtracking_data[yaw_pitch_indices, :]
         # upsample the head-tracking data to match that of gaze tracking
+        headtracking_srate = 1 / np.mean(np.diff(head_tracker_timestamps))
+
+        scipy.interpolate.interp1d()
 
     gaze_behavior_events, fixations, saccades, velocity = gaze_event_detection(gaze_xy,
                                                                                gaze_timestamps=eyetracking_timestamps,

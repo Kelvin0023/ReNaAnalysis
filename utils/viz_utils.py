@@ -78,6 +78,10 @@ def visualize_gazeray(events, block_id=None):
     plt.show()
 
 
+def visualize_rdf_gaze_event(rdf, participant, session, block_id=None):
+    events = rdf.get_event(participant, session)
+    visualize_gaze_events(events, block_id)
+
 def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, pathSim_fix_y = 1):
     f, ax = plt.subplots(figsize=[40, 5])
 
