@@ -82,7 +82,7 @@ def visualize_rdf_gaze_event(rdf, participant, session, block_id=None):
     events = rdf.get_event(participant, session)
     visualize_gaze_events(events, block_id)
 
-def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, pathSim_fix_y = 1):
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5):
     f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -103,6 +103,7 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
 
         draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
+        draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'Patch-Sim' and block_start_timestamp < x.timestamp < block_end_timestamp, pathSim_fix_y)
 
         ax.set_xlim(block_start_timestamp, block_end_timestamp)

@@ -1,28 +1,14 @@
-
-
-import json
 import os
-import pickle
 import time
 from collections import defaultdict
-from datetime import datetime
 
-import matplotlib.pyplot as plt
-import numpy as np
-import mne
-
-from eye.EyeUtils import temporal_filter_fixation
-from eye.eyetracking import gaze_event_detection, gaze_event_detection_I_VT, gaze_event_detection_PatchSim
-from utils.RenaDataFrame import RenaDataFrame
-from utils.data_utils import get_exg_data
-from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
-from utils.utils import generate_pupil_event_epochs, \
-    flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
-    read_file_lines_as_list, get_gaze_ray_events, get_item_events, rescale_merge_exg, extract_block_data, \
-    viz_pupil_epochs, viz_eeg_epochs
+from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation
 from params import *
+from utils.RenaDataFrame import RenaDataFrame
+from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
+from utils.utils import get_item_events, viz_pupil_epochs, viz_eeg_epochs
 # analysis parameters ######################################################################################
-from utils.viz_utils import visualize_gaze_events
+from utils.viz_utils import visualize_gaze_events, visualize_rdf_gaze_event
 
 """
 Parameters (in the file /params.py):
@@ -108,22 +94,35 @@ if not is_loading_saved_analysis:
             # add gaze behaviors from patch sim
             events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
-            visualize_gaze_events(events, 6)
+            # visualize_gaze_events(events, 6)
             rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels, session_ICA_path)  # also preprocess the EEG data
 
 rdf.preprocess()
-colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
-
-event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
-                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
-# viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
-viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
-# viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
-viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
-
-
 end_time = time.time()
 print("Took {0} seconds".format(end_time - start_time))
 
+colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
+# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
+#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
+# # viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
+# viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
+# # viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
+# viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
+#
+#
+#
+#
+#
+# visualize_rdf_gaze_event(rdf, participant='1', session=1, block_id=6)
+#
+# event_filters = [lambda x: type(x)==Fixation and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: type(x)==Fixation and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"],
+#                  lambda x: type(x)==Fixation and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Novelty"]]
+# viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
+#
+#
+event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors)

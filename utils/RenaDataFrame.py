@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import numpy as np
 
@@ -86,6 +87,10 @@ class RenaDataFrame:
             pupil_data_with_events, event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_preset["StreamName"]][1], events, event_names, event_filters)
             epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids)
             # check_contraint_block_counts(events, deviant + len(epochs_pupil))  # TODO only taken into account constraint conditions
+            if len(epochs_pupil) == 0:
+                warnings.warn(f'No epochs found for participant {p} session {s} after rejection, skipping')
+            else:
+                print(f'Found {len(epochs_pupil)} pupil epochs for participant {p} session {s}')
             pupil_epochs = epochs_pupil if pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs])
         return pupil_epochs, event_ids
 
@@ -96,13 +101,15 @@ class RenaDataFrame:
         event_ids = None
 
         for (p, s), (data, events) in ps_dict.items():
-            print('Getting EEG epochs for participant {} session {}'.format(p, s))
-
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
 
             epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids)
             # check_contraint_block_counts(events, deviant + len(epochs))  # TODO only taken into account constraint conditions
-            eeg_epochs = epochs if eeg_epochs is None else mne.concatenate_epochs([epochs, eeg_epochs])
+            if len(epochs) == 0:
+                warnings.warn(f'No epochs found for participant {p} session {s} after rejection, skipping')
+            else:
+                print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
+                eeg_epochs = epochs if eeg_epochs is None else mne.concatenate_epochs([epochs, eeg_epochs])
         return eeg_epochs, event_ids
 
     def event_discriminant_analysis(self, event_names, event_filters):

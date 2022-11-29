@@ -64,8 +64,7 @@ def get_data_file_paths(base_root, data_directory):
 
     for participant, participant_directory in zip(participant_list, participant_directory_list):
         file_names = os.listdir(participant_directory)
-        # assert len(file_names) % 3 == 0
-        # must have #files divisible by 3. That is, we have a itemCatalog, SessionLog and data file for each experiment session.
+        #  That is, we have a itemCatalog, SessionLog and data file for each experiment session.
         num_sessions = [int(txt.strip('.p')) for txt in file_names if txt != '.DS_Store' and txt.strip('.p').isdigit()]
         num_sessions = len(np.unique(num_sessions))
         if os.path.exists(os.path.join(participant_directory, 'badchannels.txt')):  # load bad channels for this participant

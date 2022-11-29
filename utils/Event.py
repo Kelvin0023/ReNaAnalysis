@@ -149,6 +149,9 @@ def is_event_in_block(event, events):
     return False
 
 def copy_item_info(dest_event, source_event):
+    dest_event.block_condition = source_event.block_condition
+    dest_event.block_id = source_event.block_id
+
     dest_event.dtn = source_event.dtn
     dest_event.dtn_onffset = source_event.dtn_onffset
     dest_event.item_id = source_event.item_id
