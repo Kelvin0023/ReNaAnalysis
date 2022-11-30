@@ -1,15 +1,66 @@
-def rena_analysis(is_data_preloaded, is_epochs_preloaded, is_save_loaded_data, is_regenerate_ica: bool,
-                  preloaded_dats_path = 'data/participant_session_dict.p',
-                  preloaded_epoch_path = 'data/participant_condition_epoch_dict.p',
-                  preloaded_block_path = 'data/participant_condition_block_dict.p'):
-    """
+import os
+import time
 
-    @param is_data_preloaded:
-    @param is_epochs_preloaded:
-    @param is_save_loaded_data:
-    @param is_regenerate_ica: whether to regenerate ica for the EEG data, if yes, the script calculates the ica components
-    while processing the EEG data. The generated ica weights will be save to the data path, so when running the script
-    the next time and if the EEG data is not changed, you can set this to false to skip recalculating ica to save time
-    """
-    pass
+from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
+from params import *
+from utils.RenaDataFrame import RenaDataFrame
+from utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
+from utils.utils import get_item_events
 
+
+def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
+    eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
+
+
+
+def get_rdf(is_loading_saved_analysis = False):
+    start_time = time.time()  # record the start time of the analysis
+    # get the list of paths to save the analysis results
+    preloaded_dats_path, preloaded_epoch_path, preloaded_block_path, gaze_statistics_path, gaze_behavior_path, epoch_data_export_root = get_analysis_result_paths(
+        base_root, note)
+    # get the paths to the data files
+    participant_list, participant_session_file_path_dict, participant_badchannel_dict = get_data_file_paths(base_root,
+                                                                                                            data_directory)
+
+    rdf = RenaDataFrame()
+
+    if not is_loading_saved_analysis:
+        participant_session_file_path_dict = load_participant_session_dict(participant_session_file_path_dict,
+                                                                           preloaded_dats_path)
+        print("Loading data took {0} seconds".format(time.time() - start_time))
+
+        for p_i, (participant_index, session_dict) in enumerate(participant_session_file_path_dict.items()):
+            # print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
+            for session_index, session_files in session_dict.items():
+                print("Processing participant-code[{0}]: {4} of {1}, session {2} of {3}".format(int(participant_index),
+                                                                                                len(participant_session_file_path_dict),
+                                                                                                session_index + 1,
+                                                                                                len(session_dict),
+                                                                                                p_i + 1))
+                data, item_catalog_path, session_log_path, session_bad_eeg_channels_path, session_ICA_path = session_files
+                session_bad_eeg_channels = open(session_bad_eeg_channels_path, 'r').read().split(' ') if os.path.exists(
+                    session_bad_eeg_channels_path) else None
+                item_catalog = json.load(open(item_catalog_path))
+                session_log = json.load(open(session_log_path))
+                item_codes = list(item_catalog.values())
+
+                # markers
+                events = get_item_events(data['Unity.ReNa.EventMarkers'][0], data['Unity.ReNa.EventMarkers'][1],
+                                         data['Unity.ReNa.ItemMarkers'][0], data['Unity.ReNa.ItemMarkers'][1])
+
+                # add gaze behaviors from I-DT
+                events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events)
+                events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events,
+                                                    headtracking_data_timestamps=data['Unity.HeadTracker'])
+                # add gaze behaviors from patch sim
+                events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1],
+                                                        events)
+
+                # visualize_gaze_events(events, 6)
+                rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels,
+                                            session_ICA_path)  # also preprocess the EEG data
+
+    rdf.preprocess()
+    end_time = time.time()
+    print("Getting RDF Took {0} seconds".format(end_time - start_time))
+    return rdf

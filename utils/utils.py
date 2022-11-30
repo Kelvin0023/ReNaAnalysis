@@ -1,15 +1,10 @@
 import os
-import random
-from copy import copy
 
-import scipy
-from autoreject import AutoReject
-from scipy.interpolate import interp1d
-
-import mne
-import numpy as np
 import matplotlib.pyplot as plt
-from mne import find_events, Epochs
+import numpy as np
+import scipy
+from mne import Epochs
+from scipy.interpolate import interp1d
 
 from eye.eyetracking import Saccade, GazeRayIntersect
 from params import *
@@ -356,7 +351,7 @@ def generate_eeg_event_epochs(raw, event_ids):
     return epochs, epochs.events[:, 2]
 
 
-def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
+def visualize_pupil_epochs(epochs, event_ids, colors, title='', srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
     plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
@@ -385,10 +380,8 @@ def visualize_pupil_epochs(epochs, event_ids, colors, srate=200, verbose='INFO',
                  label='{0}, N={1}'.format(e_name, y.shape[0]))
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
+    plt.title(title)
     plt.legend()
-
-    plt.legend()
-    plt.title("")
     plt.show()
 
 
@@ -529,10 +522,11 @@ def validate_get_epoch_args(event_names, event_filters):
     except AssertionError:
         raise ValueError('Number of event names must match the number of event filters')
 
-def viz_pupil_epochs(rdf, event_names, event_filters, colors, participant=None, session=None):
+def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None):
     pupil_epochs, pupil_event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant, session)
-    visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors)
+    visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, title=title)
 
 def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None):
     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
     visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)
+
