@@ -7,6 +7,8 @@ from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
 from utils.utils import get_item_events, viz_pupil_epochs, viz_eeg_epochs
+import matplotlib.pyplot as plt
+import numpy as np
 # analysis parameters ######################################################################################
 from utils.viz_utils import visualize_gaze_events, visualize_rdf_gaze_event
 
@@ -106,13 +108,8 @@ colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 # event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
 #                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
-# # viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
-# viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
 # # viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
 # viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
-#
-#
-#
 #
 #
 # visualize_rdf_gaze_event(rdf, participant='1', session=1, block_id=6)
@@ -123,6 +120,21 @@ colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 # viz_pupil_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
 #
 #
-event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+# event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+# viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors)
+
+event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"],
+                 lambda x: type(x)==Fixation and (x.block_condition == conditions['RSVP'] or x.block_condition == conditions['Carousel']) and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+viz_eeg_epochs(rdf, ["VS-Target", "OtherTarget"], event_filters, {'VS-Target': 'blue', 'OtherTarget': 'red', 'Novelty': 'orange'}, title='Locked to Detected Fixation (using patch-similarity)')
+
+
+event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn==dtnn_types["Distractor"],
+                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn==dtnn_types["Target"]]
+viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to Detected Fixation (using I-DT)')
+
+
+event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn==dtnn_types["Target"],
+                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"],
                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
-viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors)
+viz_eeg_epochs(rdf, ["I-DT", "I-DT-Head", "Patch-Sim"], event_filters, {'I-DT': 'blue', 'I-DT-Head': 'red', 'Patch-Sim': 'orange'}, title='Visual Search with Different Lockings')

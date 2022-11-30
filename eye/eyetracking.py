@@ -203,7 +203,7 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
         events[s.onset:s.offset] = SACCADE_CODE
     for f in fixations:
         events[f.onset:f.offset] = FIXATION_CODE
-    print("Detected {} fixation from I-DT with {}% glitch percentage".format(len(fixations), glitch_precentage * 100) + "" if head_rotation is None else "with Head rotation")
+    print("Detected {} fixation from I-DT with {}% glitch percentage {}".format(len(fixations), glitch_precentage * 100, "" if head_rotation is None else "with Head rotation"))
     return events, fixations, saccades, velocities
 
 

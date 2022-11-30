@@ -2,6 +2,7 @@ import os
 import warnings
 
 import numpy as np
+from autoreject import AutoReject
 
 from params import *
 from utils.Event import add_events_to_data, check_contraint_block_counts
@@ -110,9 +111,8 @@ class RenaDataFrame:
             else:
                 print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
                 eeg_epochs = epochs if eeg_epochs is None else mne.concatenate_epochs([epochs, eeg_epochs])
-        return eeg_epochs, event_ids
+        print("Auto rejecting epochs")
+        ar = AutoReject(n_jobs=16, verbose=False)
+        eeg_epochs_clean = ar.fit_transform(eeg_epochs)
+        return eeg_epochs_clean, event_ids
 
-    def event_discriminant_analysis(self, event_names, event_filters):
-
-        # TODO
-        pass

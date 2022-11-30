@@ -3,6 +3,7 @@ import random
 from copy import copy
 
 import scipy
+from autoreject import AutoReject
 from scipy.interpolate import interp1d
 
 import mne
@@ -342,15 +343,15 @@ def rescale_merge_exg(data_array_EEG, data_array_ECG):
     data_array = np.concatenate([data_array_EEG, data_array_ECG])
     return data_array
 
-def generate_eeg_event_epochs(raw, event_ids, erp_window=(.0, .8)):
+def generate_eeg_event_epochs(raw, event_ids):
     found_events = mne.find_events(raw, stim_channel='stim')
+    print(f"using auto-reject")
     # pupil epochs
     epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin_eeg, tmax=tmax_eeg,
                       baseline=(-0.1, 0.0),
                       preload=True,
                       verbose=False,
-                      picks='eeg',
-                    reject=reject)
+                      picks='eeg')
 
     return epochs, epochs.events[:, 2]
 
@@ -439,7 +440,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, v
 
         for event_name, events in event_groups.items():
             try:
-                epochs[events].average().plot_topomap(times=np.linspace(tmin_eeg_viz, tmax_eeg_viz, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vmax=vmax_EEG, vmin=vmin_EEG)
+                epochs[events].average().plot_topomap(times=np.linspace(tmin_eeg_viz, tmax_eeg_viz, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vlim=(vmin_EEG, vmax_EEG))
             except KeyError:  # meaning this event does not exist in these epochs
                 continue
 
@@ -532,6 +533,6 @@ def viz_pupil_epochs(rdf, event_names, event_filters, colors, participant=None, 
     pupil_epochs, pupil_event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant, session)
     visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors)
 
-def viz_eeg_epochs(rdf, event_names, event_filters, colors, participant=None, session=None):
+def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None):
     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
-    visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors)
+    visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)
