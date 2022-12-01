@@ -21,13 +21,13 @@ class EEGCNNNet(nn.Module):
         )
 
         self.fcs = nn.Sequential(
-            nn.Linear(8640, 128),
+            nn.Linear(864, 128),
             nn.Linear(128, 64),
             nn.Linear(64, num_classes)
         )
 
     def forward(self, x):
         x = self.conv(x)
-        x = torch.flatten(x)
+        x = torch.flatten(x, 1)
         x = self.fcs(x)
         return x
