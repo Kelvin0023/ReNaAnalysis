@@ -2,6 +2,7 @@ import itertools
 import json
 
 import mne
+import numpy as np
 
 from utils.Bidict import Bidict
 
@@ -53,11 +54,11 @@ tmin_eeg = -1.2
 tmax_eeg = 2.4
 
 tmin_eeg_viz = -0.1
-tmax_eeg_viz = 1.2
+tmax_eeg_viz = 1.
 
 eyetracking_srate = 200
 exg_srate = 2048
-
+exg_resample_srate = 128
 eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 
 eeg_montage = mne.channels.make_standard_montage('biosemi64')
@@ -100,3 +101,5 @@ reject = dict(eeg=100e-6)  # DO NOT reject or we will have a mismatch between EE
 
 is_regenerate_ica = False
 debug = True
+
+eeg_epoch_ticks = np.array([0, 0.3, 0.6])

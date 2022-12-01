@@ -1,8 +1,10 @@
 import os
 
+import imblearn
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
+from imblearn.over_sampling import SMOTE
 from mne import Epochs
 from scipy.interpolate import interp1d
 
@@ -338,11 +340,9 @@ def rescale_merge_exg(data_array_EEG, data_array_ECG):
     data_array = np.concatenate([data_array_EEG, data_array_ECG])
     return data_array
 
-def generate_eeg_event_epochs(raw, event_ids):
+def generate_eeg_event_epochs(raw, event_ids, tmin, tmax):
     found_events = mne.find_events(raw, stim_channel='stim')
-    print(f"using auto-reject")
-    # pupil epochs
-    epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin_eeg, tmax=tmax_eeg,
+    epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin, tmax=tmax,
                       baseline=(-0.1, 0.0),
                       preload=True,
                       verbose=False,
@@ -449,7 +449,7 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., resample_srate=128, bad_channels=None, is_ica_selection_inclusive=True, n_worker=16):
+def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., bad_channels=None, is_ica_selection_inclusive=True, n_worker=16):
     eeg_data = data[0][1:65, :]  # take only the EEG channels
     ecg_data = data[0][65:67, :]
     exg_data = rescale_merge_exg(eeg_data, ecg_data)
@@ -469,7 +469,7 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, hig
 
     raw = raw.filter(l_freq=lowcut, h_freq=highcut, n_jobs=n_worker)  # bandpass filter
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_worker)
-    raw = raw.resample(resample_srate, n_jobs=n_worker)
+    raw = raw.resample(exg_resample_srate, n_jobs=n_worker)
 
     if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
         ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
@@ -530,3 +530,16 @@ def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participan
     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
     visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)
 
+def epochs_to_class_samples(epochs, event_ids, picks=None, balance=False):
+    x = []
+    y = []
+    for event_name, event_class in event_ids.items():
+        x.append(epochs[event_name].get_data(picks=picks))
+        y += [event_class] * len(epochs[event_name].get_data())
+    x = np.concatenate(x, axis=0)
+    # if balance:
+    #     sm = SMOTE(random_state=42)
+    #     x, y = sm.fit_resample(x, y)
+    if np.min(y) == 1:
+        y = np.array(y) - 1
+    return x, y

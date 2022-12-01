@@ -2,7 +2,7 @@ import os
 import time
 from collections import defaultdict
 
-from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation
+from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation, GazeRayIntersect
 from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
@@ -106,11 +106,10 @@ viz_eeg_epochs(rdf, ["I-DT", "I-DT-Head", "Patch-Sim"], event_filters,
 
 # discriminant analysis
 event_filters = [
-    lambda x: type(x) == Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn ==
-              dtnn_types["Distractor"],
-    lambda x: type(x) == Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn ==
-              dtnn_types["Target"]]
+    lambda x: type(x) == Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn == dtnn_types["Distractor"],
+    lambda x: type(x) == Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn == dtnn_types["Target"]]
 event_names = ["Distractor", "Target"]
+viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to Detected Fixation (using I-DT)')
 
 
 plt.rcParams.update({'font.size': 22})

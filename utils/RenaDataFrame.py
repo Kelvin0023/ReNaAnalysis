@@ -95,7 +95,7 @@ class RenaDataFrame:
             pupil_epochs = epochs_pupil if pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs])
         return pupil_epochs, event_ids
 
-    def get_eeg_epochs(self, event_names, event_filters, participant=None, session=None):
+    def get_eeg_epochs(self, event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=None, session=None):
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
         eeg_epochs = None  # clear epochs
@@ -104,7 +104,7 @@ class RenaDataFrame:
         for (p, s), (data, events) in ps_dict.items():
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
 
-            epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids)
+            epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax)
             # check_contraint_block_counts(events, deviant + len(epochs))  # TODO only taken into account constraint conditions
             if len(epochs) == 0:
                 warnings.warn(f'No epochs found for participant {p} session {s} after rejection, skipping')

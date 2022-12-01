@@ -1,17 +1,35 @@
 import os
 import time
 
+import numpy as np
+from matplotlib import pyplot as plt
+from sklearn.linear_model import LinearRegression
+
 from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
 from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
-from utils.utils import get_item_events
+from utils.utils import get_item_events, epochs_to_class_samples
 
 
 def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
 
 
+def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
+    assert len(event_names) == len(event_filters) == 2
+    eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
+    x, y = epochs_to_class_samples(eeg_epochs, eeg_event_ids, picks=eeg_picks)
+    r_square_grid = np.zeros(x.shape[1:])
+
+    for channel_i in range(r_square_grid.shape[0]):
+        for time_i in range(r_square_grid.shape[1]):
+            x_train = x[:, channel_i, time_i].reshape(-1, 1)
+            model = LinearRegression()
+            model.fit(x_train, y)
+            r_square_grid[channel_i, time_i] = model.score(x_train, y)
+    plt.imshow(r_square_grid, aspect='auto')
+    plt.show()
 
 def get_rdf(is_loading_saved_analysis = False):
     start_time = time.time()  # record the start time of the analysis
