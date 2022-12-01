@@ -443,10 +443,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, v
 def flatten_list(l):
     return [item for sublist in l for item in sublist]
 
-def read_file_lines_as_list(path):
-    with open(path, 'r') as filehandle:
-        out = [line.rstrip() for line in filehandle.readlines()]
-    return out
+
 
 def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
@@ -533,16 +530,3 @@ def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participan
     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
     visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)
 
-def epochs_to_class_samples(epochs, event_ids, picks=None, balance=False):
-    x = []
-    y = []
-    for event_name, event_class in event_ids.items():
-        x.append(epochs[event_name].get_data(picks=picks))
-        y += [event_class] * len(epochs[event_name].get_data())
-    x = np.concatenate(x, axis=0)
-    # if balance:
-    #     sm = SMOTE(random_state=42)
-    #     x, y = sm.fit_resample(x, y)
-    if np.min(y) == 1:
-        y = np.array(y) - 1
-    return x, y

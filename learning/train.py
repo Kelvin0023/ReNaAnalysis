@@ -4,6 +4,7 @@ import pickle
 
 import numpy as np
 import torch
+from imblearn.over_sampling import SMOTE
 from matplotlib import pyplot as plt
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
@@ -15,7 +16,7 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
-from params import lr, epochs, batch_size, train_ratio, model_save_dir
+from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage
 
 
 def score_model(x, y, model, test_name="CNN"):
@@ -52,6 +53,7 @@ def score_model(x, y, model, test_name="CNN"):
     val_losses = []
     val_accs = []
     best_loss = np.inf
+    patience_counter = []
 
     for epoch in range(epochs):
         mini_batch_i = 0
@@ -119,20 +121,70 @@ def score_model(x, y, model, test_name="CNN"):
                                                                                                                       -1],
                                                                                                                   val_losses[
                                                                                                                       -1]))
-
+        # Save training histories after every epoch
+        training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
+                              'acc_val': val_accs}
+        pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
         if val_losses[-1] < best_loss:
             torch.save(model.state_dict(), os.path.join(model_save_dir, test_name))
             print(
                 'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
                                                                                         model_save_dir))
             best_loss = val_losses[-1]
-
-        # Save training histories after every epoch
-        training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
-                              'acc_val': val_accs}
-        pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter > patience:
+                print(f'Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                break
+    plt.plot(training_histories['acc_train'])
+    plt.plot(training_histories['acc_val'])
+    plt.title(f"Accuracy, {test_name}")
+    plt.show()
 
     plt.plot(training_histories['loss_train'])
     plt.plot(training_histories['loss_val'])
+    plt.title(f"Loss, {test_name}")
     plt.show()
 
+    return model
+
+def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, data_type='eeg', picks=None, tmin_eeg=0, tmax_eeg=0.8):
+    """
+    script will always z norm along channels for the input
+    @param: data_type: can be eeg, pupil or mixed
+    """
+    if data_type == 'eeg':
+        epochs, event_ids = rdf.get_eeg_epochs(event_names, event_filters, picks=picks, tmin=tmin_eeg, tmax=tmax_eeg)
+    else:
+        raise NotImplementedError('Only EEG is implemented')
+    x = []
+    y = []
+    for event_name, event_class in event_ids.items():
+        x.append(epochs[event_name].get_data(picks=picks))
+        y += [event_class] * len(epochs[event_name].get_data())
+    x = np.concatenate(x, axis=0)
+
+    if np.min(y) == 1:
+        y = np.array(y) - 1
+
+    if rebalance:
+        epoch_shape = x.shape[1:]
+        x = np.reshape(x, newshape=(len(x), -1))
+        sm = SMOTE(random_state=42)
+        x, y = sm.fit_resample(x, y)
+        x = np.reshape(x, newshape=(len(x), ) + epoch_shape)  # reshape back x after resampling
+
+    x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)
+
+    if data_type == 'eeg':
+        x_distractors = x[:, eeg_montage.ch_names.index('CPz'), :][y==0]
+        x_targets = x[:, eeg_montage.ch_names.index('CPz'), :][y==1]
+        x_distractors = np.mean(x_distractors, axis=0)
+        x_targets = np.mean(x_targets, axis=0)
+        plt.plot(x_distractors)
+        plt.plot(x_targets)
+        plt.title('Sample sanity check')
+        plt.show()
+
+    return x, y

@@ -6,10 +6,11 @@ from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
 
 from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
+from learning.train import epochs_to_class_samples
 from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
-from utils.utils import get_item_events, epochs_to_class_samples, visualize_pupil_epochs
+from utils.utils import get_item_events, visualize_pupil_epochs
 
 
 def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
@@ -22,8 +23,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     plt.rcParams.update({'font.size': 22})
     assert len(event_names) == len(event_filters) == 2
     tmin = -0.1
-    eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin, tmax=0.8)
-    x, y = epochs_to_class_samples(eeg_epochs, eeg_event_ids, picks=eeg_picks)
+    x, y = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=0.8)
     r_square_grid = np.zeros(x.shape[1:])
 
     for channel_i in range(r_square_grid.shape[0]):

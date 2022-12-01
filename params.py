@@ -108,5 +108,6 @@ pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 lr = 5e-3
 batch_size = 1024
 epochs = 1000
+patience = 50
 train_ratio = 0.8
 model_save_dir = 'learning/saved_models'

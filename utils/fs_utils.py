@@ -6,9 +6,10 @@ from datetime import datetime
 import numpy as np
 from rena.utils.data_utils import RNStream
 
-from utils.utils import flatten_list, read_file_lines_as_list
-
-
+def read_file_lines_as_list(path):
+    with open(path, 'r') as filehandle:
+        out = [line.rstrip() for line in filehandle.readlines()]
+    return out
 def load_participant_session_dict(participant_session_dict, preloaded_dats_path):
     print("Preloading .dats")  # TODO parallelize loading of .dats
     for p_i, (participant_index, session_dict) in enumerate(participant_session_dict.items()):
@@ -78,3 +79,10 @@ def get_data_file_paths(base_root, data_directory):
                                                                         '{0}_badchannels'.format(i),
                                                                         '{0}_ParticipantSessionICA'.format(i)]]
     return participant_list, participant_session_file_path_dict, participant_badchannel_dict
+
+def convert_dats_in_folder_to_p(root):
+    file_paths = [os.path.join(root, x) for x in os.listdir(root)]
+    for i, f_path in enumerate(file_paths):
+        print(f"Working on file {f_path}, {i+1} of {len(file_paths)}")
+        data = RNStream(f_path).stream_in(jitter_removal=False)
+        pickle.dump(data, open(f_path.replace('dats', 'p'), 'wb'))

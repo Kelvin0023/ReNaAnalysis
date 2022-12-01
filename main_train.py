@@ -1,31 +1,13 @@
-import os
 import pickle
-import time
-from collections import defaultdict
 
-from imblearn.over_sampling import SMOTE
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
-
-from RenaAnalysis import get_rdf, r_square_test
-from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation
 from learning.models import EEGCNNNet
 from learning.train import score_model
-from params import *
-from utils.RenaDataFrame import RenaDataFrame
-from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
-from utils.utils import get_item_events, viz_pupil_epochs, viz_eeg_epochs, epochs_to_class_samples
-import matplotlib.pyplot as plt
-import numpy as np
+
 # analysis parameters ######################################################################################
-from utils.viz_utils import visualize_gaze_events, visualize_rdf_gaze_event
 
-start_time = time.time()  # record the start time of the analysis
 
-# rdf = pickle.load(open('rdf.p', 'rb'))
+print("Loading RDF")
+rdf = pickle.load(open('rdf.p', 'rb'))
 #
 # # discriminant test  ####################################################################################################
 # event_names = ["Distractor", "Target"]
@@ -51,7 +33,10 @@ start_time = time.time()  # record the start time of the analysis
 # plt.plot(x_distractors)
 # plt.plot(x_targets)
 # plt.show()
+#
+# epochs_to_class_samples(rdf, event_names, event_filters, rebalance=True)
+
 x = pickle.load(open('x.p', 'rb'))
 y = pickle.load(open('y.p', 'rb'))
-model = EEGCNNNet(in_length=x.shape[-1], num_classes=2)
-score_model(x, y, model)
+model = EEGCNNNet(in_shape=x.shape, num_classes=2)
+model = score_model(x, y, model)
