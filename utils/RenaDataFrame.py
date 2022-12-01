@@ -1,13 +1,12 @@
-import os
 import warnings
 
-import numpy as np
 from autoreject import AutoReject
 
 from params import *
-from utils.Event import add_events_to_data, check_contraint_block_counts
-from utils.utils import generate_pupil_event_epochs, visualize_pupil_epochs, rescale_merge_exg, \
-    generate_eeg_event_epochs, preprocess_session_eeg, visualize_eeg_epochs, validate_get_epoch_args
+from utils.Event import add_events_to_data
+from utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
+    validate_get_epoch_args, \
+    interpolate_zeros
 
 
 class RenaDataFrame:
@@ -23,6 +22,17 @@ class RenaDataFrame:
                 print(f"Preprocessing EEG for participant {p}, session {s}")
                 eeg_raw, eeg_ica_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, bad_channels=bad_channels)
                 data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'ica': eeg_ica_raw, 'timestamps': downsampled_timestamps}
+            if 'Unity.VarjoEyeTrackingComplete' in data.keys():
+                print(f"Preprocessing pupil for participant {p}, session {s}")
+                left = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('left_pupil_size')].copy()
+                assert np.sum(left == np.nan) == 0
+                left = interpolate_zeros(left)
+                data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('left_pupil_size')] = left
+
+                right = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('right_pupil_size')].copy()
+                assert np.sum(right == np.nan) == 0
+                right = interpolate_zeros(right)
+                data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('right_pupil_size')] = right
 
     def get_data_events(self, participant=None, session=None) -> dict:
         """

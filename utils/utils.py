@@ -30,6 +30,10 @@ def interpolate_nan(x):
     interp = interp1d(indices[not_nan], x[not_nan], fill_value="extrapolate")
     return interp(indices)
 
+def interpolate_zeros(x):
+    copy = np.copy(x)
+    copy[copy == 0] = np.nan
+    return interpolate_nan(copy)
 
 def interpolate_array_nan(data_array):
     """
@@ -351,23 +355,20 @@ def generate_eeg_event_epochs(raw, event_ids, tmin, tmax):
     return epochs, epochs.events[:, 2]
 
 
-def visualize_pupil_epochs(epochs, event_ids, colors, title='', srate=200, verbose='INFO', fig_size=(25.6, 14.4)):
+def visualize_pupil_epochs(epochs, event_ids, colors, title='', srate=200, verbose='INFO', fig_size=(25.6, 14.4), show=True):
     plt.rcParams["figure.figsize"] = fig_size
     mne.set_log_level(verbose=verbose)
     # epochs = epochs.apply_baseline((0.0, 0.0))
     for e_name, e_id in event_ids.items():
         y = epochs[e_name].get_data()
-        y = interpolate_epoch_zeros(y)  # remove nan
-        y = interpolate_epochs_nan(y)  # remove nan
         assert np.sum(np.isnan(y)) == 0
         if len(y) == 0:
             print("visualize_pupil_epochs: all epochs bad, skipping")
             continue
         y = np.mean(y, axis=1)  # average left and right
         y = scipy.stats.zscore(y, axis=1, ddof=0, nan_policy='propagate')
-
         y_mean = np.mean(y, axis=0)
-        y_mean = y_mean - y_mean[int(abs(tmin_pupil_viz) * srate)]  # baseline correct
+        # y_mean = y_mean - y_mean[int(abs(tmin_pupil_viz) * srate)]  # baseline correct
         y1 = y_mean + scipy.stats.sem(y, axis=0)  # this is the upper envelope
         y2 = y_mean - scipy.stats.sem(y, axis=0)  # this is the lower envelope
 
@@ -380,9 +381,11 @@ def visualize_pupil_epochs(epochs, event_ids, colors, title='', srate=200, verbo
                  label='{0}, N={1}'.format(e_name, y.shape[0]))
     plt.xlabel('Time (sec)')
     plt.ylabel('Pupil Diameter (averaged left and right z-score), shades are SEM')
-    plt.title(title)
     plt.legend()
-    plt.show()
+
+    if show:
+        plt.title(title)
+        plt.show()
 
 
 # TODO visualize_eeg_epochs

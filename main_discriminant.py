@@ -1,4 +1,5 @@
 import os
+import pickle
 import time
 from collections import defaultdict
 
@@ -9,8 +10,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
-from RenaAnalysis import get_rdf
+from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation
+from learning.models import EEGCNNNet
+from learning.train import score_model
 from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
@@ -64,55 +67,55 @@ Event markers are encoded in integers, this list shows what event does each numb
 start_time = time.time()  # record the start time of the analysis
 
 rdf = get_rdf()
+pickle.dump(rdf, open('rdf.p', 'wb'))
 
-colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
-
-# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
-# viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
-#
-# visualize_rdf_gaze_event(rdf, participant='1', session=1, block_id=6)
-
-event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS']  and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
-                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS']  and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+# discriminant test  ####################################################################################################
 event_names = ["Distractor", "Target"]
-
 event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-
-# discriminant test
 eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters)
+
 x, y = epochs_to_class_samples(eeg_epochs, eeg_event_ids)
+epoch_shape = x.shape[1:]
 x = np.reshape(x, newshape=(len(x), -1))
 sm = SMOTE(random_state=42)
 x, y = sm.fit_resample(x, y)
+x = np.reshape(x, newshape=(len(x), ) + epoch_shape)  # reshape back x after resampling
 
-x = StandardScaler().fit_transform(x)
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
-cls = SVC(gamma=2, C=1)
-cls.fit(x_train, y_train)
-y_pred = cls.predict(x_test)
-# y_pred = np.rint(y_pred)
-print(classification_report(y_test, y_pred, target_names=event_names))
-score = cls.score(x_test, y_test)
+# z-norm along channels
+x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)
 
-# statistical difference test
-assert len(event_names) == len(event_filters) == 2
-eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, tmin=-0.1, tmax=0.8)
-x, y = epochs_to_class_samples(eeg_epochs, eeg_event_ids, picks=eeg_picks)
-r_square_grid = np.zeros(x.shape[1:])
 
-for channel_i in range(r_square_grid.shape[0]):
-    for time_i in range(r_square_grid.shape[1]):
-        x_train = x[:, channel_i, time_i].reshape(-1, 1)
-        model = LinearRegression()
-        model.fit(x_train, y)
-        r_square_grid[channel_i, time_i] = model.score(x_train, y)
-
-xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
-xticks_locations = xtick_labels * exg_resample_srate
-plt.xticks(xticks_locations, xtick_labels)
-plt.imshow(r_square_grid, aspect='auto', cmap='Purples')
-plt.colorbar()
+# sanity check the channels
+x_distractors = x[:, eeg_montage.ch_names.index('CPz'), :][y==0]
+x_targets = x[:, eeg_montage.ch_names.index('CPz'), :][y==1]
+x_distractors = np.mean(x_distractors, axis=0)
+x_targets = np.mean(x_targets, axis=0)
+plt.plot(x_distractors)
+plt.plot(x_targets)
 plt.show()
+
+pickle.dump(x, open('x.p', 'wb'))
+pickle.dump(y, open('y.p', 'wb'))
+model = EEGCNNNet(in_length=x.shape[-1], num_classes=2)
+score_model(x, y, model)
+
+# statistical difference test  #####################################################
+# event_names = ["Distractor", "Target"]
+# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+# r_square_test(rdf, event_names, event_filters, title="Constrained Conditions")
+#
+# event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+# r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to detected fixation (Patch-Sim)")
+#
+# event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"]]
+# r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to detected fixation (I-VT-Head)")
+#
+# event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT' and x.dtn==dtnn_types["Target"]]
+# r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to detected fixation (I-VT)")
+
+

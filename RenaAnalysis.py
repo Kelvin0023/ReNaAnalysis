@@ -9,16 +9,20 @@ from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_Patc
 from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
-from utils.utils import get_item_events, epochs_to_class_samples
+from utils.utils import get_item_events, epochs_to_class_samples, visualize_pupil_epochs
 
 
 def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
 
 
-def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
+def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None, title="", fig_size=(25.6, 14.4)):
+    plt.rcParams["figure.figsize"] = fig_size
+    colors = {'Distractor': 'blue', 'Target': 'red'}
+    plt.rcParams.update({'font.size': 22})
     assert len(event_names) == len(event_filters) == 2
-    eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
+    tmin = -0.1
+    eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin, tmax=0.8)
     x, y = epochs_to_class_samples(eeg_epochs, eeg_event_ids, picks=eeg_picks)
     r_square_grid = np.zeros(x.shape[1:])
 
@@ -28,8 +32,41 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
             model = LinearRegression()
             model.fit(x_train, y)
             r_square_grid[channel_i, time_i] = model.score(x_train, y)
-    plt.imshow(r_square_grid, aspect='auto')
+
+    xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
+    xticks_locations = (eeg_epoch_ticks - tmin) * exg_resample_srate
+    plt.xticks(xticks_locations, xtick_labels)
+    plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
+    plt.imshow(r_square_grid, aspect='auto', cmap='Blues')
+    plt.title("EEG Statistical difference (r²) between target and distractor, " + title)
+    plt.colorbar()
+    plt.tight_layout()
     plt.show()
+
+    # pupilometries
+    pupil_epochs, pupil_event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant, session)
+    x, y = epochs_to_class_samples(pupil_epochs, pupil_event_ids)
+    x = np.mean(x, axis=1)
+    r_square_grid = np.zeros(x.shape[1])
+    for time_i in range(len(r_square_grid)):
+        x_train = x[:, time_i].reshape(-1, 1)
+        model = LinearRegression()
+        model.fit(x_train, y)
+        r_square_grid[time_i] = model.score(x_train, y)
+
+    visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, show=False, fig_size=fig_size)
+    plt.twinx()
+    plt.title("Pupillometry Statistical difference (r²) between target and distractor" + title)
+    xtick_labels = [f'{x} s' for x in pupil_epoch_ticks]
+    xticks_locations = (pupil_epoch_ticks - tmin_pupil) * eyetracking_srate
+    plt.xticks(xticks_locations, xtick_labels)
+    plt.plot(np.linspace(tmin_pupil_viz, tmax_pupil_viz, len(r_square_grid)), r_square_grid, color='grey', linewidth=4)
+    plt.ylim((0, 0.1))
+    plt.ylabel("r²")
+    plt.tight_layout()
+    plt.show()
+
+
 
 def get_rdf(is_loading_saved_analysis = False):
     start_time = time.time()  # record the start time of the analysis

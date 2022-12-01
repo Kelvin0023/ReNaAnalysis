@@ -31,9 +31,9 @@ eval = history_ann.model.evaluate(x=x_test, y=y_test)
 # eval = history_rnn.model.evaluate(x=x_test, y=y_test)
 #
 # # test the CNN
-# history_cnn = build_train_cnn(x_train, x_test, y_train, y_test)
-# plot_train_history(history_cnn, note=str(scn) + ' CNN')
-# eval = history_cnn.model.evaluate(x=x_test, y=y_test)
+history_cnn = build_train_cnn(x_train, x_test, y_train, y_test)
+plot_train_history(history_cnn, note=str(scn) + ' CNN')
+eval = history_cnn.model.evaluate(x=x_test, y=y_test)
 
 # test the BIRNN_attention
 # history_brnn = build_train_birnn_with_attention(x_train, x_test, y_train, y_test)
