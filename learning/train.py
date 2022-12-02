@@ -19,7 +19,7 @@ from tqdm import tqdm
 from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage
 
 
-def score_model(x, y, model, test_name="CNN"):
+def train_model(x, y, model, test_name="CNN"):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
@@ -147,15 +147,35 @@ def score_model(x, y, model, test_name="CNN"):
     plt.title(f"Loss, {test_name}")
     plt.show()
 
-    return model
+    return model, training_histories, criterion, label_encoder
 
-def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, data_type='eeg', picks=None, tmin_eeg=0, tmax_eeg=0.8):
+def eval_model(model, x, y, criterion, label_encoder):
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+
+    y = label_encoder.fit_transform(np.array(y).reshape(-1, 1)).toarray()
+    x = torch.Tensor(x).to(device)  # transform to torch tensor
+    y = torch.Tensor(y).to(device)
+    model.eval()
+    with torch.no_grad():
+        y_pred = model(x)
+        y_pred = F.softmax(y_pred, dim=1)
+
+        loss = criterion(y, y_pred)
+        num_correct_preds = torch.sum(torch.argmax(y, dim=1) == torch.argmax(y_pred, dim=1)).item()
+        accuracy = num_correct_preds / len(x)
+
+    return loss, accuracy
+
+def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, session=None, rebalance=False, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
     """
     if data_type == 'eeg':
-        epochs, event_ids = rdf.get_eeg_epochs(event_names, event_filters, picks=picks, tmin=tmin_eeg, tmax=tmax_eeg)
+        epochs, event_ids = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg)
+    elif data_type == 'pupil':
+        epochs, event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant, session)
     else:
         raise NotImplementedError('Only EEG is implemented')
     x = []
@@ -178,8 +198,9 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, da
     x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)
 
     if data_type == 'eeg':
-        x_distractors = x[:, eeg_montage.ch_names.index('CPz'), :][y==0]
-        x_targets = x[:, eeg_montage.ch_names.index('CPz'), :][y==1]
+        coi = picks.index('CPz') if picks else eeg_montage.ch_names.index('CPz')
+        x_distractors = x[:, coi, :][y==0]
+        x_targets = x[:, coi, :][y==1]
         x_distractors = np.mean(x_distractors, axis=0)
         x_targets = np.mean(x_targets, axis=0)
         plt.plot(x_distractors)
@@ -187,4 +208,4 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, da
         plt.title('Sample sanity check')
         plt.show()
 
-    return x, y
+    return x, y, epochs, event_ids

@@ -105,7 +105,7 @@ class RenaDataFrame:
             pupil_epochs = epochs_pupil if pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs])
         return pupil_epochs, event_ids
 
-    def get_eeg_epochs(self, event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=None, session=None):
+    def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None):
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
         eeg_epochs = None  # clear epochs

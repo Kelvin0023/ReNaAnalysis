@@ -13,8 +13,8 @@ from utils.fs_utils import load_participant_session_dict, get_data_file_paths, g
 from utils.utils import get_item_events, visualize_pupil_epochs
 
 
-def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
-    eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
+# def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
+#     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
 
 
 def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None, title="", fig_size=(25.6, 14.4)):
@@ -23,7 +23,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     plt.rcParams.update({'font.size': 22})
     assert len(event_names) == len(event_filters) == 2
     tmin = -0.1
-    x, y = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=0.8)
+    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=0.8)
     r_square_grid = np.zeros(x.shape[1:])
 
     for channel_i in range(r_square_grid.shape[0]):
@@ -44,8 +44,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     plt.show()
 
     # pupilometries
-    pupil_epochs, pupil_event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant, session)
-    x, y = epochs_to_class_samples(pupil_epochs, pupil_event_ids)
+    x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='pupil')
     x = np.mean(x, axis=1)
     r_square_grid = np.zeros(x.shape[1])
     for time_i in range(len(r_square_grid)):
@@ -54,7 +53,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
         model.fit(x_train, y)
         r_square_grid[time_i] = model.score(x_train, y)
 
-    visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, show=False, fig_size=fig_size)
+    visualize_pupil_epochs(epochs, event_ids, colors, show=False, fig_size=fig_size)
     plt.twinx()
     plt.title("Pupillometry Statistical difference (r²) between target and distractor" + title)
     xtick_labels = [f'{x} s' for x in pupil_epoch_ticks]

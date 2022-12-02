@@ -1,42 +1,36 @@
 import pickle
 
+from RenaAnalysis import r_square_test
+from eye.eyetracking import Fixation
 from learning.models import EEGCNNNet
-from learning.train import score_model
+from learning.train import train_model, epochs_to_class_samples, eval_model
+from params import conditions, dtnn_types
 
 # analysis parameters ######################################################################################
-
+participant = '1'
+session = 1
 
 print("Loading RDF")
 rdf = pickle.load(open('rdf.p', 'rb'))
-#
-# # discriminant test  ####################################################################################################
+
+print('Training model on constrained blocks')
 # event_names = ["Distractor", "Target"]
 # event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-# eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters)
-#
-# x, y = epochs_to_class_samples(eeg_epochs, eeg_event_ids)
-# epoch_shape = x.shape[1:]
-# x = np.reshape(x, newshape=(len(x), -1))
-# sm = SMOTE(random_state=42)
-# x, y = sm.fit_resample(x, y)
-# x = np.reshape(x, newshape=(len(x), ) + epoch_shape)  # reshape back x after resampling
-#
-# # z-norm along channels
-# x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)
-#
-# # sanity check the channels
-# x_distractors = x[:, eeg_montage.ch_names.index('CPz'), :][y==0]
-# x_targets = x[:, eeg_montage.ch_names.index('CPz'), :][y==1]
-# x_distractors = np.mean(x_distractors, axis=0)
-# x_targets = np.mean(x_targets, axis=0)
-# plt.plot(x_distractors)
-# plt.plot(x_targets)
-# plt.show()
-#
-# epochs_to_class_samples(rdf, event_names, event_filters, rebalance=True)
+# x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant=participant, session=session)
+# pickle.dump(x, open('x.p', 'wb'))
+# pickle.dump(y, open('y.p', 'wb'))
 
 x = pickle.load(open('x.p', 'rb'))
 y = pickle.load(open('y.p', 'rb'))
 model = EEGCNNNet(in_shape=x.shape, num_classes=2)
-model = score_model(x, y, model)
+model, training_histories, criterion, label_encoder = train_model(x, y, model)
+
+# load the free viewing epochs
+
+event_names = ["Distractor", "Target"]
+event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+# r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to detected fixation (I-VT-Head)")
+x_i_dt_head, y_i_dt_head, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant=participant, session=session)
+loss, accuracy = eval_model(model, x_i_dt_head, y_i_dt_head, criterion, label_encoder)
