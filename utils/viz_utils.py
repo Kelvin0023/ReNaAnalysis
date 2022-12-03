@@ -78,11 +78,11 @@ def visualize_gazeray(events, block_id=None):
     plt.show()
 
 
-def visualize_rdf_gaze_event(rdf, participant, session, block_id=None):
+def visualize_rdf_gaze_event(rdf, participant, session, block_id=None, only_long_gaze=False):
     events = rdf.get_event(participant, session)
-    visualize_gaze_events(events, block_id)
+    visualize_gaze_events(events, block_id, only_long_gaze=only_long_gaze)
 
-def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5):
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False):
     f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -101,7 +101,10 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
         dtn_type = np.array([e.dtn for e in events if e.block_id == block_id and e.dtn_onffset])
         [plt.axvspan(onset, offset, alpha=0.25, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
 
-        draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
+        if only_long_gaze:
+            draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp and x.is_first_long_gaze, gaze_intersect_y)
+        else:
+            draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'Patch-Sim' and block_start_timestamp < x.timestamp < block_end_timestamp, pathSim_fix_y)

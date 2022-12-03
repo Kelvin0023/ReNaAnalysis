@@ -262,7 +262,8 @@ def gaze_event_detection_PatchSim(ps_fixation_detection_data, ps_fixation_detect
 
 
 class GazeRayIntersect(Event):
-    def __init__(self, timestamp, onset_time, offset_time, *args, **kwargs):
+    def __init__(self, timestamp, onset_time, offset_time, is_first_long_gaze, *args, **kwargs):
         super().__init__(timestamp, *args, **kwargs)
         self.onset_time = onset_time
         self.offset_time = offset_time
+        self.is_first_long_gaze = is_first_long_gaze

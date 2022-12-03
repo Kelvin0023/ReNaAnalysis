@@ -81,7 +81,7 @@ def find_value_thresholding_interval(array, timestamps, value_threshold, time_th
                 print('exceed time tolerance ignoring interval')
     return out
 
-def get_practice_block_marker(block_marker, practice_length=4):
+def get_practice_block_marker(block_marker, practice_length=5):
     rtn = np.array([False] * len(block_marker))
     rtn[:practice_length] = True
     return rtn
@@ -250,7 +250,7 @@ def add_design_matrix_to_data(data_array, event_marker_index, srate, erp_window,
     return np.concatenate([data_array, design_matrix], axis=0), design_matrix, design_matrix_channel_names
 
 
-def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
+def get_gaze_ray_events(item_markers, item_marker_timestamps, events, long_gaze_threshold=0.15):
     """
     the item marker has the gaze events for each object. Its channel represent different objects in each block
     @param item_markers:
@@ -306,9 +306,14 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events):
                 assert len(item_dtns) == 1
                 gaze_ray_onset_dist = i_b_obj_dist[gaze_ray_diff == 1]
 
-                # TODO only keep the first gaze ray event for now, not taking diff because gaze ray intersect is too discrete
+                found_first_long_gaze = False
                 for onset_time, offset_time, item_id, item_distance in zip(gaze_ray_onset_times, gaze_ray_offset_times, gaze_ray_onset_item_ids, gaze_ray_onset_dist):
-                    e = GazeRayIntersect(onset_time, onset_time, offset_time, block_condition=block_conditions[j], block_id=block_ids[j], dtn=item_dtns[0], item_id=item_id, obj_dist=item_distance)
+                    if not found_first_long_gaze and (offset_time - onset_time > long_gaze_threshold):
+                        found_first_long_gaze = True
+                        is_first_long_gaze = True
+                    else:
+                        is_first_long_gaze = False
+                    e = GazeRayIntersect(onset_time, onset_time, offset_time, block_condition=block_conditions[j], block_id=block_ids[j], dtn=item_dtns[0], item_id=item_id, obj_dist=item_distance, is_first_long_gaze=is_first_long_gaze)
                     if block_conditions[j] == conditions['Carousel']:
                         e.carousel_speed = get_closest_event_attribute_before(events, onset_time, 'carousel_speed', lambda x: x.dtn_onffset)
                         e.carousel_angle = get_closest_event_attribute_before(events, onset_time, 'carousel_angle', lambda x: x.dtn_onffset)
@@ -345,7 +350,14 @@ def rescale_merge_exg(data_array_EEG, data_array_ECG):
     return data_array
 
 def generate_eeg_event_epochs(raw, event_ids, tmin, tmax):
-    found_events = mne.find_events(raw, stim_channel='stim')
+    found_events = mne.find_events(raw, stim_channel='stim', shortest_event=1)
+
+    # event_durations = []
+    # event_indices = np.argwhere(a != 0)[:, 1]
+    # for i, event_index in enumerate(event_indices):
+    #     event_durations.append(event_index - event_indices[i-1])
+    # event_durations = np.array(event_durations)
+
     epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin, tmax=tmax,
                       baseline=(-0.1, 0.0),
                       preload=True,
