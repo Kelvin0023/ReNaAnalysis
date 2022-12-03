@@ -39,19 +39,26 @@ plt.rcParams.update({'font.size': 22})
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 event_names = ["Distractor", "Target"]
 
-# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
-# viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
-#
+
+print('Training model on constrained blocks')
+event_names = ["Distractor", "Target"]
+event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True)
+pickle.dump(x, open('x.p', 'wb'))
+pickle.dump(y, open('y.p', 'wb'))
+
+# x = pickle.load(open('x.p', 'rb'))
+# y = pickle.load(open('y.p', 'rb'))
+model = EEGCNNNet(in_shape=x.shape, num_classes=2)
+model, training_histories, criterion, label_encoder = train_model(x, y, model)
+
+
 event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
                  lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to first long Gaze Ray Intersect')
-
-# visualize_rdf_gaze_event(rdf, participant='0', session=0, block_id=6, only_long_gaze=True)
-r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")
-
-x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True)
-model = EEGCNNNet(in_shape=x, num_classes=2)
+# viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to first long Gaze Ray Intersect')
+# r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")
+x_vs, y_vs, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True)
 model, training_histories, criterion, label_encoder = train_model(x, y, model)
-# loss, accuracy = eval_model(model, x_i_dt_head, y_i_dt_head, criterion, label_encoder)
+
+loss, accuracy = eval_model(model, x_vs, y_vs, criterion, label_encoder)
