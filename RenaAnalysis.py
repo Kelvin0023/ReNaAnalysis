@@ -23,7 +23,8 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     plt.rcParams.update({'font.size': 22})
     assert len(event_names) == len(event_filters) == 2
     tmin = -0.1
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=0.8)
+    tmax = 0.8
+    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=tmax)
     r_square_grid = np.zeros(x.shape[1:])
 
     for channel_i in range(r_square_grid.shape[0]):
@@ -42,6 +43,32 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     plt.colorbar()
     plt.tight_layout()
     plt.show()
+
+    # do the same r test for all channels
+    # x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, tmin_eeg=tmin, tmax_eeg=tmax)
+    # r_square_grid = np.zeros(x.shape[1:])
+    #
+    # for channel_i in range(r_square_grid.shape[0]):
+    #     for time_i in range(r_square_grid.shape[1]):
+    #         x_train = x[:, channel_i, time_i].reshape(-1, 1)
+    #         model = LinearRegression()
+    #         model.fit(x_train, y)
+    #         r_square_grid[channel_i, time_i] = model.score(x_train, y)
+    #
+    # pos = mne.create_info(
+    #     eeg_channel_names,
+    #     sfreq=exg_resample_srate,
+    #     ch_types=['eeg'] * len(eeg_channel_names))
+    # pos.set_montage(eeg_montage)
+    # step = 0.1
+    # times = np.arange(0., tmax, step)
+    # for i, start_time in enumerate(times):
+    #     values_to_plot = r_square_grid[:, int(start_time * exg_resample_srate) : int((start_time + step) * exg_resample_srate)]
+    #     values_to_plot = np.max(values_to_plot, axis=1)
+    #     plt.subplot(1, len(times), i+1)
+    #     mne.viz.plot_topomap(values_to_plot, pos=pos, vmin=0, vmax=np.max(r_square_grid), show=False)
+    #     plt.title(f'{start_time}-{start_time+step}')
+    #     plt.show()
 
     # pupilometries
     x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='pupil')

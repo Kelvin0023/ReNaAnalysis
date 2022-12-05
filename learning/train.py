@@ -16,10 +16,11 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
-from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage
+from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight
 
 
 def train_model(x, y, model, test_name="CNN"):
+
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
@@ -74,6 +75,10 @@ def train_model(x, y, model, test_name="CNN"):
             y_pred = F.softmax(y_pred, dim=1)
             # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
             y_tensor = y.to(device)
+
+            # l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+
+            # loss = criterion(y_tensor, y_pred) + l2_penalty
             loss = criterion(y_tensor, y_pred)
             loss.backward()
             optimizer.step()
@@ -173,9 +178,9 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
     @param: data_type: can be eeg, pupil or mixed
     """
     if data_type == 'eeg':
-        epochs, event_ids = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg)
+        epochs, event_ids = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
     elif data_type == 'pupil':
-        epochs, event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant, session)
+        epochs, event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session)
     else:
         raise NotImplementedError('Only EEG is implemented')
     x = []
@@ -203,9 +208,10 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
         x_targets = x[:, coi, :][y==1]
         x_distractors = np.mean(x_distractors, axis=0)
         x_targets = np.mean(x_targets, axis=0)
-        plt.plot(x_distractors)
-        plt.plot(x_targets)
+        plt.plot(x_distractors, label='distractor')
+        plt.plot(x_targets, label='target')
         plt.title('Sample sanity check')
+        plt.legend
         plt.show()
 
     return x, y, epochs, event_ids

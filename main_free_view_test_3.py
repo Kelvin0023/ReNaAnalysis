@@ -2,6 +2,7 @@ import os
 import pickle
 import time
 
+import torch
 
 from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import Fixation
@@ -37,35 +38,22 @@ rdf = get_rdf()
 
 plt.rcParams.update({'font.size': 22})
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
+
+
 event_names = ["Distractor", "Target"]
-
-
-print('Training model on constrained blocks')
-event_names = ["Distractor", "Target"]
-event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True)
-pickle.dump(x, open('x.p', 'wb'))
-pickle.dump(y, open('y.p', 'wb'))
-
-# x = pickle.load(open('x.p', 'rb'))
-# y = pickle.load(open('y.p', 'rb'))
-model = EEGCNNNet(in_shape=x.shape, num_classes=2)
-model, training_histories, criterion, label_encoder = train_model(x, y, model)
-
 event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
                  lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to first long Gaze Ray Intersect', participant='1', session=2)
+x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True)
+
+# pickle.dump(x, open('x.p', 'wb'))
+# pickle.dump(y, open('y.p', 'wb'))
+#
+x = pickle.load(open('x.p', 'rb'))
+y = pickle.load(open('y.p', 'rb'))
+torch.manual_seed(42)
+np.random.seed(42)
+model = EEGCNNNet(in_shape=x.shape, num_classes=2)
+model, training_histories, criterion, label_encoder = train_model(x, y, model)
+
 # r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")
-x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
-model = EEGCNNNet(in_shape=x.shape, num_classes=2)
-model, training_histories, criterion, label_encoder = train_model(x, y, model)
 
-
-
-event_filters = [lambda x: type(x)==Fixation and x.detection_alg == 'Patch-Sim' and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
-                 lambda x: type(x)==Fixation and x.detection_alg == 'Patch-Sim' and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to Patch-Sim', session=2, participant='1')
-x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, session=2, participant='1')
-model = EEGCNNNet(in_shape=x.shape, num_classes=2)
-model, training_histories, criterion, label_encoder = train_model(x, y, model)

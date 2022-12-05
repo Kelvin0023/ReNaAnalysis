@@ -138,7 +138,7 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
 
     gaze_xy_deg = (180 / math.pi) * np.arcsin(gaze_xy) if gaze_xy_format == 'ratio' else gaze_xy
 
-    detection_alg = 'I-DT' if head_rotation is None else 'I-DT-Head'
+    detection_alg = 'I-VT' if head_rotation is None else 'I-VT-Head'
     if head_rotation is not None:
         gaze_xy_deg = gaze_xy_deg + head_rotation
 
