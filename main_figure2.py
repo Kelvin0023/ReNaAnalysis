@@ -38,5 +38,5 @@ colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
 event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['RSVP'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
                  lambda x: type(x)==Fixation and x.block_condition == conditions['RSVP'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
-# viz_pupil_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='RSVP ERP, locked to Detected Fixation (using Patch-Sim)')
-viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to Detected Fixation (using I-DT)')
+viz_pupil_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='RSVP ERP, locked to Detected Fixation (using Patch-Sim)')
+viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='RSVP ERP, locked to Detected Fixation (using Patch-Sim)')
