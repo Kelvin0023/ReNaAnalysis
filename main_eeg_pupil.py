@@ -36,7 +36,7 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
-# rdf = pickle.load(open('rdf.p', 'rb'))
+rdf = pickle.load(open('rdf.p', 'rb'))
 # rdf = pickle.dump(rdf, open('rdf.p', 'wb'))
 
 # discriminant test  ####################################################################################################
@@ -45,16 +45,16 @@ plt.rcParams.update({'font.size': 22})
 
 # colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 #
-# event_names = ["Distractor", "Target"]
-# event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-# x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=2)
+event_names = ["Distractor", "Target"]
+event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
+                 lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
+x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=2)
 #
 # pickle.dump(x, open('x_eeg_pupil.p', 'wb'))
 # pickle.dump(y, open('y_eeg_pupil.p', 'wb'))
 
-x = pickle.load(open('x_eeg_pupil.p', 'rb'))
-y = pickle.load(open('y_eeg_pupil.p', 'rb'))
+# x = pickle.load(open('x_eeg_pupil.p', 'rb'))
+# y = pickle.load(open('y_eeg_pupil.p', 'rb'))
 
 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2)
 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model)
