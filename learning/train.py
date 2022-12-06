@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
-from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight
+from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight, random_seed
 
 
 def train_model(x, y, model, test_name="CNN"):
@@ -28,7 +28,7 @@ def train_model(x, y, model, test_name="CNN"):
     label_encoder = preprocessing.OneHotEncoder()
     y = label_encoder.fit_transform(np.array(y).reshape(-1, 1)).toarray()
 
-    x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=train_ratio, random_state=42)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=train_ratio, random_state=random_seed)
     train_size, val_size = len(x_train), len(x_test)
     x_train = torch.Tensor(x_train)  # transform to torch tensor
     x_test = torch.Tensor(x_test)
@@ -47,7 +47,7 @@ def train_model(x, y, model, test_name="CNN"):
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+    scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
     train_losses = []
     train_accs = []
@@ -76,9 +76,9 @@ def train_model(x, y, model, test_name="CNN"):
             # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
             y_tensor = y.to(device)
 
-            # l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
 
-            # loss = criterion(y_tensor, y_pred) + l2_penalty
+            loss = criterion(y_tensor, y_pred) + l2_penalty
             loss = criterion(y_tensor, y_pred)
             loss.backward()
             optimizer.step()

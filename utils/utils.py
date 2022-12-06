@@ -321,8 +321,7 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events, long_gaze_
     return rtn
 
 
-def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_ids, erp_window=(.0, .8), srate=200,
-                                verbose='WARNING'):  # use a fixed sampling rate for the sampling rate to match between recordings
+def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_ids, srate=200, verbose='WARNING'):  # use a fixed sampling rate for the sampling rate to match between recordings
     mne.set_log_level(verbose=verbose)
 
     info = mne.create_info(

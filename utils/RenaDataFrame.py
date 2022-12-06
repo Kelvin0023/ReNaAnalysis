@@ -122,7 +122,7 @@ class RenaDataFrame:
                 print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
                 eeg_epochs = epochs if eeg_epochs is None else mne.concatenate_epochs([epochs, eeg_epochs])
         print("Auto rejecting epochs")
-        ar = AutoReject(n_jobs=16, verbose=False)
+        ar = AutoReject(n_jobs=20, verbose=False)
         eeg_epochs_clean = ar.fit_transform(eeg_epochs)
         return eeg_epochs_clean, event_ids
 

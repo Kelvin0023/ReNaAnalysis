@@ -29,8 +29,12 @@ class EEGCNNNet(nn.Module):
 
         self.fcs = nn.Sequential(
             nn.Linear(cnn_flattened_size, 128),
+            nn.LeakyReLU(),
             nn.Linear(128, 64),
-            nn.Linear(64, num_classes)
+            nn.LeakyReLU(),
+            nn.Linear(64, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, num_classes)
         )
 
     def forward(self, x):

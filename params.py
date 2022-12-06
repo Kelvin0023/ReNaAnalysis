@@ -105,10 +105,12 @@ debug = True
 eeg_epoch_ticks = np.array([0, 0.3, 0.6, 0.8])
 pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 
-lr = 1e-3
-batch_size = 1024
+lr = 5e-3
+batch_size = 64
 epochs = 2000
-patience = 500
+patience = 75
 train_ratio = 0.8
 model_save_dir = 'learning/saved_models'
 l2_weight = 1e-5
+
+random_seed = 42
