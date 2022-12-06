@@ -5,7 +5,7 @@ import time
 
 from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import Fixation
-from learning.models import EEGCNNNet
+from learning.models import EEGInceptionNet
 from learning.train import epochs_to_class_samples, eval_model, train_model
 from params import *
 import matplotlib.pyplot as plt
@@ -49,7 +49,7 @@ colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
 x = pickle.load(open('x.p', 'rb'))
 y = pickle.load(open('y.p', 'rb'))
-model = EEGCNNNet(in_shape=x.shape, num_classes=2)
+model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
 model, training_histories, criterion, label_encoder = train_model(x, y, model)
 
 # r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")

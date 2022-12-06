@@ -460,7 +460,7 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., bad_channels=None, is_ica_selection_inclusive=True, n_worker=16):
+def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=30., bad_channels=None, is_ica_selection_inclusive=True, n_worker=16):
     eeg_data = data[0][1:65, :]  # take only the EEG channels
     ecg_data = data[0][65:67, :]
     exg_data = rescale_merge_exg(eeg_data, ecg_data)

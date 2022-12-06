@@ -2,7 +2,7 @@ import pickle
 
 from RenaAnalysis import r_square_test
 from eye.eyetracking import Fixation
-from learning.models import EEGCNNNet
+from learning.models import EEGInceptionNet
 from learning.train import train_model, epochs_to_class_samples, eval_model
 from params import conditions, dtnn_types
 
@@ -23,7 +23,7 @@ print('Training model on constrained blocks')
 
 x = pickle.load(open('x.p', 'rb'))
 y = pickle.load(open('y.p', 'rb'))
-model = EEGCNNNet(in_shape=x.shape, num_classes=2)
+model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
 model, training_histories, criterion, label_encoder = train_model(x, y, model)
 
 # load the free viewing epochs
