@@ -55,10 +55,10 @@ plt.rcParams.update({'font.size': 22})
 # pickle.dump(x, open('x.p', 'wb'))
 # pickle.dump(y, open('y.p', 'wb'))
 
-x = pickle.load(open('x.p', 'rb'))
-y = pickle.load(open('y.p', 'rb'))
+x = pickle.load(open('x_constrained.p', 'rb'))
+y = pickle.load(open('y_constrained.p', 'rb'))
 
-model = EEGCNN(in_shape=x.shape, num_classes=2)
+model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
 model, training_histories, criterion, label_encoder = train_model(x, y, model)
 
 # r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")

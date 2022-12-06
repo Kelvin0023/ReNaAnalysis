@@ -87,17 +87,17 @@ class EEGCNN(nn.Module):
         super().__init__()
         self.conv = nn.Sequential(
             nn.Conv1d(in_channels, num_filters, 5),
-            nn.LeakyReLU(),
+            # nn.LeakyReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
 
             nn.Conv1d(num_filters, num_filters, 5),
-            nn.LeakyReLU(),
+            # nn.LeakyReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
 
             nn.Conv1d(num_filters, num_filters, 5),
-            nn.LeakyReLU(),
+            # nn.LeakyReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
             nn.Flatten()

@@ -28,7 +28,7 @@ def train_model(x, y, model, test_name="CNN"):
     label_encoder = preprocessing.OneHotEncoder()
     y = label_encoder.fit_transform(np.array(y).reshape(-1, 1)).toarray()
 
-    # x = model.prepare_data(x)
+    x = model.prepare_data(x)
     x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=train_ratio, random_state=random_seed)
     train_size, val_size = len(x_train), len(x_test)
     x_train = torch.Tensor(x_train)  # transform to torch tensor
