@@ -329,6 +329,7 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
         sfreq=srate,
         ch_types=data_channel_types)
     raw = mne.io.RawArray(data_.transpose(), info)
+    raw = raw.resample(eyetracking_resample_srate, n_jobs=20)
 
     found_events = mne.find_events(raw, stim_channel='stim')
     # pupil epochs
@@ -538,6 +539,6 @@ def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', particip
     visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, title=title)
 
 def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=tmin_eeg, tmax=tmax_eeg):
-    eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, tmin, tmax, participant, session)
+    eeg_epochs, eeg_event_ids, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin, tmax, participant, session)
     visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)
 

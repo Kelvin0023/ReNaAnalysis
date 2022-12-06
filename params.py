@@ -57,6 +57,7 @@ tmin_eeg_viz = -0.1
 tmax_eeg_viz = 1.
 
 eyetracking_srate = 200
+eyetracking_resample_srate = 20
 exg_srate = 2048
 exg_resample_srate = 128
 eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']

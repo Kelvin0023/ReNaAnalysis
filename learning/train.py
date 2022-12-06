@@ -178,12 +178,38 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
     """
+    if data_type == 'both':
+        epochs_eeg, event_ids, ar_log = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg,
+                                                           participant=participant, session=session)
+        epochs_pupil, event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant=participant,
+                                                       session=session)
+        epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
+        y = []
+        x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
+        x_pupil = [epochs_pupil[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
+        x_eeg = np.concatenate(x_eeg, axis=0)
+        x_pupil = np.concatenate(x_pupil, axis=0)
+
+        for event_name, event_class in event_ids.items():
+            y += [event_class] * len(epochs_pupil[event_name].get_data())
+        if np.min(y) == 1:
+            y = np.array(y) - 1
+        if rebalance:
+            x_eeg, y_eeg = rebalance_classes(x_eeg, y)
+            x_pupil, y_pupil = rebalance_classes(x_pupil, y)
+            assert np.all(y_eeg == y_pupil)
+            y = y_eeg
+        sanity_check_eeg(x_eeg, y, picks)
+        sanity_check_pupil(x_pupil, y)
+        return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
+
     if data_type == 'eeg':
-        epochs, event_ids = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
+        epochs, event_ids, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
     elif data_type == 'pupil':
         epochs, event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session)
     else:
-        raise NotImplementedError('Only EEG is implemented')
+        raise NotImplementedError(f'data type {data_type} is not implemented')
+
     x = []
     y = []
     for event_name, event_class in event_ids.items():
@@ -195,24 +221,195 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
         y = np.array(y) - 1
 
     if rebalance:
-        epoch_shape = x.shape[1:]
-        x = np.reshape(x, newshape=(len(x), -1))
-        sm = SMOTE(random_state=42)
-        x, y = sm.fit_resample(x, y)
-        x = np.reshape(x, newshape=(len(x), ) + epoch_shape)  # reshape back x after resampling
+        x, y = rebalance_classes(x, y)
 
     x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)
 
     if data_type == 'eeg':
-        coi = picks.index('CPz') if picks else eeg_montage.ch_names.index('CPz')
-        x_distractors = x[:, coi, :][y==0]
-        x_targets = x[:, coi, :][y==1]
-        x_distractors = np.mean(x_distractors, axis=0)
-        x_targets = np.mean(x_targets, axis=0)
-        plt.plot(x_distractors, label='distractor')
-        plt.plot(x_targets, label='target')
-        plt.title('Sample sanity check')
-        plt.legend
-        plt.show()
+        sanity_check_eeg(x, y, picks)
+    elif data_type == 'pupil':
+        sanity_check_pupil(x, y)
 
     return x, y, epochs, event_ids
+
+def rebalance_classes(x, y):
+    epoch_shape = x.shape[1:]
+    x = np.reshape(x, newshape=(len(x), -1))
+    sm = SMOTE(random_state=42)
+    x, y = sm.fit_resample(x, y)
+    x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
+    return x, y
+
+def sanity_check_eeg(x, y, picks):
+    coi = picks.index('CPz') if picks else eeg_montage.ch_names.index('CPz')
+    x_distractors = x[:, coi, :][y == 0]
+    x_targets = x[:, coi, :][y == 1]
+    x_distractors = np.mean(x_distractors, axis=0)
+    x_targets = np.mean(x_targets, axis=0)
+    plt.plot(x_distractors, label='distractor')
+    plt.plot(x_targets, label='target')
+    plt.title('EEG sample sanity check')
+    plt.legend()
+    plt.show()
+
+def sanity_check_pupil(x, y):
+    x_distractors = x[y == 0]
+    x_targets = x[y == 1]
+    x_distractors = np.mean(x_distractors, axis=(0, 1))  # also average left and right
+    x_targets = np.mean(x_targets, axis=(0, 1))
+
+    plt.plot(x_distractors, label='distractor')
+    plt.plot(x_targets, label='target')
+    plt.title('Pupil sample sanity check')
+    plt.legend()
+    plt.show()
+
+
+def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil"):
+
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+
+    # create the train dataset
+    label_encoder = preprocessing.OneHotEncoder()
+    y = label_encoder.fit_transform(np.array(y).reshape(-1, 1)).toarray()
+
+    x = model.prepare_data(x)
+
+    x_eeg_train, x_eeg_test, y_train, y_test = train_test_split(x[0], y, train_size=train_ratio, random_state=random_seed)
+    x_pupil_train, x_pupil_test, y_train, y_test = train_test_split(x[1], y, train_size=train_ratio, random_state=random_seed)
+
+    train_size, val_size = len(x_eeg_train), len(x_eeg_test)
+    x_eeg_train = torch.Tensor(x_eeg_train)  # transform to torch tensor
+    x_eeg_test = torch.Tensor(x_eeg_test)
+
+    x_pupil_train = torch.Tensor(x_pupil_train)  # transform to torch tensor
+    x_pupil_test = torch.Tensor(x_pupil_test)
+
+    y_train = torch.Tensor(y_train)
+    y_test = torch.Tensor(y_test)
+
+    train_dataset_eeg = TensorDataset(x_eeg_train, y_train)
+    train_dataloader_eeg = DataLoader(train_dataset_eeg, batch_size=batch_size)
+
+    train_dataset_pupil = TensorDataset(x_pupil_train, y_train)
+    train_dataloader_pupil = DataLoader(train_dataset_pupil, batch_size=batch_size)
+
+    val_dataset_eeg = TensorDataset(x_eeg_test, y_test)
+    val_dataloader_eeg = DataLoader(val_dataset_eeg, batch_size=batch_size)
+
+    val_dataset_pupil = TensorDataset(x_pupil_test, y_test)
+    val_dataloader_pupil = DataLoader(val_dataset_pupil, batch_size=batch_size)
+
+    print("Model Summary: ")
+    # summary(model, input_size=x_train.shape[1:])
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+    scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+
+    train_losses = []
+    train_accs = []
+    val_losses = []
+    val_accs = []
+    best_loss = np.inf
+    patience_counter = []
+
+    for epoch in range(epochs):
+        mini_batch_i = 0
+        batch_losses = []
+        num_correct_preds = 0
+        pbar = tqdm(total=math.ceil(len(train_dataloader_eeg.dataset) / train_dataloader_eeg.batch_size),
+                    desc='Training {}'.format(test_name))
+        pbar.update(mini_batch_i)
+
+        model.train()  # set the model in training model (dropout and batchnormal behaves differently in train vs. eval)
+        for (x_eeg, y), (x_pupil, y) in zip(train_dataloader_eeg, train_dataloader_pupil):
+            optimizer.zero_grad()
+
+            mini_batch_i += 1
+            pbar.update(1)
+
+            y_pred = model([x_eeg.to(device), x_pupil.to(device)])
+            y_pred = F.softmax(y_pred, dim=1)
+            # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
+            y_tensor = y.to(device)
+
+            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+
+            loss = criterion(y_tensor, y_pred) + l2_penalty
+            loss = criterion(y_tensor, y_pred)
+            loss.backward()
+            optimizer.step()
+
+            # measure accuracy
+            num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
+
+            pbar.set_description('Training [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+            batch_losses.append(loss.item())
+        train_losses.append(np.mean(batch_losses))
+        train_accs.append(num_correct_preds / train_size)
+        pbar.close()
+        scheduler.step()
+
+        model.eval()
+        with torch.no_grad():
+            pbar = tqdm(total=math.ceil(len(val_dataloader_eeg.dataset) / val_dataloader_eeg.batch_size),
+                        desc='Validating {}'.format(test_name))
+            pbar.update(mini_batch_i := 0)
+            batch_losses = []
+            num_correct_preds = 0
+
+            for (x_eeg, y), (x_pupil, y) in zip(val_dataloader_eeg, val_dataloader_pupil):
+                mini_batch_i += 1
+                pbar.update(1)
+                y_pred = model([x_eeg.to(device), x_pupil.to(device)])
+                y_pred = F.softmax(y_pred, dim=1)
+                # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
+                y_tensor = y.to(device)
+                loss = criterion(y_tensor, y_pred)
+                pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+                batch_losses.append(loss.item())
+                num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
+
+            val_losses.append(np.mean(batch_losses))
+            val_accs.append(num_correct_preds / val_size)
+            pbar.close()
+        print(
+            "Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = {:.8f}, val loss={:.8f}".format(epoch,
+                                                                                                                  train_accs[
+                                                                                                                      -1],
+                                                                                                                  train_losses[
+                                                                                                                      -1],
+                                                                                                                  val_accs[
+                                                                                                                      -1],
+                                                                                                                  val_losses[
+                                                                                                                      -1]))
+        # Save training histories after every epoch
+        training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
+                              'acc_val': val_accs}
+        pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
+        if val_losses[-1] < best_loss:
+            torch.save(model.state_dict(), os.path.join(model_save_dir, test_name))
+            print(
+                'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
+                                                                                        model_save_dir))
+            best_loss = val_losses[-1]
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter > patience:
+                print(f'Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                break
+    plt.plot(training_histories['acc_train'])
+    plt.plot(training_histories['acc_val'])
+    plt.title(f"Accuracy, {test_name}")
+    plt.show()
+
+    plt.plot(training_histories['loss_train'])
+    plt.plot(training_histories['loss_val'])
+    plt.title(f"Loss, {test_name}")
+    plt.show()
+
+    return model, training_histories, criterion, label_encoder

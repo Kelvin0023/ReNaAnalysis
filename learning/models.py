@@ -125,10 +125,10 @@ class EEGCNN(nn.Module):
         return x
 
 class EEGPupilCNN(nn.Module):
-    def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, in_channels=64, num_filters=16):
+    def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, eeg_in_channels=64, pupil_in_channel=2, num_filters=16):
         super().__init__()
         self.conv_eeg = nn.Sequential(
-            nn.Conv1d(in_channels, num_filters, 5),
+            nn.Conv1d(eeg_in_channels, num_filters, 5),
             nn.LeakyReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
@@ -145,23 +145,41 @@ class EEGPupilCNN(nn.Module):
             nn.Flatten()
         )
 
-        # self.conv_pupil =
+        self.conv_pupil = nn.Sequential(
+            nn.Conv1d(pupil_in_channel, num_filters, 3),
+            nn.LeakyReLU(),
+            nn.BatchNorm1d(num_filters),
+            nn.MaxPool1d(2),
+
+            nn.Conv1d(num_filters, num_filters, 3),
+            nn.LeakyReLU(),
+            nn.BatchNorm1d(num_filters),
+            nn.MaxPool1d(2),
+
+            nn.Conv1d(num_filters, num_filters, 3),
+            nn.LeakyReLU(),
+            nn.BatchNorm1d(num_filters),
+            nn.MaxPool1d(2),
+            nn.Flatten()
+        )
 
         # with torch.no_grad():
         #     cnn_flattened_size = self.conv(torch.rand(in_shape)).shape[1]
 
         self.fcs = nn.Sequential(
-            nn.Linear(224, 128),
-            # nn.LeakyReLU(),
+            nn.Linear(304, 128),
+            nn.LeakyReLU(),
             nn.Linear(128, 64),
-            # nn.LeakyReLU(),
+            nn.LeakyReLU(),
             nn.Linear(64, 32),
-            # nn.LeakyReLU(),
+            nn.LeakyReLU(),
             nn.Linear(32, num_classes)
         )
 
     def forward(self, input):
-        x = self.conv(input)
+        x_eeg = self.conv_eeg(input[0])
+        x_pupil = self.conv_pupil(input[1])
+        x = torch.concat([x_eeg, x_pupil], dim=1)
         x = self.fcs(x)
         return x
 
