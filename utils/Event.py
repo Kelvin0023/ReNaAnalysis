@@ -7,6 +7,12 @@ from params import *
 
 class Event:
     def __init__(self, timestamp, *args, **kwargs):
+        """
+        dtn can be
+        @param timestamp:
+        @param args:
+        @param kwargs:
+        """
         self.timestamp = timestamp
 
         # block information
@@ -83,11 +89,14 @@ def get_events_between(start_time, end_time, events, event_filter: callable):
     rtn_events = list(filter_events[np.logical_and(events_timestamps > start_time, events_timestamps < end_time)])
     return rtn_events
 
-def get_overlapping_events(start_time, end_time, events, event_filter: callable):
+def get_overlapping_events(start_time, end_time, events, event_filter: callable=None):
     """
     given events must have onset and offset in fields
     @return:
     """
+    if event_filter is None:
+        event_filter = lambda x: x  # use identity lambda
+
     filter_events = np.array([e for e in events if event_filter(e)])
     onset_times = np.array([e.onset_time for e in filter_events])
     offset_times = np.array([e.offset_time for e in filter_events])
@@ -96,6 +105,19 @@ def get_overlapping_events(start_time, end_time, events, event_filter: callable)
     before_start_event_mask = np.logical_and(offset_times <= end_time, offset_times >= start_time)
     return filter_events[np.logical_or(after_start_event_mask, before_start_event_mask)]
 
+def get_overlapping_events_single_target(target_time, events, event_filter: callable=None):
+    """
+    given events must have onset and offset in fields
+    @return:
+    """
+    if event_filter is None:
+        event_filter = lambda x: x  # use identity lambda
+    filter_events = np.array([e for e in events if event_filter(e)])
+    onset_times = np.array([e.onset_time for e in filter_events])
+    offset_times = np.array([e.offset_time for e in filter_events])
+
+    mask = np.logical_and(onset_times <= target_time, offset_times >= target_time)
+    return filter_events[mask]
 
 def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, events, event_names, event_filters, deviate=25e-2):
     event_array = np.zeros(data_timestamp.shape)
@@ -173,3 +195,4 @@ def check_contraint_block_counts(events, epoch_count):
 def get_last_block_end_time(events):
     filter_events = [e for e in events if e.is_block_end]
     return filter_events[-1].timestamp
+

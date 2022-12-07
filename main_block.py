@@ -37,7 +37,7 @@ start_time = time.time()  # record the start time of the analysis
 
 rdf = get_rdf()
 # rdf = pickle.load(open('rdf.p', 'rb'))
-# pickle.dump(rdf, open('rdf.p', 'wb'))
+pickle.dump(rdf, open('rdf.p', 'wb'))
 
 # discriminant test  ####################################################################################################
 
@@ -59,4 +59,4 @@ rdf = get_rdf()
 
 # r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")
 
-visualize_block_gaze_event(rdf, participant='1', session=2, block_id=5, generate_video=True)
+# visualize_block_gaze_event(rdf, participant='1', session=2, block_id=5, generate_video=True)

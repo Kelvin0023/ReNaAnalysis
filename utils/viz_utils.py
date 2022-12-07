@@ -1,8 +1,15 @@
-import numpy as np
-from matplotlib import pyplot as plt
+import os
 
+import cv2
+import lpips
+import numpy as np
+import pandas as pd
+from matplotlib import pyplot as plt
+from moviepy.video.io import ImageSequenceClip
+
+from eye.EyeUtils import prepare_image_for_sim_score, temporal_filter_fixation
 from eye.eyetracking import Fixation, Saccade, GazeRayIntersect
-from utils.Event import get_events_between, get_block_start_event
+from utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_target
 from params import *
 
 def visualiza_session(events):
@@ -80,9 +87,10 @@ def visualize_gazeray(events, block_id=None):
 
 def visualize_block_gaze_event(rdf, participant, session, block_id=None, only_long_gaze=False, generate_video=True):
     events = rdf.get_event(participant, session)
+    generate_video = rdf.participant_session_videos[participant, session] if generate_video else None
     visualize_gaze_events(events, block_id, only_long_gaze=only_long_gaze, generate_video=generate_video)
 
-def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=True):
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=None):
     f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -102,9 +110,9 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
         [plt.axvspan(onset, offset, alpha=0.25, color='red' if dtn==2 else 'blue') for onset, offset, dtn in zip(dtn_onsets_ts, dtn_offsets_ts, dtn_type)]
 
         if only_long_gaze:
-            draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp and x.is_first_long_gaze, gaze_intersect_y)
+            gaze_ray_intersects = draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp and x.is_first_long_gaze, gaze_intersect_y)
         else:
-            draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
+            gaze_ray_intersects = draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'Patch-Sim' and block_start_timestamp < x.timestamp < block_end_timestamp, pathSim_fix_y)
@@ -112,10 +120,12 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
 
         ax.set_xlim(block_start_timestamp, block_end_timestamp)
         ax.set_title("Block ID {}, condition {}".format(block_id, get_block_start_event(block_id, events).block_condition))
+
+        if generate_video is not None:
+            generate_block_video(image_folder=generate_video, block_id=block_id, block_start_time=block_start_timestamp, block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects)
     ax.legend()
     ax.set_xlabel('Time (sec)')
     plt.show()
-
 
 def add_bounding_box(a, x, y, width, height, color):
     copy = np.copy(a)
@@ -140,3 +150,159 @@ def draw_fixations(ax, events, event_filter, fix_y, include_item_index=True):
         ax.hlines(y=fix_y, xmin=f_onset_ts, xmax=f_offset_ts, linewidth=4, colors=dtn_color_dict[f_dtn])
         if f_item_index and include_item_index:
             ax.text((f_onset_ts + f_offset_ts) / 2, fix_y, f'{f_item_index}')
+    return filtered_events
+
+def generate_block_video(image_folder, block_id, block_start_time, block_end_time, gaze_ray_intersects, is_add_patch_sim=False):
+    gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
+    video_name = f'BlockVideo_{block_id}.mp4'
+
+    #defining parameters ##############################
+
+    similarity_threshold = .02
+
+    fixation_y_value = -1e-2
+    fps = 30
+    video_fps = 5
+
+    patch_size = 63, 111  # width, height
+    fovs = 115, 90  # horizontal, vertical, in degrees
+    central_fov = 13  # fov of the fovea
+    near_peripheral_fov = 30  # physio fov
+    mid_perpheral_fov = 60  # physio fov
+
+    # for drawing the fovea box
+    patch_color = (255, 255, 0)
+
+    center_color_dict = {-1: (128, 128, 128), 1: (0, 0, 255), 2: (255, 0, 0), 3: (255, 165, 0)}
+
+    center_no_intersect_size = 1
+    center_intersect_size = 2
+
+    fovea_color = (0, 255, 0)
+    parafovea_color = (255, 0, 255)
+    peripheri_color = (0, 255, 255)
+
+    is_flipping_y = True
+    y_axis = 0
+    # end of parameters ###############################################################
+
+    # read the gaze info csv
+    gaze_info = pd.read_csv(gaze_info_file)
+
+    timestamps = gaze_info['localclock']
+
+    video_start_frame = np.argmin(np.abs(timestamps - block_start_time))
+    video_frame_count = np.argmin(np.abs(timestamps - block_end_time)) - video_start_frame
+    assert video_frame_count > 1
+
+    # get the video frames
+    images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
+    image_size = cv2.imread(os.path.join(image_folder, images[0])).shape[:2]
+    ppds = image_size[0] / fovs[0], image_size[1] / fovs[1]  # horizontal, vertical, calculate pixel per degree of FOV
+
+    images.sort(key=lambda x: int(x.strip('.png')))  # sort the image files
+    frame = cv2.imread(os.path.join(image_folder, images[0]))
+    height, width, layers = frame.shape
+
+    # video = cv2.VideoWriter(video_name, cv2.VideoWriter_fourcc(*'DIVX'), 30, (width,height))
+    loss_fn_alex = lpips.LPIPS(net='alex')  # best forward scores
+    images_with_bb = []
+    previous_img_patch = None
+    distance_list = []
+    patch_boundaries = []
+    if video_frame_count is None: video_frame_count = len(images[video_start_frame:])
+    for i, image in enumerate(images[video_start_frame:]):  # iterate through the images
+        print('Processing {0} of {1} images'.format(i + 1, video_frame_count), end='\r', flush=True)
+        img = cv2.imread(os.path.join(image_folder, image))  # read in the image
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # convert from BGR to RGB
+        img_modified = img.copy()
+        gaze_coordinate = gaze_info.iloc[video_start_frame + i, :].values  # get the gaze coordinate for this image
+        gaze_x, gaze_y, timestamp = int(gaze_coordinate[2]), int(gaze_coordinate[3]), gaze_coordinate[3]  # the gaze coordinate
+
+        gaze_intersect_this_frame = get_overlapping_events_single_target(timestamp, gaze_ray_intersects)
+        if len(gaze_intersect_this_frame) == 1:
+            e = gaze_intersect_this_frame[0]
+            # is_intersected = True
+            # intersect_dtn = e.dtn
+            intersect_index = e.item_index
+            center_color = center_color_dict[e.dtn]
+            center_radius = center_intersect_size
+
+        elif len(gaze_intersect_this_frame) == 0:
+            intersect_index = None
+            center_radius = center_no_intersect_size
+            center_color = center_color_dict[-1]
+
+        else:
+            raise Exception("There can only be at most one gaze ray intersect at a eyetracking frame")
+
+        if is_flipping_y: gaze_y = image_size[y_axis] - gaze_y  # because CV's y zero is at the bottom of the screen
+        center = gaze_x, gaze_y
+
+        img_patch_x_min = int(np.min([np.max([0, gaze_x - patch_size[0] / 2]), image_size[0] - patch_size[0]]))
+        img_patch_x_max = int(np.max([np.min([image_size[0], gaze_x + patch_size[0] / 2]), patch_size[0]]))
+        img_patch_y_min = int(np.min([np.max([0, gaze_y - patch_size[1] / 2]), image_size[1] - patch_size[1]]))
+        img_patch_y_max = int(np.max([np.min([image_size[1], gaze_y + patch_size[1] / 2]), patch_size[1]]))
+        patch_boundaries.append((img_patch_x_min, img_patch_y_min, img_patch_x_max, img_patch_y_max))
+
+        img_patch = img[img_patch_x_min: img_patch_x_max, img_patch_y_min: img_patch_y_max]
+
+        # draw the center circle
+        cv2.circle(img_modified, center, center_radius, center_color, 0.5)
+        if intersect_index: img_modified = cv2.putText(img_modified, f'{intersect_index}', center + np.array([0, 15]), cv2.FONT_HERSHEY_SIMPLEX, 1, center_color, 2, cv2.LINE_AA)
+        # get similarity score
+        if previous_img_patch is not None:
+            img_tensor, previous_img_tensor = prepare_image_for_sim_score(img_patch), prepare_image_for_sim_score(
+                previous_img_patch)
+            distance = loss_fn_alex(img_tensor, previous_img_tensor).item()
+            img_modified = cv2.putText(img_modified, "%.2f" % distance, center, cv2.FONT_HERSHEY_SIMPLEX, 1,
+                                       center_color, 2, cv2.LINE_AA)
+            distance_list.append(distance)
+        previous_img_patch = img_patch
+
+        axis = (int(central_fov * ppds[0]), int(central_fov * ppds[1]))
+        cv2.ellipse(img_modified, center, axis, 0, 0, 360, fovea_color, thickness=4)
+        axis = (int(near_peripheral_fov * ppds[0]), int(near_peripheral_fov * ppds[1]))
+        cv2.ellipse(img_modified, center, axis, 0, 0, 360, parafovea_color, thickness=4)
+        axis = (int(1.25 * mid_perpheral_fov * ppds[0]), int(mid_perpheral_fov * ppds[1]))
+        cv2.ellipse(img_modified, center, axis, 0, 0, 360, peripheri_color, thickness=4)
+
+        images_with_bb.append(img_modified)
+        if i + 1 == video_frame_count:
+            break
+
+    distance_list = np.array(distance_list)
+    thresholded_sim_distance = np.ones(len(distance_list))
+    thresholded_sim_distance[distance_list > similarity_threshold] = 0
+    # duration thresholding
+    fix_list_filtered = temporal_filter_fixation(thresholded_sim_distance, marker_mode='viz')
+
+    if is_add_patch_sim:
+        for i, (fix, img, patch_boundary) in enumerate(zip(fix_list_filtered, images_with_bb, patch_boundaries)):
+            img_modified = img.copy()
+            if fix == fixation_y_value:
+                shapes = np.zeros_like(img_modified, np.uint8)
+                alpha = 0.3
+                cv2.rectangle(shapes, patch_boundary[:2], patch_boundary[2:], patch_color, thickness=-1)
+                mask = shapes.astype(bool)
+                img_modified[mask] = cv2.addWeighted(img_modified, alpha, shapes, 1 - alpha, 0)[mask]
+            else:
+                cv2.rectangle(img_modified, patch_boundary[:2], patch_boundary[2:], patch_color, thickness=2)
+            images_with_bb[i] = img_modified
+
+    clip = ImageSequenceClip.ImageSequenceClip(images_with_bb, fps=video_fps)
+    clip.write_videofile(os.path.join(image_folder, video_name))
+
+    viz_time = block_start_time - block_end_time
+    viz_start_index = 0
+    fig = plt.gcf()
+    fig.set_size_inches(30, 10.5)
+    plt.rcParams['font.size'] = '24'
+    plt.plot(np.linspace(0, viz_time, viz_time * fps), distance_list[viz_start_index:viz_start_index + viz_time * fps],
+             linewidth=5, label='Fovea Patch Distance')
+    plt.plot(np.linspace(0, viz_time, viz_time * fps),
+             fix_list_filtered[viz_start_index:viz_start_index + viz_time * fps], linewidth=10, label='Fixation')
+    plt.title('Example similarity distance sequence')
+    plt.ylabel("Similarity distance between previous and this frame")
+    plt.xlabel("Time (seconds)")
+    plt.show()
