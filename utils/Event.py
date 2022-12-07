@@ -24,6 +24,7 @@ class Event:
         self.dtn_onffset = kwargs['dtn_onffset'] if 'dtn_onffset' in kwargs.keys() else None  # only event marker will have this field
 
         # object related markers
+        self.item_index = kwargs['item_index'] if 'item_index' in kwargs.keys() else None
         self.item_id = kwargs['item_id'] if 'itemID' in kwargs.keys() else None
         self.obj_dist = kwargs['obj_dist'] if 'objDistFromPlayer' in kwargs.keys() else None
         self.carousel_speed = kwargs['carousel_speed'] if 'CarouselSpeed' in kwargs.keys() else None

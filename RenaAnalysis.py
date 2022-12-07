@@ -106,19 +106,17 @@ def get_rdf(is_loading_saved_analysis = False):
     rdf = RenaDataFrame()
 
     if not is_loading_saved_analysis:
-        participant_session_file_path_dict = load_participant_session_dict(participant_session_file_path_dict,
-                                                                           preloaded_dats_path)
+        participant_session_data_dict = load_participant_session_dict(participant_session_file_path_dict, preloaded_dats_path)  # load the dats files
         print("Loading data took {0} seconds".format(time.time() - start_time))
 
-        for p_i, (participant_index, session_dict) in enumerate(participant_session_file_path_dict.items()):
-            # print("Working on participant {0} of {1}".format(int(participant_index) + 1, len(participant_session_dict)))
+        for p_i, (participant_index, session_dict) in enumerate(participant_session_data_dict.items()):
             for session_index, session_files in session_dict.items():
                 print("Processing participant-code[{0}]: {4} of {1}, session {2} of {3}".format(int(participant_index),
-                                                                                                len(participant_session_file_path_dict),
+                                                                                                len(participant_session_data_dict),
                                                                                                 session_index + 1,
                                                                                                 len(session_dict),
                                                                                                 p_i + 1))
-                data, item_catalog_path, session_log_path, session_bad_eeg_channels_path, session_ICA_path = session_files
+                data, item_catalog_path, session_log_path, session_bad_eeg_channels_path, session_ICA_path, video_path = session_files
                 session_bad_eeg_channels = open(session_bad_eeg_channels_path, 'r').read().split(' ') if os.path.exists(
                     session_bad_eeg_channels_path) else None
                 item_catalog = json.load(open(item_catalog_path))
@@ -139,7 +137,7 @@ def get_rdf(is_loading_saved_analysis = False):
 
                 # visualize_gaze_events(events, 6)
                 rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels,
-                                            session_ICA_path)  # also preprocess the EEG data
+                                            session_ICA_path, video_path)  # also preprocess the EEG data
 
     rdf.preprocess()
     end_time = time.time()

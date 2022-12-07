@@ -17,7 +17,7 @@ def load_participant_session_dict(participant_session_dict, preloaded_dats_path)
                                                                     len(participant_session_dict), p_i + 1))
         for session_index, session_files in session_dict.items():
             print("Session-code [{0}]: {0} of {1}".format(session_index, session_index + 1, len(session_dict)))
-            data_path, _, _, _, _= session_files
+            data_path = session_files[0]
             if os.path.exists(
                     data_path.replace('dats', 'p')):  # load pickle if it's available as it is faster than dats
                 data = pickle.load(open(data_path.replace('dats', 'p'), 'rb'))
@@ -77,7 +77,9 @@ def get_data_file_paths(base_root, data_directory):
                                                                         '{0}_ReNaItemCatalog.json'.format(i),
                                                                         '{0}_ReNaSessionLog.json'.format(i),
                                                                         '{0}_badchannels'.format(i),
-                                                                        '{0}_ParticipantSessionICA'.format(i)]]
+                                                                        '{0}_ParticipantSessionICA'.format(i),
+                                                                        '{0}_video'.format(i)]]
+
     return participant_list, participant_session_file_path_dict, participant_badchannel_dict
 
 def convert_dats_in_folder_to_p(root):

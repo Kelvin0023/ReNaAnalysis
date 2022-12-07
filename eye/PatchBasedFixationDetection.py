@@ -12,19 +12,19 @@ import matplotlib.pyplot as plt
 from eye.EyeUtils import prepare_image_for_sim_score, temporal_filter_fixation
 
 
-# image_folder = 'D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall/10-25-2022/ReNaUnityCameraCapture_10-25-2022-18-12-02'
-image_folder = "D:/Dropbox/Dropbox/ReNa/FinalSet_GIW/out/1_2_ballcatch"
+image_folder = 'D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall/12_02_2022/ReNaUnityCameraCapture_12_02_2022_19_36_54'
+# image_folder = "D:/Dropbox/Dropbox/ReNa/FinalSet_GIW/out/1_2_ballcatch"
 
 gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
-video_name = 'PatchBasedFixationDetection.mp4'
+video_name = 'PatchBasedFixationDetection_slow_motion.mp4'
 
 similarity_threshold = .02
 
 fixation_y_value = -1e-2
 fps = 30
-video_fps = 30
-video_start_frame = 0
-video_frame_count = None
+video_fps = 5
+video_start_frame = 16000
+video_frame_count = 3000
 
 patch_size = 63, 111  # width, height
 fovs = 115, 90  # horizontal, vertical, in degrees
@@ -68,7 +68,7 @@ for i, image in enumerate(images[video_start_frame:]):  # iterate through the im
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # convert from BGR to RGB
     img_modified = img.copy()
     gaze_coordinate = gaze_info.iloc[video_start_frame+i, :].values  # get the gaze coordinate for this image
-    gaze_x, gaze_y = int(gaze_coordinate[1]), int(gaze_coordinate[2])  # the gaze coordinate
+    gaze_x, gaze_y = int(gaze_coordinate[2]), int(gaze_coordinate[3])  # the gaze coordinate
     if is_flipping_y: gaze_y = image_size[y_axis] - gaze_y  # because CV's y zero is at the bottom of the screen
     center = gaze_x, gaze_y
 

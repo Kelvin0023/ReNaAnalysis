@@ -35,9 +35,9 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-# rdf = get_rdf()
+rdf = get_rdf()
 # rdf = pickle.load(open('rdf.p', 'rb'))
-# rdf = pickle.dump(rdf, open('rdf.p', 'wb'))
+# pickle.dump(rdf, open('rdf.p', 'wb'))
 
 # discriminant test  ####################################################################################################
 
@@ -53,11 +53,10 @@ start_time = time.time()  # record the start time of the analysis
 # pickle.dump(x, open('x_eeg_pupil_p1_s2.p', 'wb'))
 # pickle.dump(y, open('y_eeg_pupil_p1_s2.p', 'wb'))
 
-x = pickle.load(open('x_eeg_pupil_p1_s2.p', 'rb'))
-y = pickle.load(open('y_eeg_pupil_p1_s2.p', 'rb'))
+# x = pickle.load(open('x_eeg_pupil_p1_s2.p', 'rb'))
+# y = pickle.load(open('y_eeg_pupil_p1_s2.p', 'rb'))
 
-model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2)
-model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model)
 
 # r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")
 
+visualize_block_gaze_event(rdf, participant='1', session=2, block_id=5, generate_video=True)

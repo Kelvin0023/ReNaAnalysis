@@ -9,7 +9,7 @@ from params import *
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################
-from utils.viz_utils import visualize_gaze_events, visualize_rdf_gaze_event
+from utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event
 
 """
 Parameters (in the file /params.py):

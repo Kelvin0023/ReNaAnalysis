@@ -78,11 +78,11 @@ def visualize_gazeray(events, block_id=None):
     plt.show()
 
 
-def visualize_rdf_gaze_event(rdf, participant, session, block_id=None, only_long_gaze=False):
+def visualize_block_gaze_event(rdf, participant, session, block_id=None, only_long_gaze=False, generate_video=True):
     events = rdf.get_event(participant, session)
-    visualize_gaze_events(events, block_id, only_long_gaze=only_long_gaze)
+    visualize_gaze_events(events, block_id, only_long_gaze=only_long_gaze, generate_video=generate_video)
 
-def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False):
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=True):
     f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -105,9 +105,10 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
             draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp and x.is_first_long_gaze, gaze_intersect_y)
         else:
             draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
-        draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
-        draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
+        draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
+        draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
         draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'Patch-Sim' and block_start_timestamp < x.timestamp < block_end_timestamp, pathSim_fix_y)
+
 
         ax.set_xlim(block_start_timestamp, block_end_timestamp)
         ax.set_title("Block ID {}, condition {}".format(block_id, get_block_start_event(block_id, events).block_condition))
@@ -129,10 +130,13 @@ def add_bounding_box(a, x, y, width, height, color):
     copy[bounding_box[1]:bounding_box[1] + bounding_box[3], np.min([image_width-1, bounding_box[0] + bounding_box[2]])] = color
     return copy
 
-def draw_fixations(ax, events, event_filter, fix_y):
+def draw_fixations(ax, events, event_filter, fix_y, include_item_index=True):
     filtered_events = [e for e in events if event_filter(e)]
     fix_onset_times = [e.onset_time for e in filtered_events]
     fix_offset_times = [e.offset_time for e in filtered_events]
     fix_dtn = [e.dtn for e in filtered_events]
-    for f_onset_ts, f_offset_ts, f_dtn in zip(fix_onset_times, fix_offset_times, fix_dtn):
+    fix_item_indices = [e.item_index for e in filtered_events]
+    for f_onset_ts, f_offset_ts, f_dtn, f_item_index in zip(fix_onset_times, fix_offset_times, fix_dtn, fix_item_indices):
         ax.hlines(y=fix_y, xmin=f_onset_ts, xmax=f_offset_ts, linewidth=4, colors=dtn_color_dict[f_dtn])
+        if f_item_index and include_item_index:
+            ax.text((f_onset_ts + f_offset_ts) / 2, fix_y, f'{f_item_index}')

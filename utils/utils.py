@@ -307,13 +307,13 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events, long_gaze_
                 gaze_ray_onset_dist = i_b_obj_dist[gaze_ray_diff == 1]
 
                 found_first_long_gaze = False
-                for onset_time, offset_time, item_id, item_distance in zip(gaze_ray_onset_times, gaze_ray_offset_times, gaze_ray_onset_item_ids, gaze_ray_onset_dist):
+                for item_index, (onset_time, offset_time, item_id, item_distance) in enumerate(zip(gaze_ray_onset_times, gaze_ray_offset_times, gaze_ray_onset_item_ids, gaze_ray_onset_dist)):
                     if not found_first_long_gaze and (offset_time - onset_time > long_gaze_threshold):
                         found_first_long_gaze = True
                         is_first_long_gaze = True
                     else:
                         is_first_long_gaze = False
-                    e = GazeRayIntersect(onset_time, onset_time, offset_time, block_condition=block_conditions[j], block_id=block_ids[j], dtn=item_dtns[0], item_id=item_id, obj_dist=item_distance, is_first_long_gaze=is_first_long_gaze)
+                    e = GazeRayIntersect(onset_time, onset_time, offset_time, block_condition=block_conditions[j], block_id=block_ids[j], dtn=item_dtns[0], item_index=item_index, item_id=item_id, obj_dist=item_distance, is_first_long_gaze=is_first_long_gaze)
                     if block_conditions[j] == conditions['Carousel']:
                         e.carousel_speed = get_closest_event_attribute_before(events, onset_time, 'carousel_speed', lambda x: x.dtn_onffset)
                         e.carousel_angle = get_closest_event_attribute_before(events, onset_time, 'carousel_angle', lambda x: x.dtn_onffset)

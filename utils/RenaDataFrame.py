@@ -11,10 +11,12 @@ from utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, 
 
 class RenaDataFrame:
     def __init__(self):
+        self.participant_session_videos = {}
         self.participant_session_dict = {}
 
-    def add_participant_session(self, data, events, participant, session_index, bad_channels, ica_path):
+    def add_participant_session(self, data, events, participant, session_index, bad_channels, ica_path, video_dir):
         self.participant_session_dict[(participant, session_index)] = data, events, bad_channels, ica_path
+        self.participant_session_videos[(participant, session_index)] = video_dir
 
     def preprocess(self):
         for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items():

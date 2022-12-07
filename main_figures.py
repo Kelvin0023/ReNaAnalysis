@@ -10,7 +10,7 @@ from utils.utils import get_item_events, viz_pupil_epochs, viz_eeg_epochs, get_r
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################
-from utils.viz_utils import visualize_gaze_events, visualize_rdf_gaze_event
+from utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event
 import matplotlib.pyplot as plt
 
 """
