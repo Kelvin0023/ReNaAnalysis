@@ -40,7 +40,7 @@ def load_participant_session_dict(participant_session_dict, preloaded_dats_path)
 def get_analysis_result_paths(base_root, note):
     dt_string = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
     analysis_result_dir = os.path.join(base_root, 'RenaAnalysis-{}-{}'.format(dt_string, note))
-    os.mkdir(analysis_result_dir)
+    # os.mkdir(analysis_result_dir)
 
     preloaded_dats_path = os.path.join(analysis_result_dir, 'participant_session_dict.p')
     preloaded_epoch_path = os.path.join(analysis_result_dir, 'participant_condition_epoch_dict.p')

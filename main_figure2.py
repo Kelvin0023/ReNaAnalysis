@@ -36,7 +36,7 @@ rdf = pickle.load(open('rdf.p', 'rb'))
 plt.rcParams.update({'font.size': 22})
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
-event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['RSVP'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
-                 lambda x: type(x)==Fixation and x.block_condition == conditions['RSVP'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
-viz_pupil_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='RSVP ERP, locked to Detected Fixation (using Patch-Sim)')
-viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='RSVP ERP, locked to Detected Fixation (using Patch-Sim)')
+event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+viz_pupil_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='VS ERP, locked to Detected Fixation (using Patch-Sim)')
+viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='VS ERP, locked to Detected Fixation (using Patch-Sim)')
