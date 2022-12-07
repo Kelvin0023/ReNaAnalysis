@@ -24,7 +24,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     assert len(event_names) == len(event_filters) == 2
     tmin = -0.1
     tmax = 0.8
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=tmax)
+    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=tmax, participant=participant, session=session)
     r_square_grid = np.zeros(x.shape[1:])
 
     for channel_i in range(r_square_grid.shape[0]):
@@ -71,7 +71,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     #     plt.show()
 
     # pupilometries
-    x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='pupil')
+    x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='pupil', participant=participant, session=session)
     x = np.mean(x, axis=1)
     r_square_grid = np.zeros(x.shape[1])
     for time_i in range(len(r_square_grid)):

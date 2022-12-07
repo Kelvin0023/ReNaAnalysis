@@ -58,11 +58,11 @@ rdf = get_rdf()
 
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
-# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
-# # viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
-# viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
+event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Novelty"]]
+# viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors, participant='1', session=1)
+viz_eeg_epochs(rdf, ["Distractor", "Target", "Novelty"], event_filters, colors)
 #
 #
 # visualize_rdf_gaze_event(rdf, participant='1', session=1, block_id=6)

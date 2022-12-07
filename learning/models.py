@@ -87,17 +87,17 @@ class EEGCNN(nn.Module):
         super().__init__()
         self.conv = nn.Sequential(
             nn.Conv1d(in_channels, num_filters, 5),
-            # nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
 
             nn.Conv1d(num_filters, num_filters, 5),
-            # nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
 
             nn.Conv1d(num_filters, num_filters, 5),
-            # nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
             nn.Flatten()
@@ -108,11 +108,11 @@ class EEGCNN(nn.Module):
 
         self.fcs = nn.Sequential(
             nn.Linear(176, 128),
-            # nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(128, 64),
-            # nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(64, 32),
-            # nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(32, num_classes)
         )
 
@@ -129,17 +129,17 @@ class EEGPupilCNN(nn.Module):
         super().__init__()
         self.conv_eeg = nn.Sequential(
             nn.Conv1d(eeg_in_channels, num_filters, 5),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
 
             nn.Conv1d(num_filters, num_filters, 5),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
 
             nn.Conv1d(num_filters, num_filters, 5),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
             nn.Flatten()
@@ -147,17 +147,17 @@ class EEGPupilCNN(nn.Module):
 
         self.conv_pupil = nn.Sequential(
             nn.Conv1d(pupil_in_channel, num_filters, 3),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
 
             nn.Conv1d(num_filters, num_filters, 3),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
 
             nn.Conv1d(num_filters, num_filters, 3),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
             nn.Flatten()
@@ -168,11 +168,11 @@ class EEGPupilCNN(nn.Module):
 
         self.fcs = nn.Sequential(
             nn.Linear(304, 128),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(128, 64),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(64, 32),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(32, num_classes)
         )
 

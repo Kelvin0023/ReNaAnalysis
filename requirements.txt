@@ -9,3 +9,5 @@ torchsummary==1.5.1
 imbalanced-learn
 seaborn
 imageio
+tqdm
+autoreject

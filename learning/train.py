@@ -23,7 +23,7 @@ def train_model(x, y, model, test_name="CNN"):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
-
+    model = model.to(device)
     # create the train dataset
     label_encoder = preprocessing.OneHotEncoder()
     y = label_encoder.fit_transform(np.array(y).reshape(-1, 1)).toarray()
@@ -269,7 +269,7 @@ def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil"):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
-
+    model.to(device)
     # create the train dataset
     label_encoder = preprocessing.OneHotEncoder()
     y = label_encoder.fit_transform(np.array(y).reshape(-1, 1)).toarray()

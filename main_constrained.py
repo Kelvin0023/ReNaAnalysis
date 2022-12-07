@@ -36,23 +36,27 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
-rdf = pickle.load(open('rdf.p', 'rb'))
+# pickle.dump(rdf, open('rdf.p', 'wb'))
+# rdf = pickle.load(open('rdf.p', 'rb'))
 
 # discriminant test  ####################################################################################################
 
 plt.rcParams.update({'font.size': 22})
 # colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
+#
+# print('Training model on constrained blocks')
+# event_names = ["Distractor", "Target"]
+# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+# viz_eeg_epochs(rdf, event_names, event_filters, colors)
+#
+# x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
 
-print('Training model on constrained blocks')
-event_names = ["Distractor", "Target"]
-event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
-pickle.dump(x, open('x_constrained.p', 'wb'))
-pickle.dump(y, open('y_constrained.p', 'wb'))
+# pickle.dump(x, open('x_constrained.p', 'wb'))
+# pickle.dump(y, open('y_constrained.p', 'wb'))
 
-# x = pickle.load(open('x_constrained.p', 'rb'))
-# y = pickle.load(open('y_constrained.p', 'rb'))
+x = pickle.load(open('x_constrained.p', 'rb'))
+y = pickle.load(open('y_constrained.p', 'rb'))
 model = EEGCNN(in_shape=x.shape, num_classes=2)
 model, training_histories, criterion, label_encoder = train_model(x, y, model)
 
