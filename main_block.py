@@ -36,8 +36,8 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
-rdf = pickle.load(open('rdf.p', 'rb'))
-# pickle.dump(rdf, open('rdf.p', 'wb'))
+rdf = pickle.load(open('C:/Data/rdf.p', 'rb'))
+# pickle.dump(rdf, open('C:/Data/rdf.p', 'wb'))  # dump to the SSD c drive
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 # discriminant test  ####################################################################################################
 

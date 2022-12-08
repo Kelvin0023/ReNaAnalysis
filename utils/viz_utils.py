@@ -250,13 +250,13 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
 
         # draw the center circle
         cv2.circle(img_modified, center, center_radius, center_color, 1)
-        if intersect_index: img_modified = cv2.putText(img_modified, f'{intersect_index}', center + np.array([0, 15]), cv2.FONT_HERSHEY_SIMPLEX, 1, center_color, 2, cv2.LINE_AA)
+        if intersect_index: img_modified = cv2.putText(img_modified, f'{intersect_index}', center + np.array([0, 15]), cv2.FONT_HERSHEY_SIMPLEX, 0.2, center_color, 2, cv2.LINE_AA)
         # get similarity score
         if previous_img_patch is not None:
             img_tensor, previous_img_tensor = prepare_image_for_sim_score(img_patch), prepare_image_for_sim_score(
                 previous_img_patch)
             distance = loss_fn_alex(img_tensor, previous_img_tensor).item()
-            img_modified = cv2.putText(img_modified, "%.2f" % distance, center, cv2.FONT_HERSHEY_SIMPLEX, 1,
+            img_modified = cv2.putText(img_modified, "%.2f" % distance, center, cv2.FONT_HERSHEY_SIMPLEX, 0.2,
                                        center_color, 2, cv2.LINE_AA)
             distance_list.append(distance)
         previous_img_patch = img_patch
