@@ -186,6 +186,7 @@ def copy_item_info(dest_event, source_event):
     dest_event.dtn = source_event.dtn
     dest_event.dtn_onffset = source_event.dtn_onffset
     dest_event.item_id = source_event.item_id
+    dest_event.item_index = source_event.item_index
     dest_event.obj_dist = source_event.obj_dist
     dest_event.carousel_speed = source_event.carousel_speed
     dest_event.carousel_angle = source_event.carousel_angle

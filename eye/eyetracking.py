@@ -87,15 +87,18 @@ def add_event_info_to_gaze(fixations, events):
     note the function can run on either exg or eyetracking, we use exg here as it has higher sampling rate and gives
     presumably better synchronization
     @rtype: new lists of fixations and saccades
+
+    @TODO this is a analysis bottleneck function make this multi-process
     """
     fix_in_block = []
     sac_in_block = []
+    gaze_intersects = [x for x in events if type(x) == GazeRayIntersect]
     for f in fixations:
         if is_event_in_block(f, events):
             f = add_event_meta_info(f, events)
-            f.preceding_saccade = add_event_meta_info(f, events)
+            f.preceding_saccade = add_event_meta_info(f.preceding_saccade, events)
             # gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
-            overlapping_gaze_intersects = get_overlapping_events(f.onset_time, f.offset_time, events, lambda x: type(x) == GazeRayIntersect)
+            overlapping_gaze_intersects = get_overlapping_events(f.onset_time, f.offset_time, gaze_intersects)
 
             if len(overlapping_gaze_intersects) > 0:
                 e = overlapping_gaze_intersects[0]  # IMPORTANT pick the first gaze event
@@ -184,9 +187,9 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
                         gaze_timestamps[offset], peak, detection_alg=detection_alg))
 
     # identify the fixations for all the intervals between saccades
-    fixation_inteval_indices = [(saccades[i - 1].offset, saccades[i].onset) for i in
+    fixation_interval_indices = [(saccades[i - 1].offset, saccades[i].onset) for i in
                                 range(1, len(saccades))]  # IGNORE the interval before the first saccade
-    for i, (onset, offset) in enumerate(fixation_inteval_indices):
+    for i, (onset, offset) in enumerate(fixation_interval_indices):
         duration = gaze_timestamps[offset] - gaze_timestamps[onset]
         _xy_deg = gaze_xy_deg[:, onset:offset][:,
                   events[onset:offset] != -1]  # check the dispersion excluding the invalid points
@@ -203,7 +206,7 @@ def gaze_event_detection(gaze_xy, gaze_timestamps, gaze_xy_format="ratio", gaze_
         events[s.onset:s.offset] = SACCADE_CODE
     for f in fixations:
         events[f.onset:f.offset] = FIXATION_CODE
-    print("Detected {} fixation from I-DT with {}% glitch percentage {}".format(len(fixations), glitch_precentage * 100, "" if head_rotation is None else "with Head rotation"))
+    print("Detected {} fixation from I-VT with {}% glitch percentage {}".format(len(fixations), glitch_precentage * 100, "" if head_rotation is None else "with Head rotation"))
     return events, fixations, saccades, velocities
 
 
