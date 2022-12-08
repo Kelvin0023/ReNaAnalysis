@@ -38,7 +38,7 @@ start_time = time.time()  # record the start time of the analysis
 rdf = get_rdf()
 # rdf = pickle.load(open('rdf.p', 'rb'))
 pickle.dump(rdf, open('rdf.p', 'wb'))
-
+print("Saving/loading RDF complete")
 # discriminant test  ####################################################################################################
 
 # plt.rcParams.update({'font.size': 22})
