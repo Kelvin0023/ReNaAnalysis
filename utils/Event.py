@@ -1,3 +1,4 @@
+import inspect
 from typing import Union
 
 import numpy as np
@@ -38,6 +39,13 @@ class Event:
 
         self.likert = kwargs['Likert'] if 'Likert' in kwargs.keys() else None  # TODO to be added
 
+    def __str__(self):
+        rtn = ''
+        for i in inspect.getmembers(self):
+            if not i[0].startswith('_'):  # To remove other methods that
+                if not inspect.ismethod(i[1]):
+                    rtn += f'{i}, '
+        return rtn
 
 class FoveateAngleCrossing(Event):
     def __init__(self, timestamp, onset_time, offset_time, threshold, *args, **kwargs):

@@ -291,7 +291,7 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events, long_gaze_
         # b_foveate_angle = b_item_markers[item_marker_names.index('foveateAngle')::len(item_marker_names), :]  # the gaze ray inter for 30 items in this block
         # b_foveate_angle = b_foveate_angle * np.pi / 180
 
-        for i_b_gr, i_b_iid, i_b_dtn, i_b_obj_dist in zip(b_gazeray, b_itemids, b_dtns, b_obj_dist):
+        for item_index, (i_b_gr, i_b_iid, i_b_dtn, i_b_obj_dist) in enumerate(zip(b_gazeray, b_itemids, b_dtns, b_obj_dist)):
             if np.any(i_b_gr != 0):  # if gaze happen on this object
                 gaze_ray_diff = np.diff(np.concatenate([[0.], i_b_gr]))
                 gaze_ray_onset_times = b_item_timestamps[gaze_ray_diff == 1]
@@ -307,7 +307,7 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events, long_gaze_
                 gaze_ray_onset_dist = i_b_obj_dist[gaze_ray_diff == 1]
 
                 found_first_long_gaze = False
-                for item_index, (onset_time, offset_time, item_id, item_distance) in enumerate(zip(gaze_ray_onset_times, gaze_ray_offset_times, gaze_ray_onset_item_ids, gaze_ray_onset_dist)):
+                for onset_time, offset_time, item_id, item_distance in zip(gaze_ray_onset_times, gaze_ray_offset_times, gaze_ray_onset_item_ids, gaze_ray_onset_dist):
                     if not found_first_long_gaze and (offset_time - onset_time > long_gaze_threshold):
                         found_first_long_gaze = True
                         is_first_long_gaze = True
