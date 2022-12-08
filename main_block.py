@@ -35,10 +35,10 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf()
-# rdf = pickle.load(open('rdf.p', 'rb'))
-pickle.dump(rdf, open('rdf.p', 'wb'))
-print("Saving/loading RDF complete")
+# rdf = get_rdf()
+rdf = pickle.load(open('rdf.p', 'rb'))
+# pickle.dump(rdf, open('rdf.p', 'wb'))
+print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 # discriminant test  ####################################################################################################
 
 # plt.rcParams.update({'font.size': 22})
@@ -59,4 +59,4 @@ print("Saving/loading RDF complete")
 
 # r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")
 
-# visualize_block_gaze_event(rdf, participant='1', session=2, block_id=5, generate_video=True)
+visualize_block_gaze_event(rdf, participant='1', session=2, block_id=6, generate_video=True)

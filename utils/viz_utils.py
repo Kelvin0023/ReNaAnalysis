@@ -162,7 +162,7 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
 
     fixation_y_value = -1e-2
     fps = 30
-    video_fps = 5
+    video_fps = 30
 
     patch_size = 63, 111  # width, height
     fovs = 115, 90  # horizontal, vertical, in degrees
@@ -184,15 +184,18 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
 
     is_flipping_y = True
     y_axis = 0
+
     # end of parameters ###############################################################
 
     # read the gaze info csv
     gaze_info = pd.read_csv(gaze_info_file)
 
-    timestamps = gaze_info['localclock']
+    timestamps = gaze_info['LocalClock']
 
     video_start_frame = np.argmin(np.abs(timestamps - block_start_time))
     video_frame_count = np.argmin(np.abs(timestamps - block_end_time)) - video_start_frame
+    block_duration = block_end_time - block_start_time
+    assert block_duration - 50e-3 < timestamps[video_start_frame + video_frame_count] - timestamps[video_start_frame] < block_duration + 50e-3
     assert video_frame_count > 1
 
     # get the video frames
@@ -217,7 +220,7 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # convert from BGR to RGB
         img_modified = img.copy()
         gaze_coordinate = gaze_info.iloc[video_start_frame + i, :].values  # get the gaze coordinate for this image
-        gaze_x, gaze_y, timestamp = int(gaze_coordinate[2]), int(gaze_coordinate[3]), gaze_coordinate[3]  # the gaze coordinate
+        gaze_x, gaze_y, timestamp = int(gaze_coordinate[2]), int(gaze_coordinate[3]), gaze_coordinate[4]  # the gaze coordinate
 
         gaze_intersect_this_frame = get_overlapping_events_single_target(timestamp, gaze_ray_intersects)
         if len(gaze_intersect_this_frame) == 1:
@@ -227,12 +230,10 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
             intersect_index = e.item_index
             center_color = center_color_dict[e.dtn]
             center_radius = center_intersect_size
-
         elif len(gaze_intersect_this_frame) == 0:
             intersect_index = None
             center_radius = center_no_intersect_size
             center_color = center_color_dict[-1]
-
         else:
             raise Exception("There can only be at most one gaze ray intersect at a eyetracking frame")
 
@@ -248,7 +249,7 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
         img_patch = img[img_patch_x_min: img_patch_x_max, img_patch_y_min: img_patch_y_max]
 
         # draw the center circle
-        cv2.circle(img_modified, center, center_radius, center_color, 0.5)
+        cv2.circle(img_modified, center, center_radius, center_color, 1)
         if intersect_index: img_modified = cv2.putText(img_modified, f'{intersect_index}', center + np.array([0, 15]), cv2.FONT_HERSHEY_SIMPLEX, 1, center_color, 2, cv2.LINE_AA)
         # get similarity score
         if previous_img_patch is not None:
@@ -293,15 +294,13 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
     clip = ImageSequenceClip.ImageSequenceClip(images_with_bb, fps=video_fps)
     clip.write_videofile(os.path.join(image_folder, video_name))
 
-    viz_time = block_start_time - block_end_time
-    viz_start_index = 0
     fig = plt.gcf()
     fig.set_size_inches(30, 10.5)
     plt.rcParams['font.size'] = '24'
-    plt.plot(np.linspace(0, viz_time, viz_time * fps), distance_list[viz_start_index:viz_start_index + viz_time * fps],
+    plt.plot(np.linspace(0, block_duration, len(distance_list)), distance_list,
              linewidth=5, label='Fovea Patch Distance')
-    plt.plot(np.linspace(0, viz_time, viz_time * fps),
-             fix_list_filtered[viz_start_index:viz_start_index + viz_time * fps], linewidth=10, label='Fixation')
+    plt.plot(np.linspace(0, block_duration, len(distance_list)),
+             fix_list_filtered, linewidth=10, label='Fixation')
     plt.title('Example similarity distance sequence')
     plt.ylabel("Similarity distance between previous and this frame")
     plt.xlabel("Time (seconds)")
