@@ -4,6 +4,10 @@ import time
 import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import roc_auc_score
+from scipy import stats
+from scipy.stats import norm
+import math
 
 from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
 from learning.train import epochs_to_class_samples
@@ -26,12 +30,14 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     tmax = 0.8
     x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=tmax, participant=participant, session=session)
     r_square_grid = np.zeros(x.shape[1:])
+    d_prime_grid = np.zeros(x.shape[1:])
 
     for channel_i in range(r_square_grid.shape[0]):
         for time_i in range(r_square_grid.shape[1]):
             x_train = x[:, channel_i, time_i].reshape(-1, 1)
             model = LinearRegression()
             model.fit(x_train, y)
+            d_prime_grid[channel_i, time_i] = compute_d_prime(y_true=y, y_pred=model.predict(x_train))
             r_square_grid[channel_i, time_i] = model.score(x_train, y)
 
     xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
@@ -39,7 +45,17 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     plt.xticks(xticks_locations, xtick_labels)
     plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
     plt.imshow(r_square_grid, aspect='auto', cmap='Blues')
-    plt.title("EEG Statistical difference (r²) between target and distractor, " + title)
+    plt.title("EEG coefficient of determination (r²) between target and distractor, " + title)
+    plt.colorbar()
+    plt.tight_layout()
+    plt.show()
+
+    xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
+    xticks_locations = (eeg_epoch_ticks - tmin) * exg_resample_srate
+    plt.xticks(xticks_locations, xtick_labels)
+    plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
+    plt.imshow(d_prime_grid, aspect='auto', cmap='Blues')
+    plt.title("EEG discriminability index (d`) between target and distractor, " + title)
     plt.colorbar()
     plt.tight_layout()
     plt.show()
@@ -143,3 +159,7 @@ def get_rdf(is_loading_saved_analysis = False):
     end_time = time.time()
     print("Getting RDF Took {0} seconds".format(end_time - start_time))
     return rdf
+
+def compute_d_prime(y_true, y_pred):
+    Z = norm.ppf
+    return math.sqrt(2) * Z(roc_auc_score(y_true, y_pred))

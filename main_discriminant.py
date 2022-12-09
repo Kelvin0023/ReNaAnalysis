@@ -2,9 +2,10 @@ import os
 import pickle
 import time
 
+import torch
 
 from RenaAnalysis import get_rdf, r_square_test
-from eye.eyetracking import Fixation
+from eye.eyetracking import Fixation, GazeRayIntersect
 from params import *
 import matplotlib.pyplot as plt
 import numpy as np
@@ -49,28 +50,32 @@ Event markers are encoded in integers, this list shows what event does each numb
 """
 
 
+torch.manual_seed(random_seed)
+np.random.seed(random_seed)
 
 # end of setup parameters, start of the main block ######################################################
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf()
-pickle.dump(rdf, open('rdf.p', 'wb'))
+# rdf = get_rdf()
+rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# rdf = pickle.dump(os.path.join(export_data_root, 'rdf.p'),, open('rdf.p', 'wb'))
+print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # discriminant test  ####################################################################################################
 event_names = ["Distractor", "Target"]
-event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
 
 # statistical difference test  #####################################################
 # event_names = ["Distractor", "Target"]
-# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-# r_square_test(rdf, event_names, event_filters, title="Constrained Conditions")
+event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+r_square_test(rdf, event_names, event_filters, title="Constrained condtions (RSVP & Carousel), locked to target onset")
 #
-event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
-                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
-r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to detected fixation (Patch-Sim)")
+# event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+# r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to detected fixation (Patch-Sim)")
 #
 # event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"]]
@@ -81,3 +86,6 @@ r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locke
 # r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to detected fixation (I-VT)")
 
 
+# event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
+#                      lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
+# r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to FLGI", participant='1', session=2)

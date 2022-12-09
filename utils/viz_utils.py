@@ -86,12 +86,12 @@ def visualize_gazeray(events, block_id=None):
     plt.show()
 
 
-def visualize_block_gaze_event(rdf, participant, session, block_id=None, only_long_gaze=False, generate_video=True):
+def visualize_block_gaze_event(rdf, participant, session, block_id=None, only_long_gaze=False, generate_video=True, video_fix_alg='I-VT'):
     events = rdf.get_event(participant, session)
     generate_video = rdf.participant_session_videos[participant, session] if generate_video else None
-    visualize_gaze_events(events, block_id, only_long_gaze=only_long_gaze, generate_video=generate_video)
+    visualize_gaze_events(events, block_id, only_long_gaze=only_long_gaze, generate_video=generate_video, video_fix_alg=video_fix_alg)
 
-def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=None):
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=None, video_fix_alg='I-VT'):
     f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -127,7 +127,7 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
 
     if generate_video is not None and block_id is not None:
         generate_block_video(image_folder=generate_video, block_id=block_id, block_start_time=block_start_timestamp,
-                             block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects, fix_ivt=fix_ivt, fix_ivt_head=fix_ivt_head, fix_patch_sim=fix_patch_sim)
+                             block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects, fix_ivt=fix_ivt, fix_ivt_head=fix_ivt_head, fix_patch_sim=fix_patch_sim, video_fix_alg=video_fix_alg)
 
 
 def add_bounding_box(a, x, y, width, height, color):
@@ -155,9 +155,9 @@ def draw_fixations(ax, events, event_filter, fix_y, include_item_index=True):
             ax.text((f_onset_ts + f_offset_ts) / 2, fix_y, f'{f_item_index}')
     return filtered_events
 
-def generate_block_video(image_folder, block_id, block_start_time, block_end_time, gaze_ray_intersects, fix_ivt, fix_ivt_head, fix_patch_sim, is_add_patch_sim=False, is_flipping_y=False):
+def generate_block_video(image_folder, block_id, block_start_time, block_end_time, gaze_ray_intersects, fix_ivt, fix_ivt_head, fix_patch_sim, video_fix_alg, is_add_patch_sim=False, is_flipping_y=False):
     gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
-    video_name = f'BlockVideo_{block_id}.mp4'
+    video_name = f'BlockVideo_{block_id}-FixationAlgorithm_{video_fix_alg}.mp4'
 
     #defining parameters ##############################
 
@@ -181,12 +181,15 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
     center_intersect_size = 10
 
     cmap = matplotlib.cm.get_cmap('cool')
-    ivt_size = 20
-    ivt_color = 255 * np.array(cmap(1/3))
-    ivt_head_size = 25
-    ivt_head_color = 255 * np.array(cmap(2/3))
-    patch_sim_size = 30
-    patch_sim_color = 255 * np.array(cmap(1))
+    fix_circle_size = 20
+    fix_color = 255 * np.array(cmap(1/3))
+    # ivt_size = 20
+    # ivt_color = 255 * np.array(cmap(1/3))
+    # ivt_head_size = 25
+    # ivt_head_color = 255 * np.array(cmap(2/3))
+    # patch_sim_size = 30
+    # patch_sim_color = 255 * np.array(cmap(1))
+    fix_dict = {'I-VT': fix_ivt, 'I-VT-Head': fix_ivt_head, 'Patch-Sim': fix_patch_sim}
 
     cmap = matplotlib.cm.get_cmap('summer')
     fovea_color = 255 * np.array(cmap(1/3))
@@ -250,14 +253,12 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
         else:
             raise Exception("There can only be at most one gaze ray intersect at a eyetracking frame")
         cv2.circle(img_modified, center, center_radius, center_color, center_thickness)
-        if intersect_index is not None: img_modified = cv2.putText(img_modified, f'{intersect_index}',
+        if intersect_index is not None: img_modified = cv2.putText(img_modified, f'ItemIdx:{intersect_index}',
                                                                    center + np.array([15, 30]),
                                                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, center_color, 1,
                                                                    cv2.LINE_AA)
-
-        img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_ivt, ivt_color, ivt_size)
-        img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_ivt_head, ivt_head_color, ivt_head_size)
-        img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_patch_sim, patch_sim_color, patch_sim_size)
+        if video_fix_alg is not None:
+            img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_dict[video_fix_alg], fix_color, fix_circle_size, video_fix_alg)
 
         img_patch_x_min = int(np.min([np.max([0, gaze_x - patch_size[0] / 2]), image_size[0] - patch_size[0]]))
         img_patch_x_max = int(np.max([np.min([image_size[0], gaze_x + patch_size[0] / 2]), patch_size[0]]))
@@ -322,10 +323,14 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
     plt.xlabel("Time (seconds)")
     plt.show()
 
-def add_fix_detection_circle(img_modified, center, timestamp, fix_events, marker_color, marker_radius):
+def add_fix_detection_circle(img_modified, center, timestamp, fix_events, marker_color, marker_radius, alg):
     fix_this_frame = get_overlapping_events_single_target(timestamp, fix_events)
     if len(fix_this_frame) == 1:
         img_modified = cv2.circle(img_modified, center, marker_radius, marker_color, 2)
+        img_modified = cv2.putText(img_modified, f'Fix:{alg}',
+                                   center + np.array([15, -30]),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, marker_color, 1,
+                                   cv2.LINE_AA)
     elif len(fix_this_frame) == 0:
         pass
     else:
