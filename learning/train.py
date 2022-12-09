@@ -16,10 +16,52 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
-from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight, random_seed
+from learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
+from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
+    export_data_root
 
 
-def train_model(x, y, model, test_name="CNN"):
+def eval_lockings(rdf, event_names, locking_name_filters, participant, session, model, regenerate_epochs=True):
+    # verify number of event types
+    assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
+    locking_performance = {}
+    for locking_name, locking_filter in locking_name_filters.items():
+        test_name = f'L {locking_name}, P {participant}, S {session}, Visaul Search'
+        if regenerate_epochs:
+            if model == 'EEGPupil':
+                x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=True, participant='1', session=2)
+                pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'wb'))
+                pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'wb'))
+            else:
+                x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='eeg', rebalance=True,
+                                                     participant=participant, session=session)
+                pickle.dump(x, open(os.path.join(export_data_root,f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
+                pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
+        else:
+            try:
+                if model == 'EEGPupil':
+                    x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'rb'))
+                    y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'rb'))
+                else:
+                    x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+                    y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+            except FileNotFoundError:
+                raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model == 'EEGPupil' else "")
+        if model == 'EEGPupil':
+            model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2)
+            model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
+        else:
+            if model == 'EEGCNN':
+                model = EEGCNN(in_shape=x.shape, num_classes=2)
+            elif model == 'EEGInception':
+                model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
+            model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=test_name, verbose=0)
+        best_train_acc, best_val_acc, best_train_loss, best_val_loss = np.max(training_histories['acc_train']), np.max(training_histories['acc_val']), np.max(training_histories['loss_val']), np.max(training_histories['loss_val'])
+        print(f'{test_name}: best val accuracy: {best_val_acc}, best train accuracy: {best_train_acc}, best val loss: {best_val_loss}, best train loss: {best_train_loss}')
+        locking_performance[locking_name] = {'best val acc': best_val_acc, 'best train acc': best_train_acc, 'best val loss': best_val_loss, 'best trian loss': best_train_loss}
+    return locking_performance
+
+def train_model(x, y, model, test_name="CNN", verbose=1):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -42,8 +84,9 @@ def train_model(x, y, model, test_name="CNN"):
     val_dataset = TensorDataset(x_test, y_test)  # create your datset
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
-    print("Model Summary: ")
-    summary(model, input_size=x_train.shape[1:])
+    if verbose >= 1:
+        print("Model Summary: ")
+        summary(model, input_size=x_train.shape[1:])
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -61,16 +104,17 @@ def train_model(x, y, model, test_name="CNN"):
         mini_batch_i = 0
         batch_losses = []
         num_correct_preds = 0
-        pbar = tqdm(total=math.ceil(len(train_dataloader.dataset) / train_dataloader.batch_size),
-                    desc='Training {}'.format(test_name))
-        pbar.update(mini_batch_i)
+        if verbose >= 1:
+            pbar = tqdm(total=math.ceil(len(train_dataloader.dataset) / train_dataloader.batch_size),
+                        desc='Training {}'.format(test_name))
+            pbar.update(mini_batch_i)
 
         model.train()  # set the model in training model (dropout and batchnormal behaves differently in train vs. eval)
         for x, y in train_dataloader:
             optimizer.zero_grad()
 
             mini_batch_i += 1
-            pbar.update(1)
+            if verbose >= 1: pbar.update(1)
 
             y_pred = model(x.to(device))
             y_pred = F.softmax(y_pred, dim=1)
@@ -87,70 +131,70 @@ def train_model(x, y, model, test_name="CNN"):
             # measure accuracy
             num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
 
-            pbar.set_description('Training [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+            if verbose >= 1: pbar.set_description('Training [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
             batch_losses.append(loss.item())
         train_losses.append(np.mean(batch_losses))
         train_accs.append(num_correct_preds / train_size)
-        pbar.close()
+        if verbose >= 1: pbar.close()
         scheduler.step()
 
         model.eval()
         with torch.no_grad():
-            pbar = tqdm(total=math.ceil(len(val_dataloader.dataset) / val_dataloader.batch_size),
+            if verbose >= 1:
+                pbar = tqdm(total=math.ceil(len(val_dataloader.dataset) / val_dataloader.batch_size),
                         desc='Validating {}'.format(test_name))
-            pbar.update(mini_batch_i := 0)
+                pbar.update(mini_batch_i := 0)
             batch_losses = []
             num_correct_preds = 0
 
             for x, y in val_dataloader:
                 mini_batch_i += 1
-                pbar.update(1)
+                if verbose >= 1: pbar.update(1)
                 y_pred = model(x.to(device))
                 y_pred = F.softmax(y_pred, dim=1)
                 # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                 y_tensor = y.to(device)
                 loss = criterion(y_tensor, y_pred)
-                pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+                if verbose >= 1: pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
                 batch_losses.append(loss.item())
                 num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
 
             val_losses.append(np.mean(batch_losses))
             val_accs.append(num_correct_preds / val_size)
-            pbar.close()
-        print(
-            "Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = {:.8f}, val loss={:.8f}".format(epoch,
-                                                                                                                  train_accs[
-                                                                                                                      -1],
-                                                                                                                  train_losses[
-                                                                                                                      -1],
-                                                                                                                  val_accs[
-                                                                                                                      -1],
-                                                                                                                  val_losses[
-                                                                                                                      -1]))
+            if verbose >= 1: pbar.close()
+        if verbose >= 1:
+            print(
+            "Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = "
+            "{:.8f}, val loss={:.8f}".format(epoch, train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1]))
         # Save training histories after every epoch
         training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
                               'acc_val': val_accs}
         pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
         if val_losses[-1] < best_loss:
             torch.save(model.state_dict(), os.path.join(model_save_dir, test_name))
-            print(
-                'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
-                                                                                        model_save_dir))
+            if verbose >= 1:
+                print(
+                    'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
+                                                                                            model_save_dir))
             best_loss = val_losses[-1]
             patience_counter = 0
         else:
             patience_counter += 1
             if patience_counter > patience:
-                print(f'Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                if verbose >= 1:
+                    print(f'Terminated terminated by patience, validation loss has not improved in {patience} epochs')
                 break
+
     plt.plot(training_histories['acc_train'])
     plt.plot(training_histories['acc_val'])
     plt.title(f"Accuracy, {test_name}")
+    plt.tight_layout()
     plt.show()
 
     plt.plot(training_histories['loss_train'])
     plt.plot(training_histories['loss_val'])
     plt.title(f"Loss, {test_name}")
+    plt.tight_layout()
     plt.show()
 
     return model, training_histories, criterion, label_encoder
@@ -265,7 +309,7 @@ def sanity_check_pupil(x, y):
     plt.show()
 
 
-def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil"):
+def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil", verbose=1):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -301,7 +345,7 @@ def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil"):
     val_dataset_pupil = TensorDataset(x_pupil_test, y_test)
     val_dataloader_pupil = DataLoader(val_dataset_pupil, batch_size=batch_size)
 
-    print("Model Summary: ")
+    # print("Model Summary: ")
     # summary(model, input_size=x_train.shape[1:])
 
     criterion = nn.CrossEntropyLoss()
@@ -320,16 +364,17 @@ def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil"):
         mini_batch_i = 0
         batch_losses = []
         num_correct_preds = 0
-        pbar = tqdm(total=math.ceil(len(train_dataloader_eeg.dataset) / train_dataloader_eeg.batch_size),
-                    desc='Training {}'.format(test_name))
-        pbar.update(mini_batch_i)
+        if verbose >= 1:
+            pbar = tqdm(total=math.ceil(len(train_dataloader_eeg.dataset) / train_dataloader_eeg.batch_size),
+                        desc='Training {}'.format(test_name))
+            pbar.update(mini_batch_i)
 
         model.train()  # set the model in training model (dropout and batchnormal behaves differently in train vs. eval)
         for (x_eeg, y), (x_pupil, y) in zip(train_dataloader_eeg, train_dataloader_pupil):
             optimizer.zero_grad()
 
             mini_batch_i += 1
-            pbar.update(1)
+            if verbose >= 1:pbar.update(1)
 
             y_pred = model([x_eeg.to(device), x_pupil.to(device)])
             y_pred = F.softmax(y_pred, dim=1)
@@ -346,61 +391,58 @@ def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil"):
             # measure accuracy
             num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
 
-            pbar.set_description('Training [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+            if verbose >= 1: pbar.set_description('Training [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
             batch_losses.append(loss.item())
         train_losses.append(np.mean(batch_losses))
         train_accs.append(num_correct_preds / train_size)
-        pbar.close()
+        if verbose >= 1: pbar.close()
         scheduler.step()
 
         model.eval()
         with torch.no_grad():
-            pbar = tqdm(total=math.ceil(len(val_dataloader_eeg.dataset) / val_dataloader_eeg.batch_size),
-                        desc='Validating {}'.format(test_name))
-            pbar.update(mini_batch_i := 0)
+            if verbose >= 1:
+                pbar = tqdm(total=math.ceil(len(val_dataloader_eeg.dataset) / val_dataloader_eeg.batch_size),
+                            desc='Validating {}'.format(test_name))
+                pbar.update(mini_batch_i := 0)
             batch_losses = []
             num_correct_preds = 0
 
             for (x_eeg, y), (x_pupil, y) in zip(val_dataloader_eeg, val_dataloader_pupil):
                 mini_batch_i += 1
-                pbar.update(1)
+                if verbose >= 1: pbar.update(1)
                 y_pred = model([x_eeg.to(device), x_pupil.to(device)])
                 y_pred = F.softmax(y_pred, dim=1)
                 # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                 y_tensor = y.to(device)
                 loss = criterion(y_tensor, y_pred)
-                pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+                if verbose >= 1:pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
                 batch_losses.append(loss.item())
                 num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
 
             val_losses.append(np.mean(batch_losses))
             val_accs.append(num_correct_preds / val_size)
-            pbar.close()
-        print(
-            "Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = {:.8f}, val loss={:.8f}".format(epoch,
-                                                                                                                  train_accs[
-                                                                                                                      -1],
-                                                                                                                  train_losses[
-                                                                                                                      -1],
-                                                                                                                  val_accs[
-                                                                                                                      -1],
-                                                                                                                  val_losses[
-                                                                                                                      -1]))
+            if verbose >= 1:pbar.close()
+        if verbose >= 1:
+            print(
+            "Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = "
+            "{:.8f}, val loss={:.8f}".format(epoch, train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1]))
         # Save training histories after every epoch
         training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
                               'acc_val': val_accs}
         pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
         if val_losses[-1] < best_loss:
             torch.save(model.state_dict(), os.path.join(model_save_dir, test_name))
-            print(
-                'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
-                                                                                        model_save_dir))
+            if verbose >= 1:
+                print(
+                    'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
+                                                                                            model_save_dir))
             best_loss = val_losses[-1]
             patience_counter = 0
         else:
             patience_counter += 1
             if patience_counter > patience:
-                print(f'Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                if verbose >= 1:
+                    print(f'Terminated terminated by patience, validation loss has not improved in {patience} epochs')
                 break
     plt.plot(training_histories['acc_train'])
     plt.plot(training_histories['acc_val'])

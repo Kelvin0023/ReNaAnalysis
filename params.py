@@ -11,6 +11,7 @@ from utils.Bidict import Bidict
 # base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
+export_data_root = 'C:/Data'
 # data_directory = "Subjects-Test"
 # data_directory = "Subjects-Test-IncompleteBlock"
 
@@ -27,7 +28,7 @@ data_directory = "Subjects"
 #               'FixationDistractor': 'blue', 'FixationTarget': 'red', 'FixationNovelty': 'orange', 'FixationNull': 'grey',
 #               'Saccade2Distractor': 'blue', 'Saccade2Target': 'red', 'Saccade2Novelty': 'orange', 'Saccade2Null': 'yellow'}
 
-dtn_color_dict = {1: 'blue', 2: 'red', 3: 'orange', 4: 'grey'}
+dtn_color_dict = {None: 'grey', 1: 'blue', 2: 'red', 3: 'orange', 4: 'grey'}
 
 event_viz = 'GazeRayIntersect'
 

@@ -36,8 +36,9 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
-# rdf = pickle.load(open('rdf.p', 'rb'))
+rdf = pickle.load(open('rdf.p', 'rb'))
 # rdf = pickle.dump(rdf, open('rdf.p', 'wb'))
+print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # discriminant test  ####################################################################################################
 
@@ -45,16 +46,18 @@ start_time = time.time()  # record the start time of the analysis
 
 # colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 #
-# event_names = ["Distractor", "Target"]
+event_names = ["Distractor", "Target"]
+event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
 # event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-# x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=2)
-#
-# pickle.dump(x, open('x_eeg_pupil_p1_s2.p', 'wb'))
-# pickle.dump(y, open('y_eeg_pupil_p1_s2.p', 'wb'))
+x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=2)
 
-x = pickle.load(open('x_eeg_pupil_p1_s2.p', 'rb'))
-y = pickle.load(open('y_eeg_pupil_p1_s2.p', 'rb'))
+pickle.dump(x, open('x_eeg_pupil_p1_s2.p', 'wb'))
+pickle.dump(y, open('y_eeg_pupil_p1_s2.p', 'wb'))
+
+# x = pickle.load(open('x_eeg_pupil_p1_s2.p', 'rb'))
+# y = pickle.load(open('y_eeg_pupil_p1_s2.p', 'rb'))
 
 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2)
 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model)

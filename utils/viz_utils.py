@@ -182,16 +182,16 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
 
     cmap = matplotlib.cm.get_cmap('cool')
     ivt_size = 20
-    ivt_color = cmap(1/3)
+    ivt_color = 255 * np.array(cmap(1/3))
     ivt_head_size = 25
-    ivt_head_color = cmap(2/3)
+    ivt_head_color = 255 * np.array(cmap(2/3))
     patch_sim_size = 30
-    patch_sim_color = cmap(1)
+    patch_sim_color = 255 * np.array(cmap(1))
 
     cmap = matplotlib.cm.get_cmap('summer')
-    fovea_color = cmap(1/3)
-    parafovea_color = cmap(2/3)
-    peripheri_color = cmap(1)
+    fovea_color = 255 * np.array(cmap(1/3))
+    parafovea_color = 255 * np.array(cmap(2/3))
+    peripheri_color = 255 * np.array(cmap(1))
 
     y_axis = 0
 
@@ -252,7 +252,7 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
         cv2.circle(img_modified, center, center_radius, center_color, center_thickness)
         if intersect_index is not None: img_modified = cv2.putText(img_modified, f'{intersect_index}',
                                                                    center + np.array([15, 30]),
-                                                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, center_color, 2,
+                                                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, center_color, 1,
                                                                    cv2.LINE_AA)
 
         img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_ivt, ivt_color, ivt_size)
@@ -278,11 +278,11 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
         previous_img_patch = img_patch
 
         axis = (int(central_fov * ppds[0]), int(central_fov * ppds[1]))
-        cv2.ellipse(img_modified, center, axis, 0, 0, 360, fovea_color, thickness=4)
+        cv2.ellipse(img_modified, center, axis, 0, 0, 360, fovea_color, thickness=3)
         axis = (int(near_peripheral_fov * ppds[0]), int(near_peripheral_fov * ppds[1]))
-        cv2.ellipse(img_modified, center, axis, 0, 0, 360, parafovea_color, thickness=4)
+        cv2.ellipse(img_modified, center, axis, 0, 0, 360, parafovea_color, thickness=3)
         axis = (int(1.25 * mid_perpheral_fov * ppds[0]), int(mid_perpheral_fov * ppds[1]))
-        cv2.ellipse(img_modified, center, axis, 0, 0, 360, peripheri_color, thickness=4)
+        cv2.ellipse(img_modified, center, axis, 0, 0, 360, peripheri_color, thickness=3)
 
         images_with_bb.append(img_modified)
         if i + 1 == video_frame_count:
