@@ -182,7 +182,7 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
 
     cmap = matplotlib.cm.get_cmap('cool')
     fix_circle_size = 20
-    fix_color = 255 * np.array(cmap(1/3))
+    fix_color = 255 * np.array(cmap(1))
     # ivt_size = 20
     # ivt_color = 255 * np.array(cmap(1/3))
     # ivt_head_size = 25
@@ -253,12 +253,6 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
         else:
             raise Exception("There can only be at most one gaze ray intersect at a eyetracking frame")
         cv2.circle(img_modified, center, center_radius, center_color, center_thickness)
-        if intersect_index is not None: img_modified = cv2.putText(img_modified, f'ItemIdx:{intersect_index}',
-                                                                   center + np.array([15, 30]),
-                                                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, center_color, 1,
-                                                                   cv2.LINE_AA)
-        if video_fix_alg is not None:
-            img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_dict[video_fix_alg], fix_color, fix_circle_size, video_fix_alg)
 
         img_patch_x_min = int(np.min([np.max([0, gaze_x - patch_size[0] / 2]), image_size[0] - patch_size[0]]))
         img_patch_x_max = int(np.max([np.min([image_size[0], gaze_x + patch_size[0] / 2]), patch_size[0]]))
@@ -284,6 +278,14 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
         cv2.ellipse(img_modified, center, axis, 0, 0, 360, parafovea_color, thickness=3)
         axis = (int(1.25 * mid_perpheral_fov * ppds[0]), int(mid_perpheral_fov * ppds[1]))
         cv2.ellipse(img_modified, center, axis, 0, 0, 360, peripheri_color, thickness=3)
+
+        if intersect_index is not None: img_modified = cv2.putText(img_modified, f'GR:ItemIdx:{intersect_index}',
+                                                                   center + np.array([15, 30]),
+                                                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, center_color, 1,
+                                                                   cv2.LINE_AA)
+        if video_fix_alg is not None:
+            img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_dict[video_fix_alg], fix_color, fix_circle_size, video_fix_alg)
+
 
         images_with_bb.append(img_modified)
         if i + 1 == video_frame_count:
