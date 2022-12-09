@@ -54,7 +54,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     xticks_locations = (eeg_epoch_ticks - tmin) * exg_resample_srate
     plt.xticks(xticks_locations, xtick_labels)
     plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
-    plt.imshow(d_prime_grid, aspect='auto', cmap='Blues')
+    plt.imshow(d_prime_grid, aspect='auto', cmap='coolwarm', vmin=-0.5, vmax=0.5)
     plt.title("EEG discriminability index (d`) between target and distractor, " + title)
     plt.colorbar()
     plt.tight_layout()

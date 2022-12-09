@@ -331,7 +331,7 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
     raw = mne.io.RawArray(data_.transpose(), info)
     raw = raw.resample(eyetracking_resample_srate, n_jobs=20)
 
-    found_events = mne.find_events(raw, stim_channel='stim')
+    found_events = mne.find_events(raw, stim_channel='stim', shortest_event=1)
     # pupil epochs
     epochs_pupil = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin_pupil,
                           tmax=tmax_pupil,
