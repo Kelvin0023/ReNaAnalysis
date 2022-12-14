@@ -20,15 +20,17 @@ from utils.utils import get_item_events, visualize_pupil_epochs
 # def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
 #     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
 
+def prepare_sample_label(rdf, event_names, event_filters, picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
+    assert len(event_names) == len(event_filters) == 2
+    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
+    return x, y
 
-def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None, title="", fig_size=(25.6, 14.4)):
+def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None, title="", fig_size=(25.6, 14.4)):
     plt.rcParams["figure.figsize"] = fig_size
     colors = {'Distractor': 'blue', 'Target': 'red'}
     plt.rcParams.update({'font.size': 22})
     assert len(event_names) == len(event_filters) == 2
-    tmin = -0.1
-    tmax = 0.8
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=eeg_picks, tmin_eeg=tmin, tmax_eeg=tmax, participant=participant, session=session)
+    x, y = prepare_sample_label(rdf, event_names, event_filters, eeg_picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg)
     r_square_grid = np.zeros(x.shape[1:])
     d_prime_grid = np.zeros(x.shape[1:])
 
@@ -41,7 +43,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
             r_square_grid[channel_i, time_i] = model.score(x_train, y)
 
     xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
-    xticks_locations = (eeg_epoch_ticks - tmin) * exg_resample_srate
+    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * exg_resample_srate
     plt.xticks(xticks_locations, xtick_labels)
     plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
     plt.imshow(r_square_grid, aspect='auto', cmap='Blues')
@@ -51,7 +53,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, participant=No
     plt.show()
 
     xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
-    xticks_locations = (eeg_epoch_ticks - tmin) * exg_resample_srate
+    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * exg_resample_srate
     plt.xticks(xticks_locations, xtick_labels)
     plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
     plt.imshow(d_prime_grid, aspect='auto', cmap='coolwarm', vmin=-0.5, vmax=0.5)
@@ -163,3 +165,6 @@ def get_rdf(is_loading_saved_analysis = False):
 def compute_d_prime(y_true, y_pred):
     Z = norm.ppf
     return math.sqrt(2) * Z(roc_auc_score(y_true, y_pred))
+
+def HDCA():
+    pass

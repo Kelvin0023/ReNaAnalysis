@@ -267,7 +267,7 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
     if rebalance:
         x, y = rebalance_classes(x, y)
 
-    x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)
+    x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)  # z normalize x
 
     if data_type == 'eeg':
         sanity_check_eeg(x, y, picks)
