@@ -25,7 +25,7 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
-rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 # discriminant test  ####################################################################################################
@@ -36,17 +36,17 @@ plt.rcParams.update({'font.size': 22})
 event_names = ["Distractor", "Target"]
 # event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
 #
-x, y = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
+# x, y = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
 # pickle.dump(x, open('x_p1_s2_flg.p', 'wb'))
 # pickle.dump(y, open('y_p1_s2_flg.p', 'wb'))
-pickle.dump(x, open('x_constrained.p', 'wb'))
-pickle.dump(y, open('x_constrained.p', 'wb'))
+# pickle.dump(x, open('x_constrained.p', 'wb'))
+# pickle.dump(y, open('y_constrained.p', 'wb'))
 
-# x = pickle.load(open('x_constrained.p', 'rb'))
-# y = pickle.load(open('y_constrained.p', 'rb'))
+x = pickle.load(open('x_constrained.p', 'rb'))
+y = pickle.load(open('y_constrained.p', 'rb'))
 
 split_window=100e-3
 
@@ -61,28 +61,27 @@ x_test_windowed = sliding_window_view(x_test, window_shape=split_size, axis=2)[:
 num_trials, num_channels, num_windows, num_timepoints_per_window = x_train_windowed.shape
 # compute Fisher's LD for each temporal window
 print("Computing windowed LDA per channel, and project per window and trial")
-weights_channel_window_time = np.empty(x_train_windowed.shape[1:3] + (split_size,))
-windowProjection_channel_window_trial = np.empty((num_trials, num_channels, num_windows))
-for i in range(x_train_windowed.shape[1]): # iterate over channels  # TODO this can go faster with multiprocess pool
-    for k in range(num_windows):  # iterate over different windows
-        this_x = x_train_windowed[:, i, k, :]
-        lda = LinearDiscriminantAnalysis(solver='svd')
-        lda.fit(this_x, y_train)
-        _weights = np.squeeze(lda.coef_, axis=0)
+# weights_channel_window_time = np.empty(x_train_windowed.shape[1:3] + (split_size,))
+windowProjection_window_trial = np.empty((num_trials, num_windows))
+ # TODO this can go faster with multiprocess pool
+for k in range(num_windows):  # iterate over different windows
+    this_x = x_train_windowed[:, :, k, :].reshape((num_trials, -1))
+    lda = LinearDiscriminantAnalysis(solver='svd')
+    lda.fit(this_x, y_train)
+    _weights = np.squeeze(lda.coef_, axis=0)
 
-        for j in range(num_trials):
-            windowProjection_channel_window_trial[j, i, k] = np.dot(_weights, this_x[j])
-
+    for j in range(num_trials):
+        windowProjection_window_trial[j, k] = np.dot(_weights, this_x[j])
+print('Computing forward model from window projections')
 activation = np.empty((2, num_channels, num_windows, num_timepoints_per_window))
 for class_index in range(2):
     this_x = x_train_windowed[y_train == class_index]
-    this_projection = windowProjection_channel_window_trial[y_train == class_index]
-    for i in range(num_channels):
-        for j in range(num_windows):
-            z0 = this_x[:, i, j, :].T
-            z1 = this_projection[:, i, j].reshape((-1, 1))
-            a = np.matmul(z0, z1) / np.matmul(z1.T, z1).item()
-            activation[class_index, i, j] = np.squeeze(np.matmul(z0, z1) / np.matmul(z1.T, z1).item(), axis=1)
+    this_projection = windowProjection_window_trial[y_train == class_index]
+    for j in range(num_windows):
+        z0 = this_x[:, :, j, :].reshape(this_x.shape[0], -1).T
+        z1 = this_projection[:, j].reshape((-1, 1))
+        a = (np.matmul(z0, z1) / np.matmul(z1.T, z1).item()).reshape((num_channels, num_timepoints_per_window))
+        activation[class_index, :, j] = a
 
 info = mne.create_info(
     eeg_channel_names,
