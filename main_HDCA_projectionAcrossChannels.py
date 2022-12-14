@@ -146,7 +146,8 @@ criterion = torch.nn.BCELoss()
 for epoch in range(epochs):
     optimizer.zero_grad()
     y_pred = torch.sigmoid(model(_projectionTrain_window_trial))
-    loss = criterion(y_pred, _y_train)
+    l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+    loss = criterion(y_pred, _y_train) + l2_penalty
     loss.backward()
     optimizer.step()
     print(f"epoch {epoch}, loss is {loss.item()}")

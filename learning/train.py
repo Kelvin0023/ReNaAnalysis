@@ -383,7 +383,7 @@ def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil", verbose=1):
 
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
 
-            loss = criterion(y_tensor, y_pred) + l2_penalty
+            # loss = criterion(y_tensor, y_pred) + l2_penalty
             loss = criterion(y_tensor, y_pred)
             loss.backward()
             optimizer.step()
