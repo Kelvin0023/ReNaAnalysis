@@ -29,11 +29,11 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
         test_name = f'L {locking_name}, P {participant}, S {session}, Visaul Search'
         if regenerate_epochs:
             if model == 'EEGPupil':
-                x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=True, participant='1', session=2)
+                x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=True, participant='1', session=2)
                 pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'wb'))
                 pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'wb'))
             else:
-                x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='eeg', rebalance=True,
+                x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='eeg', rebalance=True,
                                                      participant=participant, session=session)
                 pickle.dump(x, open(os.path.join(export_data_root,f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
                 pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
@@ -223,11 +223,13 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
     @param: data_type: can be eeg, pupil or mixed
     """
     if data_type == 'both':
-        epochs_eeg, event_ids, ar_log = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg,
+        epochs_eeg, event_ids, ar_log, ps_group = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg,
                                                            participant=participant, session=session)
-        epochs_pupil, event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant=participant,
+        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, participant=participant,
                                                        session=session)
         epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
+        ps_group_pupil = ps_group_pupil[np.logical_not(ar_log.bad_epochs)]
+        assert np.all(ps_group_pupil == ps_group)
         y = []
         x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
         x_pupil = [epochs_pupil[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
@@ -238,19 +240,19 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
             y += [event_class] * len(epochs_pupil[event_name].get_data())
         if np.min(y) == 1:
             y = np.array(y) - 1
-        if rebalance:
-            x_eeg, y_eeg = rebalance_classes(x_eeg, y)
-            x_pupil, y_pupil = rebalance_classes(x_pupil, y)
-            assert np.all(y_eeg == y_pupil)
-            y = y_eeg
+        # if rebalance:
+        #     x_eeg, y_eeg = rebalance_classes(x_eeg, y)
+        #     x_pupil, y_pupil = rebalance_classes(x_pupil, y)
+        #     assert np.all(y_eeg == y_pupil)
+        #     y = y_eeg
         sanity_check_eeg(x_eeg, y, picks)
         sanity_check_pupil(x_pupil, y)
         return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
 
     if data_type == 'eeg':
-        epochs, event_ids, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
+        epochs, event_ids, _, ps_group = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
     elif data_type == 'pupil':
-        epochs, event_ids = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session)
+        epochs, event_ids, ps_group = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session)
     else:
         raise NotImplementedError(f'data type {data_type} is not implemented')
 
@@ -274,7 +276,7 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
     elif data_type == 'pupil':
         sanity_check_pupil(x, y)
 
-    return x, y, epochs, event_ids
+    return x, y, epochs, event_ids, ps_group
 
 def rebalance_classes(x, y):
     epoch_shape = x.shape[1:]

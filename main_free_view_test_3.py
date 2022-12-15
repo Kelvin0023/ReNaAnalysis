@@ -62,7 +62,7 @@ else:
 # viz_pupil_epochs(rdf, event_names, event_filters, colors, title='Grid visual search, locked to long fixations', participant='1', session=2)
 # r_square_test(rdf, event_names, event_filters, title='Grid visual search, locked to long fixations', participant='1', session=2)
 
-x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
+x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
 
 pickle.dump(x, open('x_p1_s2.p', 'wb'))
 pickle.dump(y, open('y_p1_s2.p', 'wb'))

@@ -90,7 +90,9 @@ class RenaDataFrame:
         ps_dict = self.get_data_events(participant, session)
         pupil_epochs = None  # clear epochs
         event_ids = None
-        for (p, s), (data, events) in ps_dict.items():
+        ps_group = []
+
+        for (i, (p, s), (data, events)) in enumerate(ps_dict.items()):
             print('Getting pupil epochs for participant {} session {}'.format(p, s))
             eye_data = data[varjoEyetracking_preset["StreamName"]][0]
             pupil_left_data = eye_data[varjoEyetracking_preset["ChannelNames"].index('left_pupil_size'), :]
@@ -105,15 +107,17 @@ class RenaDataFrame:
             else:
                 print(f'Found {len(epochs_pupil)} pupil epochs for participant {p} session {s}')
             pupil_epochs = epochs_pupil if pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs])
-        return pupil_epochs, event_ids
+            ps_group += [i] * len(pupil_epochs)
+
+        return pupil_epochs, event_ids, ps_group
 
     def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None):
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
         eeg_epochs = None  # clear epochs
         event_ids = None
-
-        for (p, s), (data, events) in ps_dict.items():
+        ps_group = []
+        for (i, (p, s), (data, events)) in enumerate(ps_dict.items()):
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
 
             epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax)
@@ -123,8 +127,9 @@ class RenaDataFrame:
             else:
                 print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
                 eeg_epochs = epochs if eeg_epochs is None else mne.concatenate_epochs([epochs, eeg_epochs])
+            ps_group += [i] * len(eeg_epochs)
         print("Auto rejecting epochs")
         ar = AutoReject(n_jobs=20, verbose=False)
         eeg_epochs_clean, log = ar.fit_transform(eeg_epochs, return_log=True)
-        return eeg_epochs_clean, event_ids, log
+        return eeg_epochs_clean, event_ids, log, ps_group
 

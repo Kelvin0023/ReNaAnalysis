@@ -25,15 +25,15 @@ from utils.utils import get_item_events, visualize_pupil_epochs
 
 def prepare_sample_label(rdf, event_names, event_filters, picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
     assert len(event_names) == len(event_filters) == 2
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
-    return x, y
+    x, y, _, _, group = epochs_to_class_samples(rdf, event_names, event_filters, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
+    return x, y, group
 
 def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None, title="", fig_size=(25.6, 14.4)):
     plt.rcParams["figure.figsize"] = fig_size
     colors = {'Distractor': 'blue', 'Target': 'red'}
     plt.rcParams.update({'font.size': 22})
     assert len(event_names) == len(event_filters) == 2
-    x, y = prepare_sample_label(rdf, event_names, event_filters, eeg_picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg)
+    x, y, _ = prepare_sample_label(rdf, event_names, event_filters, eeg_picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg)
     r_square_grid = np.zeros(x.shape[1:])
     d_prime_grid = np.zeros(x.shape[1:])
 
@@ -241,7 +241,7 @@ def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, n
     #     y_pred = y_pred.detach().cpu().numpy()
     #     cross_window_weights = model.linear.weight.detach().cpu().numpy()[0, :]
 
-    model = LogisticRegression(random_state=random_seed).fit(projection_train, y_train)
+    model = LogisticRegression(random_state=random_seed, max_iter=epochs, fit_intercept=False, penalty='l2', solver='liblinear').fit(projection_train, y_train)
     y_pred = model.predict(projection_test)
     cross_window_weights = np.squeeze(model.coef_, axis=0)
     fpr, tpr, thresholds = metrics.roc_curve(y_test, y_pred)
@@ -252,12 +252,12 @@ def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, n
     # plt.tight_layout()
     # plt.show()
 
-    plt.plot(cross_window_weights)
-    plt.xticks(ticks=list(range(1, num_windows + 1)), labels=[str(x) for x in list(range(1, num_windows + 1))])
-    plt.xlabel("100ms windowed bins")
-    plt.ylabel("Cross-bin weights")
-    plt.tight_layout()
-    plt.show()
+    # plt.plot(cross_window_weights)
+    # plt.xticks(ticks=list(range(1, num_windows + 1)), labels=[str(x) for x in list(range(1, num_windows + 1))])
+    # plt.xlabel("100ms windowed bins")
+    # plt.ylabel("Cross-bin weights")
+    # plt.tight_layout()
+    # plt.show()
     return cross_window_weights, roc_auc, fpr, tpr
 
 def HDCA():

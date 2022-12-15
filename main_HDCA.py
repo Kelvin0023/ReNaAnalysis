@@ -39,7 +39,7 @@ event_names = ["Distractor", "Target"]
 event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
 #
-x, y = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
+x, y, _ = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
 # pickle.dump(x, open('x_p1_s2_flg.p', 'wb'))
 # pickle.dump(y, open('y_p1_s2_flg.p', 'wb'))
 pickle.dump(x, open('x_constrained.p', 'wb'))
