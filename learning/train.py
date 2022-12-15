@@ -217,7 +217,7 @@ def eval_model(model, x, y, criterion, label_encoder):
 
     return loss, accuracy
 
-def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, session=None, rebalance=False, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8):
+def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
@@ -264,8 +264,8 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
     if np.min(y) == 1:
         y = np.array(y) - 1
 
-    if rebalance:
-        x, y = rebalance_classes(x, y)
+    # if rebalance:
+    #     x, y = rebalance_classes(x, y)
 
     x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)  # z normalize x
 

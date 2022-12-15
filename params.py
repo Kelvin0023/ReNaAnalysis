@@ -117,3 +117,4 @@ model_save_dir = 'learning/saved_models'
 l2_weight = 1e-5
 
 random_seed = 42
+

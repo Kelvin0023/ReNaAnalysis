@@ -2,8 +2,11 @@ import os
 import time
 
 import numpy as np
+import torch
 from matplotlib import pyplot as plt
-from sklearn.linear_model import LinearRegression
+from mne.viz import plot_topomap
+from sklearn import metrics
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
 from scipy import stats
 from scipy.stats import norm
@@ -165,6 +168,97 @@ def get_rdf(is_loading_saved_analysis = False):
 def compute_d_prime(y_true, y_pred):
     Z = norm.ppf
     return math.sqrt(2) * Z(roc_auc_score(y_true, y_pred))
+
+def compute_forward(x_windowed, y, weights_channelWindow):
+    num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_windowed.shape
+    activation = np.empty((2, num_channels, num_windows, num_timepoints_per_window))
+    for class_index in range(2):  # for test set
+        this_x = x_windowed[y == class_index]
+        for j in range(num_windows):
+            this_x_window = this_x[:, :, j, :].reshape(this_x.shape[0], -1).T
+            z_window = np.array([np.dot(weights_channelWindow[j], this_x[trial_index, :, j, :].reshape(-1)) for trial_index in range(this_x.shape[0])])
+            z_window = z_window.reshape((-1, 1)) # change to a col vector
+            a = (np.matmul(this_x_window, z_window) / np.matmul(z_window.T, z_window).item()).reshape((num_channels, num_timepoints_per_window))
+            activation[class_index, :, j] = a
+    return activation
+
+def plot_forward(activation, event_names, split_window, num_windows):
+    info = mne.create_info(
+        eeg_channel_names,
+        sfreq=exg_resample_srate,
+        ch_types=['eeg'] * len(eeg_channel_names))
+    info.set_montage(eeg_montage)
+
+    fig = plt.figure(figsize=(22, 10), constrained_layout=True)
+    subfigs = fig.subfigures(2, 1)
+    # fig, axs = plt.subplots(2, num_windows - 1, figsize=(22, 10), sharey=True)  # sharing vmax and vmin
+    for class_index, e_name in enumerate(event_names):
+        axes = subfigs[class_index].subplots(1, num_windows - 1, sharey=True)
+        for i in range(1, num_windows):
+            a = np.mean(activation[class_index, :, i, :], axis=1)
+            plot_topomap(a, info, axes=axes[i - 1], show=False, res=512, vlim=(np.min(activation), np.max(activation)))
+            axes[i - 1].set_title(f"{int((i - 1) * split_window * 1e3)}-{int(i * split_window * 1e3)}ms")
+        subfigs[class_index].suptitle(e_name)
+    fig.suptitle("Activation map from Fisher Discriminant Analysis: Training Set", fontsize='x-large')
+    plt.show()
+
+class linearRegression(torch.nn.Module):
+    def __init__(self, inputSize, outputSize):
+        super(linearRegression, self).__init__()
+        self.linear = torch.nn.Linear(inputSize, outputSize)
+    def forward(self, x):
+        out = self.linear(x)
+        return out
+
+def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, num_windows):
+    # use_cuda = torch.cuda.is_available()
+    # device = torch.device("cuda:0" if use_cuda else "cpu")
+    # _y_train = torch.Tensor(np.expand_dims(y_train, axis=1)).to(device)
+    # _y_test = torch.Tensor(np.expand_dims(y_test, axis=1)).to(device)
+    # _projectionTrain_window_trial = torch.Tensor(projection_train).to(device)
+    # _projectionTest_window_trial = torch.Tensor(projection_test).to(device)
+    # model = linearRegression(num_windows, 1).to(device)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+    # criterion = torch.nn.BCELoss()
+    # for epoch in range(epochs):
+    #     model.train()
+    #     optimizer.zero_grad()
+    #     y_pred = torch.sigmoid(model(_projectionTrain_window_trial))
+    #     l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+    #     loss = criterion(y_pred, _y_train) + l2_penalty
+    #     loss.backward()
+    #     optimizer.step()
+    #
+    #     model.eval()
+    #     with torch.no_grad():
+    #         y_pred = torch.sigmoid(model(_projectionTest_window_trial))
+    #         l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+    #         loss_test = criterion(y_pred, _y_test) + l2_penalty
+    #     print(f"epoch {epoch}, train loss is {loss.item()}, test loss is {loss_test.item()}")
+    #
+    # with torch.no_grad():
+    #     y_pred = torch.sigmoid(model(_projectionTest_window_trial))
+    #     y_pred = y_pred.detach().cpu().numpy()
+    #     cross_window_weights = model.linear.weight.detach().cpu().numpy()[0, :]
+
+    model = LogisticRegression(random_state=random_seed).fit(projection_train, y_train)
+    y_pred = model.predict(projection_test)
+    cross_window_weights = np.squeeze(model.coef_, axis=0)
+    fpr, tpr, thresholds = metrics.roc_curve(y_test, y_pred)
+    roc_auc = metrics.auc(fpr, tpr)
+    # display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=roc_auc, estimator_name='example estimator')
+    # fig = plt.figure(figsize=(10, 10), constrained_layout=True)
+    # display.plot(ax=plt.gca())
+    # plt.tight_layout()
+    # plt.show()
+
+    plt.plot(cross_window_weights)
+    plt.xticks(ticks=list(range(1, num_windows + 1)), labels=[str(x) for x in list(range(1, num_windows + 1))])
+    plt.xlabel("100ms windowed bins")
+    plt.ylabel("Cross-bin weights")
+    plt.tight_layout()
+    plt.show()
+    return cross_window_weights, roc_auc, fpr, tpr
 
 def HDCA():
     pass
