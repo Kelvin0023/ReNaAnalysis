@@ -7,7 +7,7 @@ import torch
 from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet, EEGCNN
-from learning.train import epochs_to_class_samples, eval_model, train_model
+from learning.train import epochs_to_class_samples, eval_model, train_model, rebalance_classes
 from params import *
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,7 +37,8 @@ start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
 # pickle.dump(rdf, open('rdf.p', 'wb'))
-# rdf = pickle.load(open('rdf.p', 'rb'))
+# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # discriminant test  ####################################################################################################
 
@@ -45,18 +46,20 @@ plt.rcParams.update({'font.size': 22})
 # colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 #
 # print('Training model on constrained blocks')
-# event_names = ["Distractor", "Target"]
-# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+event_names = ["Distractor", "Target"]
+event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
 # viz_eeg_epochs(rdf, event_names, event_filters, colors)
 #
-# x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
+# x, y, epochs, event_ids, _ = epochs_to_class_samples(rdf, event_names, event_filters, tmax_eeg=0.8, data_type='eeg')
 
-# pickle.dump(x, open('x_constrained.p', 'wb'))
-# pickle.dump(y, open('y_constrained.p', 'wb'))
+# pickle.dump(x, open('x_constrained_tmax800.p', 'wb'))
+# pickle.dump(y, open('y_constrained_tmax800.p', 'wb'))
 
 x = pickle.load(open('x_constrained.p', 'rb'))
 y = pickle.load(open('y_constrained.p', 'rb'))
+
+# x, y = rebalance_classes(x, y)
 model = EEGCNN(in_shape=x.shape, num_classes=2)
 model, training_histories, criterion, label_encoder = train_model(x, y, model)
 

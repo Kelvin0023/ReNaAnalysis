@@ -65,7 +65,7 @@ class EEGInceptionNet(nn.Module):
             # nn.LeakyReLU(),
             # nn.Linear(64, 32),
             # nn.LeakyReLU(),
-            nn.Linear(1026, num_classes)
+            nn.Linear(1368, num_classes)
         )
 
     def forward(self, input):
@@ -107,7 +107,7 @@ class EEGCNN(nn.Module):
         #     cnn_flattened_size = self.conv(torch.rand(in_shape)).shape[1]
 
         self.fcs = nn.Sequential(
-            nn.Linear(176, 128),
+            nn.Linear(224, 128),
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),

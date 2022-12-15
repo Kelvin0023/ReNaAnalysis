@@ -92,7 +92,7 @@ class RenaDataFrame:
         event_ids = None
         ps_group = []
 
-        for (i, (p, s), (data, events)) in enumerate(ps_dict.items()):
+        for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
             print('Getting pupil epochs for participant {} session {}'.format(p, s))
             eye_data = data[varjoEyetracking_preset["StreamName"]][0]
             pupil_left_data = eye_data[varjoEyetracking_preset["ChannelNames"].index('left_pupil_size'), :]
@@ -117,7 +117,7 @@ class RenaDataFrame:
         eeg_epochs = None  # clear epochs
         event_ids = None
         ps_group = []
-        for (i, (p, s), (data, events)) in enumerate(ps_dict.items()):
+        for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
 
             epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax)
@@ -127,9 +127,11 @@ class RenaDataFrame:
             else:
                 print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
                 eeg_epochs = epochs if eeg_epochs is None else mne.concatenate_epochs([epochs, eeg_epochs])
-            ps_group += [i] * len(eeg_epochs)
+            ps_group += [i] * len(epochs)
         print("Auto rejecting epochs")
         ar = AutoReject(n_jobs=20, verbose=False)
         eeg_epochs_clean, log = ar.fit_transform(eeg_epochs, return_log=True)
+        ps_group = np.array(ps_group)[np.logical_not(log.bad_epochs)]
+
         return eeg_epochs_clean, event_ids, log, ps_group
 

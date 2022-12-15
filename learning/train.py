@@ -6,8 +6,8 @@ import numpy as np
 import torch
 from imblearn.over_sampling import SMOTE
 from matplotlib import pyplot as plt
-from sklearn import preprocessing
-from sklearn.model_selection import train_test_split
+from sklearn import preprocessing, metrics
+from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
 from torch import nn
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
@@ -61,143 +61,167 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
         locking_performance[locking_name] = {'best val acc': best_val_acc, 'best train acc': best_train_acc, 'best val loss': best_val_loss, 'best trian loss': best_train_loss}
     return locking_performance
 
-def train_model(x, y, model, test_name="CNN", verbose=1):
-
+def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     model = model.to(device)
     # create the train dataset
     label_encoder = preprocessing.OneHotEncoder()
-    y = label_encoder.fit_transform(np.array(y).reshape(-1, 1)).toarray()
+    label_encoder = label_encoder.fit(np.array(Y).reshape(-1, 1))
+    X = model.prepare_data(X)
 
-    x = model.prepare_data(x)
-    x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=train_ratio, random_state=random_seed)
-    train_size, val_size = len(x_train), len(x_test)
-    x_train = torch.Tensor(x_train)  # transform to torch tensor
-    x_test = torch.Tensor(x_test)
-    y_train = torch.Tensor(y_train)
-    y_test = torch.Tensor(y_test)
-
-    train_dataset = TensorDataset(x_train, y_train)  # create your datset
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
-
-    val_dataset = TensorDataset(x_test, y_test)  # create your datset
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
-
-    if verbose >= 1:
-        print("Model Summary: ")
-        summary(model, input_size=x_train.shape[1:])
-
+    skf = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
+    train_losses_folds = []
+    train_accs_folds = []
+    val_losses_folds = []
+    val_accs_folds = []
+    val_aucs_folds = []
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
-    scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
-    train_losses = []
-    train_accs = []
-    val_losses = []
-    val_accs = []
-    best_loss = np.inf
-    patience_counter = []
+    for f_index, (train, test) in enumerate(skf.split(X, Y)):
+        x_train, x_test, y_train, y_test = X[train], X[test], Y[train], Y[test]
 
-    for epoch in range(epochs):
-        mini_batch_i = 0
-        batch_losses = []
-        num_correct_preds = 0
+        x_train, y_train = rebalance_classes(x_train, y_train)  # rebalance by class
+        y_train = label_encoder.transform(np.array(y_train).reshape(-1, 1)).toarray()
+        y_test = label_encoder.transform(np.array(y_test).reshape(-1, 1)).toarray()
+
+        # x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=train_ratio, random_state=random_seed)
+        train_size, val_size = len(x_train), len(x_test)
+        x_train = torch.Tensor(x_train)  # transform to torch tensor
+        x_test = torch.Tensor(x_test)
+        y_train = torch.Tensor(y_train)
+        y_test = torch.Tensor(y_test)
+
+        train_dataset = TensorDataset(x_train, y_train)  # create your datset
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
+
+        val_dataset = TensorDataset(x_test, y_test)  # create your datset
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+
         if verbose >= 1:
-            pbar = tqdm(total=math.ceil(len(train_dataloader.dataset) / train_dataloader.batch_size),
-                        desc='Training {}'.format(test_name))
-            pbar.update(mini_batch_i)
+            print("Model Summary: ")
+            summary(model, input_size=x_train.shape[1:])
 
-        model.train()  # set the model in training model (dropout and batchnormal behaves differently in train vs. eval)
-        for x, y in train_dataloader:
-            optimizer.zero_grad()
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+        scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
-            mini_batch_i += 1
-            if verbose >= 1: pbar.update(1)
+        train_losses = []
+        train_accs = []
+        val_losses = []
+        val_accs = []
+        val_aucs = []
+        best_loss = np.inf
+        patience_counter = []
 
-            y_pred = model(x.to(device))
-            y_pred = F.softmax(y_pred, dim=1)
-            # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
-            y_tensor = y.to(device)
-
-            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
-
-            loss = criterion(y_tensor, y_pred) + l2_penalty
-            loss = criterion(y_tensor, y_pred)
-            loss.backward()
-            optimizer.step()
-
-            # measure accuracy
-            num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
-
-            if verbose >= 1: pbar.set_description('Training [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
-            batch_losses.append(loss.item())
-        train_losses.append(np.mean(batch_losses))
-        train_accs.append(num_correct_preds / train_size)
-        if verbose >= 1: pbar.close()
-        scheduler.step()
-
-        model.eval()
-        with torch.no_grad():
-            if verbose >= 1:
-                pbar = tqdm(total=math.ceil(len(val_dataloader.dataset) / val_dataloader.batch_size),
-                        desc='Validating {}'.format(test_name))
-                pbar.update(mini_batch_i := 0)
+        for epoch in range(epochs):
+            mini_batch_i = 0
             batch_losses = []
             num_correct_preds = 0
+            if verbose >= 1:
+                pbar = tqdm(total=math.ceil(len(train_dataloader.dataset) / train_dataloader.batch_size),
+                            desc='Training {}'.format(test_name))
+                pbar.update(mini_batch_i)
 
-            for x, y in val_dataloader:
+            model.train()  # set the model in training model (dropout and batchnormal behaves differently in train vs. eval)
+            for x, y in train_dataloader:
+                optimizer.zero_grad()
+
                 mini_batch_i += 1
                 if verbose >= 1: pbar.update(1)
+
                 y_pred = model(x.to(device))
                 y_pred = F.softmax(y_pred, dim=1)
                 # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                 y_tensor = y.to(device)
+
+                # l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+                # loss = criterion(y_tensor, y_pred) + l2_penalty
                 loss = criterion(y_tensor, y_pred)
-                if verbose >= 1: pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
-                batch_losses.append(loss.item())
+                loss.backward()
+                optimizer.step()
+
+                # measure accuracy
                 num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
 
-            val_losses.append(np.mean(batch_losses))
-            val_accs.append(num_correct_preds / val_size)
+                if verbose >= 1: pbar.set_description('Training [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+                batch_losses.append(loss.item())
+            train_losses.append(np.mean(batch_losses))
+            train_accs.append(num_correct_preds / train_size)
             if verbose >= 1: pbar.close()
-        if verbose >= 1:
-            print(
-            "Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = "
-            "{:.8f}, val loss={:.8f}".format(epoch, train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1]))
-        # Save training histories after every epoch
-        training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
-                              'acc_val': val_accs}
-        pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
-        if val_losses[-1] < best_loss:
-            torch.save(model.state_dict(), os.path.join(model_save_dir, test_name))
+            scheduler.step()
+
+            model.eval()
+            with torch.no_grad():
+                if verbose >= 1:
+                    pbar = tqdm(total=math.ceil(len(val_dataloader.dataset) / val_dataloader.batch_size),
+                            desc='Validating {}'.format(test_name))
+                    pbar.update(mini_batch_i := 0)
+                batch_losses = []
+                batch_aucs =[]
+                num_correct_preds = 0
+
+                for x, y in val_dataloader:
+                    mini_batch_i += 1
+                    if verbose >= 1: pbar.update(1)
+                    y_pred = model(x.to(device))
+                    y_pred = F.softmax(y_pred, dim=1)
+                    # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
+                    y_tensor = y.to(device)
+                    loss = criterion(y_tensor, y_pred)
+                    # fpr, tpr, thresholds = metrics.roc_curve(y, y_pred.detach().cpu().numpy())
+                    roc_auc = metrics.roc_auc_score(y, y_pred.detach().cpu().numpy())
+                    batch_aucs.append(roc_auc)
+                    batch_losses.append(loss.item())
+                    num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
+                    if verbose >= 1: pbar.set_description('Validating [{}]: loss:{:.8f}, auc:{:.8f}'.format(mini_batch_i, loss.item(), roc_auc))
+
+                val_aucs.append(np.mean(batch_aucs))
+                val_losses.append(np.mean(batch_losses))
+                val_accs.append(num_correct_preds / val_size)
+                if verbose >= 1: pbar.close()
             if verbose >= 1:
                 print(
-                    'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
-                                                                                            model_save_dir))
-            best_loss = val_losses[-1]
-            patience_counter = 0
-        else:
-            patience_counter += 1
-            if patience_counter > patience:
+                "Fold {}, Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = "
+                "{:.8f}, val loss={:.8f}".format(f_index, epoch, train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1]))
+            # Save training histories after every epoch
+            training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
+                                  'acc_val': val_accs}
+            pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
+            if val_losses[-1] < best_loss:
+                torch.save(model.state_dict(), os.path.join(model_save_dir, test_name))
                 if verbose >= 1:
-                    print(f'Terminated terminated by patience, validation loss has not improved in {patience} epochs')
-                break
-
-    plt.plot(training_histories['acc_train'])
-    plt.plot(training_histories['acc_val'])
-    plt.title(f"Accuracy, {test_name}")
-    plt.tight_layout()
-    plt.show()
-
-    plt.plot(training_histories['loss_train'])
-    plt.plot(training_histories['loss_val'])
-    plt.title(f"Loss, {test_name}")
-    plt.tight_layout()
-    plt.show()
-
-    return model, training_histories, criterion, label_encoder
+                    print(
+                        'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
+                                                                                                model_save_dir))
+                best_loss = val_losses[-1]
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                if patience_counter > patience:
+                    if verbose >= 1:
+                        print(f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                    break
+        train_accs_folds.append(train_accs)
+        train_losses_folds.append(train_losses)
+        val_accs_folds.append(val_accs)
+        val_losses_folds.append(val_losses)
+        val_aucs_folds.append(val_aucs)
+    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds,
+                          'acc_val': val_accs_folds, 'auc_val': val_aucs_folds}
+    # plt.plot(training_histories['acc_train'])
+    # plt.plot(training_histories['acc_val'])
+    # plt.title(f"Accuracy, {test_name}")
+    # plt.tight_layout()
+    # plt.show()
+    #
+    # plt.plot(training_histories['loss_train'])
+    # plt.plot(training_histories['loss_val'])
+    # plt.title(f"Loss, {test_name}")
+    # plt.tight_layout()
+    # plt.show()
+    print(f"Average AUC for {num_folds} folds is {np.mean([np.max(x) for x in val_aucs_folds])}")
+    return model, training_histories_folds, criterion, label_encoder
 
 def eval_model(model, x, y, criterion, label_encoder):
     use_cuda = torch.cuda.is_available()
@@ -217,7 +241,7 @@ def eval_model(model, x, y, criterion, label_encoder):
 
     return loss, accuracy
 
-def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8):
+def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
@@ -240,11 +264,11 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
             y += [event_class] * len(epochs_pupil[event_name].get_data())
         if np.min(y) == 1:
             y = np.array(y) - 1
-        # if rebalance:
-        #     x_eeg, y_eeg = rebalance_classes(x_eeg, y)
-        #     x_pupil, y_pupil = rebalance_classes(x_pupil, y)
-        #     assert np.all(y_eeg == y_pupil)
-        #     y = y_eeg
+        if rebalance:
+            x_eeg, y_eeg = rebalance_classes(x_eeg, y)
+            x_pupil, y_pupil = rebalance_classes(x_pupil, y)
+            assert np.all(y_eeg == y_pupil)
+            y = y_eeg
         sanity_check_eeg(x_eeg, y, picks)
         sanity_check_pupil(x_pupil, y)
         return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
@@ -266,8 +290,8 @@ def epochs_to_class_samples(rdf, event_names, event_filters, participant=None, s
     if np.min(y) == 1:
         y = np.array(y) - 1
 
-    # if rebalance:
-    #     x, y = rebalance_classes(x, y)
+    if rebalance:
+        x, y = rebalance_classes(x, y)
 
     x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)  # z normalize x
 
