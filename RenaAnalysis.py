@@ -194,8 +194,8 @@ def plot_forward(activation, event_names, split_window, num_windows, notes):
     subfigs = fig.subfigures(2, 1)
     # fig, axs = plt.subplots(2, num_windows - 1, figsize=(22, 10), sharey=True)  # sharing vmax and vmin
     for class_index, e_name in enumerate(event_names):
-        axes = subfigs[class_index].subplots(1, num_windows - 1, sharey=True)
-        for i in range(1, num_windows):
+        axes = subfigs[class_index].subplots(1, num_windows, sharey=True)
+        for i in range(num_windows):
             a = np.mean(activation[class_index, :, i, :], axis=1)
             plot_topomap(a, info, axes=axes[i - 1], show=False, res=512, vlim=(np.min(activation), np.max(activation)))
             axes[i - 1].set_title(f"{int((i - 1) * split_window * 1e3)}-{int(i * split_window * 1e3)}ms")
