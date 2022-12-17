@@ -16,7 +16,7 @@ import joblib
 from sklearn.model_selection import train_test_split, StratifiedGroupKFold, StratifiedKFold, StratifiedShuffleSplit
 
 from RenaAnalysis import prepare_sample_label, compute_forward, plot_forward, solve_crossbin_weights, \
-    compute_window_projections
+    compute_window_projections, get_rdf
 from eye.eyetracking import GazeRayIntersect, Fixation
 from learning.train import rebalance_classes
 from params import *
@@ -28,8 +28,8 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-# rdf = get_rdf()
-rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+rdf = get_rdf()
+# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 # discriminant test  ####################################################################################################
@@ -40,23 +40,23 @@ plt.rcParams.update({'font.size': 22})
 event_names = ["Distractor", "Target"]
 # event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-event_filters = [lambda x: type(x)==Fixation and (x.block_condition == conditions['RSVP'] or x.block_condition == conditions['Carousel'] ) and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
-                 lambda x: type(x)==Fixation and (x.block_condition == conditions['RSVP'] or x.block_condition == conditions['Carousel'] ) and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+# event_filters = [lambda x: type(x)==Fixation and (x.block_condition == conditions['RSVP'] or x.block_condition == conditions['Carousel'] ) and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: type(x)==Fixation and (x.block_condition == conditions['RSVP'] or x.block_condition == conditions['Carousel'] ) and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
 
-# x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
+x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
 # pickle.dump(x, open('x_p1_s2_flg.p', 'wb'))
 # pickle.dump(y, open('y_p1_s2_flg.p', 'wb'))
 # pickle.dump(groups, open('g_p1_s2_flg.p', 'wb'))
 
-# pickle.dump(x, open('x_constrained.p', 'wb'))
-# pickle.dump(y, open('y_constrained.p', 'wb'))
-# pickle.dump(groups, open('g_constrained.p', 'wb'))
+pickle.dump(x, open('x_constrained_ItemLocked.p', 'wb'))
+pickle.dump(y, open('y_constrained_ItemLocked.p', 'wb'))
+pickle.dump(groups, open('g_constrained_ItemLocked.p', 'wb'))
 
-x = pickle.load(open('x_constrained.p', 'rb'))
-y = pickle.load(open('y_constrained.p', 'rb'))
-groups = pickle.load(open('g_constrained.p', 'rb'))
+# x = pickle.load(open('x_constrained.p', 'rb'))
+# y = pickle.load(open('y_constrained.p', 'rb'))
+# groups = pickle.load(open('g_constrained.p', 'rb'))
 
 # HDCA parameters
 split_window=100e-3
