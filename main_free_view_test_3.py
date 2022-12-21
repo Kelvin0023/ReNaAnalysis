@@ -36,8 +36,8 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
-rdf = pickle.load(open('C:/Data/rdf.p', 'rb'))
-# rdf = pickle.dump('C:/Data/rdf.p', open('rdf.p', 'wb'))
+rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # discriminant test  ####################################################################################################
@@ -48,9 +48,9 @@ colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 #
 event_names = ["Distractor", "Target"]
 # event_locking = 'I-VT'
-event_locking = 'I-VT-Head'
+# event_locking = 'I-VT-Head'
 # event_locking = 'Patch-Sim'
-# event_locking = 'FLGI'
+event_locking = 'FLGI'
 
 if event_locking == 'FLGI':
     event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
@@ -64,11 +64,11 @@ else:
 
 x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
 
-pickle.dump(x, open('x_p1_s2.p', 'wb'))
-pickle.dump(y, open('y_p1_s2.p', 'wb'))
+pickle.dump(x, open(f'x_p1_s2_{event_locking}.p', 'wb'))
+pickle.dump(y, open(f'y_p1_s2_{event_locking}.p', 'wb'))
 
-# x = pickle.load(open('x_p1_s2.p', 'rb'))
-# y = pickle.load(open('y_p1_s2.p', 'rb'))
+# x = pickle.load(open(f'x_p1_s2_{event_locking}.p', 'rb'))
+# y = pickle.load(open(f'y_p1_s2_{event_locking}.p', 'rb'))
 
 model = EEGCNN(in_shape=x.shape, num_classes=2)
 model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=f'Locked to {event_locking}, P1, S2, Visaul Search')

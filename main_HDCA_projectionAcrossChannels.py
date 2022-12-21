@@ -49,9 +49,9 @@ event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions
 
 x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
 # x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
-pickle.dump(x, open('x_p1_s2_flg.p', 'wb'))
-pickle.dump(y, open('y_p1_s2_flg.p', 'wb'))
-pickle.dump(groups, open('g_p1_s2_flg.p', 'wb'))
+pickle.dump(x, open('x_p1_s2_FLGI.p', 'wb'))
+pickle.dump(y, open('y_p1_s2_FLGI.p', 'wb'))
+pickle.dump(groups, open('g_p1_s2_FLGI.p', 'wb'))
 
 # pickle.dump(x, open('x_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
 # pickle.dump(y, open('y_allParticipantSessions_constrained_ItemLocked.p', 'wb'))

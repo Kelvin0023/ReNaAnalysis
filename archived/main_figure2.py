@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = pickle.load(open('rdf.p', 'rb'))
+rdf = pickle.load(open('../rdf.p', 'rb'))
 
 # discriminant test  ####################################################################################################
 

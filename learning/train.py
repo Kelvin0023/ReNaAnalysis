@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
+
 from learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
     export_data_root
@@ -69,6 +70,8 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
     label_encoder = preprocessing.OneHotEncoder()
     label_encoder = label_encoder.fit(np.array(Y).reshape(-1, 1))
     X = model.prepare_data(X)
+
+
 
     skf = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
     train_losses_folds = []
