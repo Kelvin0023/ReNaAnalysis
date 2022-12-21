@@ -1,22 +1,18 @@
 import os
 import time
 
-import numpy as np
 import torch
 from matplotlib import pyplot as plt
-from mne.decoding import UnsupervisedSpatialFilter
 from mne.viz import plot_topomap
 from sklearn import metrics
-from sklearn.decomposition import PCA, FastICA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
-from scipy import stats
 from scipy.stats import norm
 import math
 
 from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
-from learning.train import epochs_to_class_samples
+from learning.train import epochs_to_class_samples, prepare_sample_label
 from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
@@ -25,11 +21,6 @@ from utils.utils import get_item_events, visualize_pupil_epochs
 
 # def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
 #     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
-
-def prepare_sample_label(rdf, event_names, event_filters, picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
-    assert len(event_names) == len(event_filters) == 2
-    x, y, _, _, group = epochs_to_class_samples(rdf, event_names, event_filters, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
-    return x, y, group
 
 def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None, title="", fig_size=(25.6, 14.4)):
     plt.rcParams["figure.figsize"] = fig_size
@@ -285,25 +276,6 @@ def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, n
     # plt.show()
     return cross_window_weights, roc_auc, fpr, tpr
 
-def compute_pca_ica(X, n_components):
-    print("applying pca followed by ica")
-    # ev = mne.EvokedArray(np.mean(X, axis=0),
-    #                      mne.create_info(64, exg_resample_srate,
-    #                                      ch_types='eeg'), tmin=-0.1)
-    # ev.plot(window_title="original", time_unit='s')
-    pca = UnsupervisedSpatialFilter(PCA(n_components), average=False)
-    pca_data = pca.fit_transform(X)
-    # ev = mne.EvokedArray(np.mean(pca_data, axis=0),
-    #                      mne.create_info(n_components, exg_resample_srate,
-    #                                      ch_types='eeg'), tmin=-0.1)
-    # ev.plot( window_title="PCA", time_unit='s')
-    ica = UnsupervisedSpatialFilter(FastICA(n_components, whiten='unit-variance'), average=False)
-    ica_data = ica.fit_transform(pca_data)
-
-    # ev1 = mne.EvokedArray(np.mean(ica_data, axis=0),mne.create_info(n_components, exg_resample_srate,ch_types='eeg'), tmin=-0.1)
-    # ev1.plot(window_title='ICA', time_unit='s')
-
-    return ica_data
 
 def compute_window_projections(x_train_windowed, x_test_windowed, y_train, num_top_components=20):
     num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_train_windowed.shape

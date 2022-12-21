@@ -17,10 +17,11 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 import joblib
 from sklearn.model_selection import train_test_split, StratifiedGroupKFold, StratifiedKFold, StratifiedShuffleSplit
 
-from RenaAnalysis import prepare_sample_label, compute_forward, plot_forward, solve_crossbin_weights, \
-    compute_window_projections, get_rdf, compute_pca_ica
+from RenaAnalysis import compute_forward, plot_forward, solve_crossbin_weights, \
+    compute_window_projections, get_rdf
+from utils.data_utils import compute_pca_ica
 from eye.eyetracking import GazeRayIntersect, Fixation
-from learning.train import rebalance_classes
+from learning.train import rebalance_classes, prepare_sample_label
 from params import *
 
 torch.manual_seed(random_seed)

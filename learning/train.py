@@ -16,44 +16,40 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
-
 from learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
-    export_data_root
+    export_data_root, num_top_compoenents
+from utils.data_utils import compute_pca_ica
 
 
-def eval_lockings(rdf, event_names, locking_name_filters, participant, session, model, regenerate_epochs=True):
+def eval_lockings(rdf, event_names, locking_name_filters, participant, session, model, regenerate_epochs=True, reduce_dim=False):
     # verify number of event types
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
+    is_using_pupil = model == 'EEGPupil'
     for locking_name, locking_filter in locking_name_filters.items():
         test_name = f'L {locking_name}, P {participant}, S {session}, Visaul Search'
         if regenerate_epochs:
-            if model == 'EEGPupil':
-                x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=True, participant='1', session=2)
-                pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'wb'))
-                pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'wb'))
-            else:
-                x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='eeg', rebalance=True,
-                                                     participant=participant, session=session)
-                pickle.dump(x, open(os.path.join(export_data_root,f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
-                pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
+            x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both' if model=='EEGPupil' else 'eeg', rebalance=False, participant=participant, session=session)
+            pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
+            pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
         else:
             try:
-                if model == 'EEGPupil':
-                    x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'rb'))
-                    y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_EEGPupil.p'), 'rb'))
-                else:
-                    x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
-                    y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+                x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'rb'))
+                y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'rb'))
             except FileNotFoundError:
                 raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model == 'EEGPupil' else "")
+        if reduce_dim:
+            if model == 'EEGPupil':
+                x[0] = compute_pca_ica(x[0], num_top_compoenents)
+            else:
+                x = compute_pca_ica(x, num_top_compoenents)
         if model == 'EEGPupil':
             model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2)
             model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
         else:
             if model == 'EEGCNN':
-                model = EEGCNN(in_shape=x.shape, num_classes=2)
+                model = EEGCNN(in_shape=x.shape, num_classes=2, in_channels=20 if reduce_dim else 64)
             elif model == 'EEGInception':
                 model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
             model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=test_name, verbose=0)
@@ -138,9 +134,9 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
                 # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                 y_tensor = y.to(device)
 
-                # l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
-                # loss = criterion(y_tensor, y_pred) + l2_penalty
-                loss = criterion(y_tensor, y_pred)
+                l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+                loss = criterion(y_tensor, y_pred) + l2_penalty
+                # loss = criterion(y_tensor, y_pred)
                 loss.backward()
                 optimizer.step()
 
@@ -410,8 +406,7 @@ def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil", verbose=1):
             # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
             y_tensor = y.to(device)
 
-            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
-
+            # l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
             # loss = criterion(y_tensor, y_pred) + l2_penalty
             loss = criterion(y_tensor, y_pred)
             loss.backward()
@@ -484,3 +479,9 @@ def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil", verbose=1):
     plt.show()
 
     return model, training_histories, criterion, label_encoder
+
+
+def prepare_sample_label(rdf, event_names, event_filters, picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
+    assert len(event_names) == len(event_filters) == 2
+    x, y, _, _, group = epochs_to_class_samples(rdf, event_names, event_filters, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
+    return x, y, group

@@ -4,7 +4,8 @@ import time
 
 import torch
 
-from RenaAnalysis import get_rdf, r_square_test, compute_pca_ica
+from RenaAnalysis import get_rdf, r_square_test
+from utils.data_utils import compute_pca_ica
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet, EEGCNN
 from learning.train import epochs_to_class_samples, eval_model, train_model, rebalance_classes
@@ -89,13 +90,11 @@ y = pickle.load(open('y_constrained.p', 'rb'))
 # participant='1', session=2) model = EEGCNNNet(in_shape=x.shape, num_classes=2) model, training_histories,
 # criterion, label_encoder = train_model(x, y, model)
 #
-#
-#
 # event_filters = [lambda x: type(x)==Fixation and x.detection_alg == 'Patch-Sim' and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==Fixation and x.detection_alg == 'Patch-Sim' and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
 # viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to Patch-Sim', session=2, participant='1')
 # x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, session=2, participant='1')
 x = compute_pca_ica(x, num_top_compoenents)
 
-model = EEGCNN(in_shape=x.shape, num_classes=2)
+model = EEGCNN(in_shape=x.shape, num_classes=2, in_channels=20)
 model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=f'Locked to item popping, all constralled')
