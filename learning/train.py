@@ -19,7 +19,7 @@ from tqdm import tqdm
 from learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
     export_data_root, num_top_compoenents
-from utils.data_utils import compute_pca_ica
+from utils.data_utils import compute_pca_ica, mean_sublists
 
 
 def eval_lockings(rdf, event_names, locking_name_filters, participant, session, model, regenerate_epochs=True, reduce_dim=False):
@@ -54,9 +54,10 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
             elif model == 'EEGInception':
                 model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
             model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=test_name, verbose=0)
-        best_train_acc, best_val_acc, best_train_loss, best_val_loss = np.max(training_histories['acc_train']), np.max(training_histories['acc_val']), np.max(training_histories['loss_val']), np.max(training_histories['loss_val'])
-        print(f'{test_name}: best val accuracy: {best_val_acc}, best train accuracy: {best_train_acc}, best val loss: {best_val_loss}, best train loss: {best_train_loss}')
-        locking_performance[locking_name] = {'best val acc': best_val_acc, 'best train acc': best_train_acc, 'best val loss': best_val_loss, 'best trian loss': best_train_loss}
+        best_train_acc, best_val_acc, best_train_loss, best_val_loss = mean_sublists(training_histories['acc_train']), mean_sublists(training_histories['acc_val']), mean_sublists(training_histories['loss_val']), mean_sublists(training_histories['loss_val'])
+        best_val_auc = mean_sublists(training_histories['auc_val'])
+        print(f'{test_name}: average val AUC {best_val_auc}, average val accuracy: {best_val_acc}, average train accuracy: {best_train_acc}, average val loss: {best_val_loss}, average train loss: {best_train_loss}')
+        locking_performance[locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
     return locking_performance
 
 def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
@@ -220,7 +221,7 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
     # plt.title(f"Loss, {test_name}")
     # plt.tight_layout()
     # plt.show()
-    print(f"Average AUC for {num_folds} folds is {np.mean([np.max(x) for x in val_aucs_folds])}")
+    if verbose: print(f"Average AUC for {num_folds} folds is {np.mean([np.max(x) for x in val_aucs_folds])}")
     return model, training_histories_folds, criterion, label_encoder
 
 def eval_model(model, x, y, criterion, label_encoder):

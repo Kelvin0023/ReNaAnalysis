@@ -1,3 +1,4 @@
+import numpy as np
 from mne.decoding import UnsupervisedSpatialFilter
 from sklearn.decomposition import PCA, FastICA
 
@@ -37,3 +38,6 @@ def compute_pca_ica(X, n_components):
     # ev1.plot(window_title='ICA', time_unit='s')
 
     return ica_data
+
+def mean_sublists(l):
+    return np.mean([np.mean(x) for x in l])
