@@ -4,8 +4,10 @@ import time
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+from mne.decoding import UnsupervisedSpatialFilter
 from mne.viz import plot_topomap
 from sklearn import metrics
+from sklearn.decomposition import PCA, FastICA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
@@ -170,16 +172,18 @@ def compute_d_prime(y_true, y_pred):
     Z = norm.ppf
     return math.sqrt(2) * Z(roc_auc_score(y_true, y_pred))
 
-def compute_forward(x_windowed, y, weights_channelWindow):
+def compute_forward(x_windowed, y, projection):
     num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_windowed.shape
     activation = np.empty((2, num_channels, num_windows, num_timepoints_per_window))
     for class_index in range(2):  # for test set
         this_x = x_windowed[y == class_index]
+        this_projection = projection[y == class_index]
         for j in range(num_windows):
             this_x_window = this_x[:, :, j, :].reshape(this_x.shape[0], -1).T
-            z_window = np.array([np.dot(weights_channelWindow[j], this_x[trial_index, :, j, :].reshape(-1)) for trial_index in range(this_x.shape[0])])
-            z_window = z_window.reshape((-1, 1)) # change to a col vector
-            a = (np.matmul(this_x_window, z_window) / np.matmul(z_window.T, z_window).item()).reshape((num_channels, num_timepoints_per_window))
+            # z_window = np.array([np.dot(weights_channelWindow[j], this_x[trial_index, :, j, :].reshape(-1)) for trial_index in range(this_x.shape[0])])
+            # z_window = z_window.reshape((-1, 1)) # change to a col vector
+            this_projection_window = this_projection[:, j]
+            a = (np.matmul(this_x_window, this_projection_window) / np.matmul(this_projection_window.T, this_projection_window).item()).reshape((num_channels, num_timepoints_per_window))
             activation[class_index, :, j] = a
     return activation
 
@@ -281,7 +285,27 @@ def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, n
     # plt.show()
     return cross_window_weights, roc_auc, fpr, tpr
 
-def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
+def compute_pca_ica(X, n_components):
+    print("applying pca followed by ica")
+    # ev = mne.EvokedArray(np.mean(X, axis=0),
+    #                      mne.create_info(64, exg_resample_srate,
+    #                                      ch_types='eeg'), tmin=-0.1)
+    # ev.plot(window_title="original", time_unit='s')
+    pca = UnsupervisedSpatialFilter(PCA(n_components), average=False)
+    pca_data = pca.fit_transform(X)
+    # ev = mne.EvokedArray(np.mean(pca_data, axis=0),
+    #                      mne.create_info(n_components, exg_resample_srate,
+    #                                      ch_types='eeg'), tmin=-0.1)
+    # ev.plot( window_title="PCA", time_unit='s')
+    ica = UnsupervisedSpatialFilter(FastICA(n_components, whiten='unit-variance'), average=False)
+    ica_data = ica.fit_transform(pca_data)
+
+    # ev1 = mne.EvokedArray(np.mean(ica_data, axis=0),mne.create_info(n_components, exg_resample_srate,ch_types='eeg'), tmin=-0.1)
+    # ev1.plot(window_title='ICA', time_unit='s')
+
+    return ica_data
+
+def compute_window_projections(x_train_windowed, x_test_windowed, y_train, num_top_components=20):
     num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_train_windowed.shape
     num_test_trials = len(x_test_windowed)
 

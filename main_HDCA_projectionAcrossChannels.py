@@ -8,15 +8,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
+from mne.decoding import UnsupervisedSpatialFilter
 from mne.viz import plot_topomap
 from numpy.lib.stride_tricks import sliding_window_view
 from sklearn import metrics
+from sklearn.decomposition import PCA, FastICA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 import joblib
 from sklearn.model_selection import train_test_split, StratifiedGroupKFold, StratifiedKFold, StratifiedShuffleSplit
 
 from RenaAnalysis import prepare_sample_label, compute_forward, plot_forward, solve_crossbin_weights, \
-    compute_window_projections, get_rdf
+    compute_window_projections, get_rdf, compute_pca_ica
 from eye.eyetracking import GazeRayIntersect, Fixation
 from learning.train import rebalance_classes
 from params import *
@@ -28,8 +30,8 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf()
-# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# rdf = get_rdf()
+rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 # discriminant test  ####################################################################################################
@@ -40,54 +42,65 @@ plt.rcParams.update({'font.size': 22})
 event_names = ["Distractor", "Target"]
 # event_filters = [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
-# event_filters = [lambda x: type(x)==Fixation and (x.block_condition == conditions['RSVP'] or x.block_condition == conditions['Carousel'] ) and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: type(x)==Fixation and (x.block_condition == conditions['RSVP'] or x.block_condition == conditions['Carousel'] ) and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
+# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
+                 lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
 
 x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
-# pickle.dump(x, open('x_p1_s2_flg.p', 'wb'))
-# pickle.dump(y, open('y_p1_s2_flg.p', 'wb'))
-# pickle.dump(groups, open('g_p1_s2_flg.p', 'wb'))
+# x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
+pickle.dump(x, open('x_p1_s2_flg.p', 'wb'))
+pickle.dump(y, open('y_p1_s2_flg.p', 'wb'))
+pickle.dump(groups, open('g_p1_s2_flg.p', 'wb'))
 
-pickle.dump(x, open('x_constrained_ItemLocked.p', 'wb'))
-pickle.dump(y, open('y_constrained_ItemLocked.p', 'wb'))
-pickle.dump(groups, open('g_constrained_ItemLocked.p', 'wb'))
+# pickle.dump(x, open('x_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
+# pickle.dump(y, open('y_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
+# pickle.dump(groups, open('g_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
 
-# x = pickle.load(open('x_constrained.p', 'rb'))
-# y = pickle.load(open('y_constrained.p', 'rb'))
-# groups = pickle.load(open('g_constrained.p', 'rb'))
-
-# HDCA parameters
-split_window=100e-3
-num_folds = 10
+# x = pickle.load(open('x_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
+# y = pickle.load(open('y_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
+# groups = pickle.load(open('g_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
 
 # split data into 100ms bins
 split_size = int(split_window * exg_resample_srate)
 # multi-fold cross-validation
-sgkf = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
-_, num_channels, num_windows, num_timepoints_per_window = sliding_window_view(x, window_shape=split_size, axis=2)[:, :, 0::split_size, :].shape
+cross_val_folds = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
+_, num_eeg_channels, num_windows, num_timepoints_per_window = sliding_window_view(x, window_shape=split_size, axis=2)[:, :, 0::split_size, :].shape
 
 cw_weights_folds = np.empty((num_folds, num_windows))
-activations_folds = np.empty((num_folds, len(event_names), num_channels, num_windows, num_timepoints_per_window))
+activations_folds = np.empty((num_folds, len(event_names), num_eeg_channels, num_windows, num_timepoints_per_window))
 roc_auc_folds = np.empty(num_folds)
 fpr_folds = []
 tpr_folds = []
-for i, (train, test) in enumerate(sgkf.split(x, y, groups=groups)):
+
+x_transformed = compute_pca_ica(x, num_top_compoenents)  # apply ICA and PCA
+
+for i, (train, test) in enumerate(cross_val_folds.split(x, y, groups=groups)):  # cross-validation; group arguement is not necessary unless using grouped folds
     print(f"Working on {i+1} fold of {num_folds}")
-    # x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=train_ratio, random_state=random_seed)
-    x_train, x_test, y_train, y_test = x[train], x[test], y[train], y[test]
-    x_train, y_train = rebalance_classes(x_train, y_train)  # rebalance by class
-    x_train_windowed = sliding_window_view(x_train, window_shape=split_size, axis=2)[:, :, 0::split_size, :]  # shape = #trials, #channels, #windows, #time points per window
+
+    x_transformed_train, x_transformed_test, y_train, y_test = x_transformed[train], x_transformed[test], y[train], y[test]
+    x_transformed_train, y_train = rebalance_classes(x_transformed_train, y_train)  # rebalance by class
+    x_test = x[test]
+
+    x_transformed_train_windowed = sliding_window_view(x_transformed_train, window_shape=split_size, axis=2)[:, :, 0::split_size, :]  # shape = #trials, #channels, #windows, #time points per window
+    x_transformed_test_windowed = sliding_window_view(x_transformed_test, window_shape=split_size, axis=2)[:, :, 0::split_size, :]  # shape = #trials, #channels, #windows, #time points per window
     x_test_windowed = sliding_window_view(x_test, window_shape=split_size, axis=2)[:, :, 0::split_size, :]  # shape = #trials, #channels, #windows, #time points per window
-    num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_train_windowed.shape
-    num_test_trials = len(x_test)
+
+    num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_transformed_train_windowed.shape
+    num_test_trials = len(x_transformed_test)
     # compute Fisher's LD for each temporal window
     print("Computing windowed LDA per channel, and project per window and trial")
-    weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial = compute_window_projections(x_train_windowed, x_test_windowed, y_train)
+    weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial = compute_window_projections(x_transformed_train_windowed, x_transformed_test_windowed, y_train)
     print('Computing forward model from window projections for test set')
-    activation = compute_forward(x_test_windowed, y_test, weights_channelWindow)
+    activation = compute_forward(x_test_windowed, y_test, projectionTest_window_trial)
     # train classifier, use gradient descent to find the cross-window weights
+    # z-norm the projections
+    projection_mean = np.mean(np.concatenate([projectionTrain_window_trial, projectionTest_window_trial], axis=0), axis=0, keepdims=True)
+    projection_std = np.std(np.concatenate([projectionTrain_window_trial, projectionTest_window_trial], axis=0), axis=0, keepdims=True)
+
+    projectionTrain_window_trial = (projectionTrain_window_trial - projection_mean) / projection_std
+    projectionTest_window_trial = (projectionTest_window_trial - projection_mean) / projection_std
+
     print('Solving cross bin weights')
     cw_weights, roc_auc, fpr, tpr = solve_crossbin_weights(projectionTrain_window_trial, projectionTest_window_trial, y_train, y_test, num_windows)
 
@@ -96,6 +109,7 @@ for i, (train, test) in enumerate(sgkf.split(x, y, groups=groups)):
     roc_auc_folds[i] = roc_auc
     fpr_folds.append(fpr)
     tpr_folds.append(tpr)
+    print(f'Fold {i}, auc is {roc_auc}')
 
 plot_forward(np.mean(activations_folds, axis=0), event_names, split_window, num_windows, notes=f"Average over {num_folds}-fold's test set")
 
@@ -103,7 +117,7 @@ print(f"Best cross ROC-AUC is {np.max(roc_auc_folds)}")
 best_fold_i = np.argmax(roc_auc_folds)
 display = metrics.RocCurveDisplay(fpr=fpr_folds[best_fold_i], tpr=tpr_folds[best_fold_i], roc_auc=roc_auc_folds[best_fold_i], estimator_name='example estimator')
 fig = plt.figure(figsize=(10, 10), constrained_layout=True)
-display.plot(ax=plt.gca())
+display.plot(ax=plt.gca(), name='ROC')
 plt.tight_layout()
 plt.title("ROC of the best cross-val fold")
 plt.show()
