@@ -42,4 +42,4 @@ locking_name_filters = {'FLGI': [lambda x: type(x)==GazeRayIntersect and x.is_fi
                         }#nyamu <3
 
 results = eval_lockings(rdf, event_names, locking_name_filters, participant='1', session=2, model='EEGCNN', regenerate_epochs=True, reduce_dim=True)
-
+pickle.dump(results, open('locking_performance', 'wb'))

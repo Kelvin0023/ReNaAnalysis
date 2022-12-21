@@ -30,7 +30,8 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
     for locking_name, locking_filter in locking_name_filters.items():
         test_name = f'L {locking_name}, P {participant}, S {session}, Visaul Search'
         if regenerate_epochs:
-            x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both' if model=='EEGPupil' else 'eeg', rebalance=False, participant=participant, session=session)
+            x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
+            # x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both' if model=='EEGPupil' else 'eeg', rebalance=False, participant=participant, session=session)
             pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
             pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
         else:
@@ -481,7 +482,7 @@ def train_model_pupil_eeg(x, y, model, test_name="CNN-EEG-Pupil", verbose=1):
     return model, training_histories, criterion, label_encoder
 
 
-def prepare_sample_label(rdf, event_names, event_filters, picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
+def prepare_sample_label(rdf, event_names, event_filters, data_type='eeg', picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
     assert len(event_names) == len(event_filters) == 2
-    x, y, _, _, group = epochs_to_class_samples(rdf, event_names, event_filters, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
+    x, y, _, _, group = epochs_to_class_samples(rdf, event_names, event_filters, data_type=data_type, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
     return x, y, group
