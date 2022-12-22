@@ -74,8 +74,8 @@ event_names = ["Distractor", "Target"]
 # pickle.dump(x, open('x_constrained_tmax800.p', 'wb'))
 # pickle.dump(y, open('y_constrained_tmax800.p', 'wb'))
 #
-x = pickle.load(open('x_constrained.p', 'rb'))
-y = pickle.load(open('y_constrained.p', 'rb'))
+x = pickle.load(open('x_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
+y = pickle.load(open('y_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
 
 # x, y = rebalance_classes(x, y)
 # model = EEGCNN(in_shape=x.shape, num_classes=2)

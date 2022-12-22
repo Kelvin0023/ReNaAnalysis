@@ -124,7 +124,7 @@ data = np.swapaxes(data, 1, 2)
 
 tau = int(dms.shape[-1] /  len(covariates))
 
-# plot_design_matrix(dms, deconv_window, tau, covariates)
+plot_design_matrix(dms, deconv_window, tau, covariates)
 
 print('Distractor, Target, Novelty prevalence: %f, %f, %f' % (np.sum(labels==1)/len(labels), np.sum(labels==2)/len(labels), np.sum(labels==3)/len(labels)))
 
