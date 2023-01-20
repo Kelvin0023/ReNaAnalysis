@@ -139,7 +139,7 @@ def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, 
 
         if len(event_data_indices) > 0:
             deviate_event_count = len(event_ts) - len(event_data_indices)
-            if deviate_event_count > 0: print("Removing {} devicate events".format(deviate_event_count))
+            if deviate_event_count > 0: print("Removing {} deviate events".format(deviate_event_count))
             deviant += deviate_event_count
 
             event_array[event_data_indices] = i + 1

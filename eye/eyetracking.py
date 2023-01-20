@@ -45,6 +45,7 @@ class Fixation(Event):
         self.offset_time = offset_time
         self.detection_alg = detection_alg
         self.epoched = False
+        self.is_first_long_gaze = False
 
 
 def running_mean(x, N):
@@ -72,10 +73,11 @@ def gaze_event_detection_I_VT(eyetracking_data_timestamps, events, headtracking_
                                                                                gaze_status=gaze_status,
                                                                                head_rotation=head_rotation_xy_eyesampled)
     fixations, saccades = add_event_info_to_gaze(fixations, events)
+    print(', {} fixations are first long on objects. Targets: {}, Distractors {}'.format(len([f for f in fixations if f.is_first_long_gaze]), len([f for f in fixations if f.dtn==1]), len([f for f in fixations if f.dtn==2])))
     return fixations + saccades
 
 
-def add_event_info_to_gaze(fixations, events):
+def add_event_info_to_gaze(fixations, events, long_gaze_threshold=0.15):
     """
     process a dataset that has gaze behavior marker and gaze marker (gaze ray intersect with object), use the gaze marker to find
     first identify the gaze marker inside a fixation,
@@ -93,6 +95,7 @@ def add_event_info_to_gaze(fixations, events):
     fix_in_block = []
     sac_in_block = []
     gaze_intersects = [x for x in events if type(x) == GazeRayIntersect]
+    fixated = []
     for f in fixations:
         if is_event_in_block(f, events):
             f = add_event_meta_info(f, events)
@@ -103,6 +106,9 @@ def add_event_info_to_gaze(fixations, events):
             if len(overlapping_gaze_intersects) > 0:
                 e = overlapping_gaze_intersects[0]  # IMPORTANT pick the first gaze event
                 f = copy_item_info(f, e)
+                if (f.item_index, f.block_id) not in fixated and f.duration > long_gaze_threshold:
+                    f.is_first_long_gaze = True
+                    fixated.append((f.item_index, f.block_id))
                 f.preceding_saccade = copy_item_info(f.preceding_saccade, e)
             else:
                 f.preceding_saccade.dtn = dtnn_types['Null']
@@ -243,24 +249,30 @@ def plot_gaze_events_overlay(start_time, end_time, gaze_timestamps, saccades, fi
     plt.show()
 
 
-def gaze_event_detection_PatchSim(ps_fixation_detection_data, ps_fixation_detection_timestamps, events):
+def gaze_event_detection_PatchSim(ps_fixation_detection_data, ps_fixation_detection_timestamps, events, long_gaze_threshold=0.15):
     fix_list_filtered = temporal_filter_fixation(ps_fixation_detection_data[1], marker_mode='marker', verbose=0)
 
     onset_timestamps = ps_fixation_detection_timestamps[fix_list_filtered == 1]
     offet_timestamps = ps_fixation_detection_timestamps[fix_list_filtered == 2]
 
     fixation_events = []
+
+    fixated = []
     for onset_ts, offset_ts in zip(onset_timestamps, offet_timestamps):
         f = Fixation(offset_ts - onset_ts, None, None, None, None, None, onset_ts, offset_ts, "Patch-Sim")
         overlapping_gaze_intersects = get_overlapping_events(f.onset_time, f.offset_time, events, lambda x: type(x) == GazeRayIntersect)
         if len(overlapping_gaze_intersects) > 0:
             e = overlapping_gaze_intersects[0]  # IMPORTANT pick the first gaze event
             f = copy_item_info(f, e)
+            if (f.item_index, f.block_id) not in fixated and f.duration > long_gaze_threshold:
+                f.is_first_long_gaze = True
+                fixated.append((f.item_index, f.block_id))
         else:
             f.dtn = dtnn_types['Null']
         fixation_events.append(f)
-    print('Detected {} fixations from Patch similarity based fixation detection'.format(
-        int(np.sum(fix_list_filtered[fix_list_filtered == 1]))))
+    print('Detected {} fixations from Patch similarity based fixation detection, {} are first long gaze on objects, {} targets, and {} distractors'.format(
+        int(np.sum(fix_list_filtered[fix_list_filtered == 1])), len([f for f in fixation_events if f.is_first_long_gaze]),
+        len([f for f in fixation_events if f.dtn==1]), len([f for f in fixation_events if f.dtn==2])))
     return fixation_events
 
 
