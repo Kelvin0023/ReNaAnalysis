@@ -30,8 +30,8 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
     for locking_name, locking_filter in locking_name_filters.items():
         test_name = f'L {locking_name}, P {participant}, S {session}, Visaul Search'
         if regenerate_epochs:
-            x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
-            # x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both' if model=='EEGPupil' else 'eeg', rebalance=False, participant=participant, session=session)
+            # x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
+            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both' if is_using_pupil else 'eeg', rebalance=False, participant=participant, session=session)
             pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
             pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
         else:
@@ -41,12 +41,12 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
             except FileNotFoundError:
                 raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model == 'EEGPupil' else "")
         if reduce_dim:
-            if model == 'EEGPupil':
+            if is_using_pupil:
                 x[0] = compute_pca_ica(x[0], num_top_compoenents)
             else:
                 x = compute_pca_ica(x, num_top_compoenents)
-        if model == 'EEGPupil':
-            model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2)
+        if is_using_pupil:
+            model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
             model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
         else:
             if model == 'EEGCNN':
@@ -68,8 +68,6 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
     label_encoder = preprocessing.OneHotEncoder()
     label_encoder = label_encoder.fit(np.array(Y).reshape(-1, 1))
     X = model.prepare_data(X)
-
-
 
     skf = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
     train_losses_folds = []
@@ -253,7 +251,7 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
         epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, participant=participant,
                                                        session=session)
         epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
-        ps_group_pupil = ps_group_pupil[np.logical_not(ar_log.bad_epochs)]
+        ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
         assert np.all(ps_group_pupil == ps_group)
         y = []
         x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
