@@ -22,7 +22,7 @@ start_time = time.time()  # record the start time of the analysis
 
 rdf = get_rdf()
 # rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
-rdf = pickle.dump(os.path.join(export_data_root, 'rdf.p'), open('rdf.p', 'wb'))
+pickle.dump(os.path.join(export_data_root, 'rdf.p'), open('rdf.p', 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # lockings test  ####################################################################################################
