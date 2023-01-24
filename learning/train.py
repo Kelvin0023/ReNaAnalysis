@@ -60,6 +60,39 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
         locking_performance[locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
     return locking_performance
 
+def eval_lockings_models(rdf, event_names, locking_name_filters, participant, session, models=('EEGCNN', 'EEGInception', 'EEGPupil'), regenerate_epochs=True, reduce_dim=False):
+    # verify number of event types
+    assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
+    performance = {}
+    for locking_name, locking_filter in locking_name_filters.items():
+        test_name = f'L {locking_name}, P {participant}, S {session}, Visaul Search'
+        if regenerate_epochs:
+            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session)
+            pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'wb'))
+            pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'wb'))
+        else:
+            x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'rb'))
+            y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'rb'))
+        if reduce_dim:
+            x[0] = compute_pca_ica(x[0], num_top_compoenents)  # reduce dimension of eeg data at index 0
+
+        # data is ready for this locking from above, now iterate over the models
+        for m in models:
+            if m == 'EEGPupil':
+                model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
+                model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
+            else:
+                if m == 'EEGCNN':
+                    model = EEGCNN(in_shape=x.shape, num_classes=2, in_channels=20 if reduce_dim else 64)
+                elif m == 'EEGInception':
+                    model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
+                model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=test_name, verbose=0)
+            best_train_acc, best_val_acc, best_train_loss, best_val_loss = mean_sublists(training_histories['acc_train']), mean_sublists(training_histories['acc_val']), mean_sublists(training_histories['loss_val']), mean_sublists(training_histories['loss_val'])
+            best_val_auc = mean_sublists(training_histories['auc_val'])
+            print(f'{test_name}: average val AUC {best_val_auc}, average val accuracy: {best_val_acc}, average train accuracy: {best_train_acc}, average val loss: {best_val_loss}, average train loss: {best_train_loss}')
+            performance[m, locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
+    return performance
+
 def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
