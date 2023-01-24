@@ -297,7 +297,8 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
     elif data_type == 'pupil':
         sanity_check_pupil(x, y)
 
-    return x, y, epochs, event_ids, ps_group_eeg
+    # return x, y, epochs, event_ids, ps_group_eeg
+    return x, y, epochs, event_ids
 
 def rebalance_classes(x, y):
     epoch_shape = x.shape[1:]
@@ -509,5 +510,5 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
 
 def prepare_sample_label(rdf, event_names, event_filters, data_type='eeg', picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
     assert len(event_names) == len(event_filters) == 2
-    x, y, _, _, group = epochs_to_class_samples(rdf, event_names, event_filters, data_type=data_type, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
-    return x, y, group
+    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type=data_type, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
+    return x, y
