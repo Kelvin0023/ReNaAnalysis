@@ -8,8 +8,8 @@ from utils.Bidict import Bidict
 
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-# base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 export_data_root = 'C:/Data'
 # data_directory = "Subjects-Test"
@@ -119,6 +119,7 @@ l2_weight = 1e-5
 random_seed = 42
 
 # HDCA parameters
-split_window=100e-3
+split_window_eeg=100e-3
+split_window_pupil=500e-3
 num_folds = 10
 num_top_compoenents = 20

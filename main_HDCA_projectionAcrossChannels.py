@@ -32,9 +32,9 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
-rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
-print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
+# print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 # discriminant test  ####################################################################################################
 
 plt.rcParams.update({'font.size': 22})
@@ -48,11 +48,14 @@ event_filters =[lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and
 # event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
 
-x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
+# x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
 # x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
-pickle.dump(x, open('x_p1_s2_FLGI.p', 'wb'))
-pickle.dump(y, open('y_p1_s2_FLGI.p', 'wb'))
-pickle.dump(groups, open('g_p1_s2_FLGI.p', 'wb'))
+# pickle.dump(x, open('x_p1_s2_FLGI.p', 'wb'))
+# pickle.dump(y, open('y_p1_s2_FLGI.p', 'wb'))
+# pickle.dump(groups, open('g_p1_s2_FLGI.p', 'wb'))
+
+x = pickle.load(open('x_p1_s2_FLGI.p', 'rb'))
+y = pickle.load(open('y_p1_s2_FLGI.p', 'rb'))
 
 # pickle.dump(x, open('x_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
 # pickle.dump(y, open('y_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
@@ -63,7 +66,7 @@ pickle.dump(groups, open('g_p1_s2_FLGI.p', 'wb'))
 # groups = pickle.load(open('g_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
 
 # split data into 100ms bins
-split_size = int(split_window * exg_resample_srate)
+split_size = int(split_window_eeg * exg_resample_srate)
 # multi-fold cross-validation
 cross_val_folds = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
 _, num_eeg_channels, num_windows, num_timepoints_per_window = sliding_window_view(x, window_shape=split_size, axis=2)[:, :, 0::split_size, :].shape
@@ -76,7 +79,7 @@ tpr_folds = []
 
 x_transformed = compute_pca_ica(x, num_top_compoenents)  # apply ICA and PCA
 
-for i, (train, test) in enumerate(cross_val_folds.split(x, y, groups=groups)):  # cross-validation; group arguement is not necessary unless using grouped folds
+for i, (train, test) in enumerate(cross_val_folds.split(x, y)):  # cross-validation; group arguement is not necessary unless using grouped folds
     print(f"Working on {i+1} fold of {num_folds}")
 
     x_transformed_train, x_transformed_test, y_train, y_test = x_transformed[train], x_transformed[test], y[train], y[test]
@@ -112,7 +115,7 @@ for i, (train, test) in enumerate(cross_val_folds.split(x, y, groups=groups)):  
     tpr_folds.append(tpr)
     print(f'Fold {i}, auc is {roc_auc}')
 
-plot_forward(np.mean(activations_folds, axis=0), event_names, split_window, num_windows, notes=f"Average over {num_folds}-fold's test set")
+plot_forward(np.mean(activations_folds, axis=0), event_names, split_window_eeg, num_windows, notes=f"Average over {num_folds}-fold's test set")
 
 print(f"Best cross ROC-AUC is {np.max(roc_auc_folds)}")
 best_fold_i = np.argmax(roc_auc_folds)
@@ -126,7 +129,7 @@ plt.show()
 fig = plt.figure(figsize=(15, 10), constrained_layout=True)
 plt.boxplot(cw_weights_folds)
 # plt.plot(cross_window_weights)
-x_labels = [f"{int((i - 1) * split_window * 1e3)}ms" for i in range(num_windows)]
+x_labels = [f"{int((i - 1) * split_window_eeg * 1e3)}ms" for i in range(num_windows)]
 x_ticks = np.arange(0.5, num_windows+0.5, 1)
 plt.plot(list(range(1, num_windows+1)), np.mean(cw_weights_folds, axis=0), label="folds average")
 

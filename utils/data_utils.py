@@ -41,3 +41,13 @@ def compute_pca_ica(X, n_components):
 
 def mean_sublists(l):
     return np.mean([np.mean(x) for x in l])
+
+def z_norm_projection(x_train, x_test):
+    assert len(x_train.shape) == len(x_test.shape) == 2
+    projection_mean = np.mean(np.concatenate((x_train, x_test), axis=0), axis=0, keepdims=True)
+    projection_std = np.std(np.concatenate((x_train, x_test), axis=0), axis=0, keepdims=True)
+
+    return (x_train - projection_mean) / projection_std, (x_test - projection_mean) / projection_std
+
+def hdca(x, y, use_pupil):
+    pass

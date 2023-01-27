@@ -28,12 +28,12 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
     locking_performance = {}
     is_using_pupil = model == 'EEGPupil'
     for locking_name, locking_filter in locking_name_filters.items():
-        test_name = f'L {locking_name}, P {participant}, S {session}, Visaul Search'
+        test_name = f'L {locking_name}, P {participant}, S {session}, Visual Search'
         if regenerate_epochs:
             # x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
             x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both' if is_using_pupil else 'eeg', rebalance=False, participant=participant, session=session)
             pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
-            pickle.dump(y, open(os.path.join(export_data_root,f'y_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
+            pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
         else:
             try:
                 x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'rb'))

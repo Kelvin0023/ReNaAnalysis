@@ -277,7 +277,7 @@ def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, n
     return cross_window_weights, roc_auc, fpr, tpr
 
 
-def compute_window_projections(x_train_windowed, x_test_windowed, y_train, num_top_components=20):
+def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
     num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_train_windowed.shape
     num_test_trials = len(x_test_windowed)
 
