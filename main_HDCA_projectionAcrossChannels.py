@@ -1,27 +1,11 @@
 # analysis parameters ######################################################################################
-import os
 import pickle
 import time
 
-# analysis parameters ######################################################################################
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
-import torch.nn.functional as F
-from mne.decoding import UnsupervisedSpatialFilter
-from mne.viz import plot_topomap
-from numpy.lib.stride_tricks import sliding_window_view
-from sklearn import metrics
-from sklearn.decomposition import PCA, FastICA
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-import joblib
-from sklearn.model_selection import train_test_split, StratifiedGroupKFold, StratifiedKFold, StratifiedShuffleSplit
-
-from learning.HDCA import compute_window_projections, solve_crossbin_weights
-from utils.data_utils import compute_pca_ica, rebalance_classes
-from eye.eyetracking import GazeRayIntersect, Fixation
+from learning.HDCA import *
 from learning.train import prepare_sample_label
-from params import *
+
+# analysis parameters ######################################################################################
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
@@ -47,7 +31,7 @@ event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
 # event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
 
-x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
+x, y = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
 # x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
 # pickle.dump(x, open('x_p1_s2_FLGI.p', 'wb'))
 # pickle.dump(y, open('y_p1_s2_FLGI.p', 'wb'))
