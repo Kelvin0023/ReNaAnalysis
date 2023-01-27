@@ -54,10 +54,10 @@ def eval_lockings(rdf, event_names, locking_name_filters, participant, session, 
             elif model == 'EEGInception':
                 model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
             model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=test_name, verbose=0)
-        best_train_acc, best_val_acc, best_train_loss, best_val_loss = mean_sublists(training_histories['acc_train']), mean_sublists(training_histories['acc_val']), mean_sublists(training_histories['loss_val']), mean_sublists(training_histories['loss_val'])
-        best_val_auc = mean_sublists(training_histories['auc_val'])
-        print(f'{test_name}: average val AUC {best_val_auc}, average val accuracy: {best_val_acc}, average train accuracy: {best_train_acc}, average val loss: {best_val_loss}, average train loss: {best_train_loss}')
-        locking_performance[locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
+        mean_train_acc, mean_val_acc, mean_train_loss, mean_val_loss = mean_sublists(training_histories['acc_train']), mean_sublists(training_histories['acc_val']), mean_sublists(training_histories['loss_val']), mean_sublists(training_histories['loss_val'])
+        mean_val_auc = mean_sublists(training_histories['auc_val'])
+        print(f'{test_name}: average val AUC {mean_val_auc}, average val accuracy: {mean_val_acc}, average train accuracy: {mean_train_acc}, average val loss: {mean_val_loss}, average train loss: {mean_train_loss}')
+        locking_performance[locking_name] = {'average val auc': mean_val_auc, 'average val acc': mean_val_acc, 'average train acc': mean_train_acc, 'average val loss': mean_val_loss, 'average trian loss': mean_train_loss}
     return locking_performance
 
 def eval_lockings_models(rdf, event_names, locking_name_filters, participant, session, models=('EEGCNN', 'EEGInception', 'EEGPupil'), regenerate_epochs=True, reduce_dim=False):

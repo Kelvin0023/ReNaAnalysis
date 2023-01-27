@@ -358,11 +358,7 @@ def generate_eeg_event_epochs(raw, event_ids, tmin, tmax):
     #     event_durations.append(event_index - event_indices[i-1])
     # event_durations = np.array(event_durations)
 
-    epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin, tmax=tmax,
-                      baseline=(-0.1, 0.0),
-                      preload=True,
-                      verbose=False,
-                      picks='eeg')
+    epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin, tmax=tmax, baseline=(-0.1, 0.0),preload=True,verbose=False,picks='eeg')
 
     return epochs, epochs.events[:, 2]
 

@@ -1,9 +1,12 @@
-import numpy as np
+# analysis parameters ######################################################################################
 from mne.decoding import UnsupervisedSpatialFilter
 from sklearn.decomposition import PCA, FastICA
 
+from params import *
 from utils.utils import rescale_merge_exg
 
+
+# analysis parameters ######################################################################################
 
 def get_exg_data(data):
     eeg_data = data['BioSemi'][0][1:65, :]  # take only the EEG channels
@@ -49,5 +52,3 @@ def z_norm_projection(x_train, x_test):
 
     return (x_train - projection_mean) / projection_std, (x_test - projection_mean) / projection_std
 
-def hdca(x, y, use_pupil):
-    pass
