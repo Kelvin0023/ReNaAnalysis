@@ -4,10 +4,9 @@ import pickle
 
 import numpy as np
 import torch
-from imblearn.over_sampling import SMOTE
 from matplotlib import pyplot as plt
 from sklearn import preprocessing, metrics
-from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit
 from torch import nn
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
@@ -16,48 +15,56 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
+from learning.HDCA import hdca
 from learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
-from params import lr, epochs, batch_size, train_ratio, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
+from params import lr, epochs, batch_size, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
     export_data_root, num_top_compoenents
-from utils.data_utils import compute_pca_ica, mean_sublists
+from utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, mean_min_sublists
 
 
 def eval_lockings(rdf, event_names, locking_name_filters, participant, session, model, regenerate_epochs=True, reduce_dim=False):
     # verify number of event types
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
-    is_using_pupil = model == 'EEGPupil'
+    is_using_pupil = 'pupil' in str.lower(model)
     for locking_name, locking_filter in locking_name_filters.items():
-        test_name = f'L {locking_name}, P {participant}, S {session}, Visual Search'
+        test_name = f'Locking-{locking_name}, Model-{model}, P-{participant}, S-{session} Visual Search'
         if regenerate_epochs:
             # x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
-            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both' if is_using_pupil else 'eeg', rebalance=False, participant=participant, session=session)
-            pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
-            pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'wb'))
+            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session)
+            pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
+            pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
         else:
             try:
-                x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'rb'))
-                y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_Pupil{is_using_pupil}.p'), 'rb'))
+                x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+                y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
             except FileNotFoundError:
                 raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model == 'EEGPupil' else "")
+        x_eeg = np.copy(x[0])
         if reduce_dim:
-            if is_using_pupil:
-                x[0] = compute_pca_ica(x[0], num_top_compoenents)
-            else:
-                x = compute_pca_ica(x, num_top_compoenents)
-        if is_using_pupil:
-            model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
-            model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
+            x[0] = compute_pca_ica(x[0], num_top_compoenents)
+
+        if model == 'HDCA':
+            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=False)  # give the original eeg data
+            locking_performance[locking_name, 'HDCA EEG'] = {'folds val auc': roc_auc_eeg}
+            locking_performance[locking_name, 'HDCA Pupil'] = {'folds val auc': roc_auc_pupil}
+            locking_performance[locking_name, 'HDCA EEG-Pupil'] = {'folds val auc': roc_auc_combined}
+            print(f'{test_name}: folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}')
+
         else:
-            if model == 'EEGCNN':
-                model = EEGCNN(in_shape=x.shape, num_classes=2, in_channels=20 if reduce_dim else 64)
-            elif model == 'EEGInception':
-                model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
-            model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=test_name, verbose=0)
-        mean_train_acc, mean_val_acc, mean_train_loss, mean_val_loss = mean_sublists(training_histories['acc_train']), mean_sublists(training_histories['acc_val']), mean_sublists(training_histories['loss_val']), mean_sublists(training_histories['loss_val'])
-        mean_val_auc = mean_sublists(training_histories['auc_val'])
-        print(f'{test_name}: average val AUC {mean_val_auc}, average val accuracy: {mean_val_acc}, average train accuracy: {mean_train_acc}, average val loss: {mean_val_loss}, average train loss: {mean_train_loss}')
-        locking_performance[locking_name] = {'average val auc': mean_val_auc, 'average val acc': mean_val_acc, 'average train acc': mean_train_acc, 'average val loss': mean_val_loss, 'average trian loss': mean_train_loss}
+            if model == 'EEGPupilCNN':
+                model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
+                model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
+            else:
+                if model == 'EEGCNN':
+                    model = EEGCNN(in_shape=x[0].shape, num_classes=2, in_channels=20 if reduce_dim else 64)
+                elif model == 'EEGInception':
+                    model = EEGInceptionNet(in_shape=x[0].shape, num_classes=2)
+                model, training_histories, criterion, label_encoder = train_model(x[0], y, model, test_name=test_name, verbose=0)
+            folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
+            folds_val_auc = mean_max_sublists(training_histories['auc_val'])
+            print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
+            locking_performance[locking_name, model] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss, 'folds trian loss': folds_train_loss}
     return locking_performance
 
 def eval_lockings_models(rdf, event_names, locking_name_filters, participant, session, models=('EEGCNN', 'EEGInception', 'EEGPupil'), regenerate_epochs=True, reduce_dim=False):
@@ -333,13 +340,6 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
     # return x, y, epochs, event_ids, ps_group_eeg
     return x, y, epochs, event_ids
 
-def rebalance_classes(x, y):
-    epoch_shape = x.shape[1:]
-    x = np.reshape(x, newshape=(len(x), -1))
-    sm = SMOTE(random_state=42)
-    x, y = sm.fit_resample(x, y)
-    x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
-    return x, y
 
 def sanity_check_eeg(x, y, picks):
     coi = picks.index('CPz') if picks else eeg_montage.ch_names.index('CPz')

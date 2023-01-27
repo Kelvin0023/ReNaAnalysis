@@ -17,11 +17,10 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 import joblib
 from sklearn.model_selection import train_test_split, StratifiedGroupKFold, StratifiedKFold, StratifiedShuffleSplit
 
-from RenaAnalysis import compute_forward, plot_forward, solve_crossbin_weights, \
-    compute_window_projections, get_rdf
-from utils.data_utils import compute_pca_ica
+from learning.HDCA import compute_window_projections, solve_crossbin_weights
+from utils.data_utils import compute_pca_ica, rebalance_classes
 from eye.eyetracking import GazeRayIntersect, Fixation
-from learning.train import rebalance_classes, prepare_sample_label
+from learning.train import prepare_sample_label
 from params import *
 
 torch.manual_seed(random_seed)
@@ -32,7 +31,7 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf()
-# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 # print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 # discriminant test  ####################################################################################################
@@ -41,29 +40,26 @@ plt.rcParams.update({'font.size': 22})
 # colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
 event_names = ["Distractor", "Target"]
-event_filters =[lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
-                     lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
-# event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-#                  lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
+# event_filters =[lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
+#                      lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
+event_filters = [lambda x: x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                 lambda x: x.dtn_onffset and x.dtn==dtnn_types["Target"]]
 # event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Distractor"],
 #                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
 
-# x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
+x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2)  # pick all EEG channels
 # x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
 # pickle.dump(x, open('x_p1_s2_FLGI.p', 'wb'))
 # pickle.dump(y, open('y_p1_s2_FLGI.p', 'wb'))
-# pickle.dump(groups, open('g_p1_s2_FLGI.p', 'wb'))
 
-x = pickle.load(open('x_p1_s2_FLGI.p', 'rb'))
-y = pickle.load(open('y_p1_s2_FLGI.p', 'rb'))
+# x = pickle.load(open('x_p1_s2_FLGI.p', 'rb'))
+# y = pickle.load(open('y_p1_s2_FLGI.p', 'rb'))
 
 # pickle.dump(x, open('x_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
 # pickle.dump(y, open('y_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
-# pickle.dump(groups, open('g_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
 
 # x = pickle.load(open('x_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
 # y = pickle.load(open('y_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
-# groups = pickle.load(open('g_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
 
 # split data into 100ms bins
 split_size = int(split_window_eeg * exg_resample_srate)
