@@ -88,12 +88,12 @@ class RenaDataFrame:
         """
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
-        pupil_epochs = None  # clear epochs
+        pupil_epochs_all = None  # clear epochs
         event_ids = None
         ps_group = []
 
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
-            print('Getting pupil epochs for participant {} session {}'.format(p, s))
+            # print('Getting pupil epochs for participant {} session {}'.format(p, s))
             eye_data = data[varjoEyetracking_preset["StreamName"]][0]
             pupil_left_data = eye_data[varjoEyetracking_preset["ChannelNames"].index('left_pupil_size'), :]
             pupil_right_data = eye_data[varjoEyetracking_preset["ChannelNames"].index('right_pupil_size'), :]
@@ -106,15 +106,16 @@ class RenaDataFrame:
                 warnings.warn(f'No epochs found for participant {p} session {s} after rejection, skipping')
             else:
                 print(f'Found {len(epochs_pupil)} pupil epochs for participant {p} session {s}')
-            pupil_epochs = epochs_pupil if pupil_epochs is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs])
-            ps_group += [i] * len(pupil_epochs)
+            pupil_epochs_all = epochs_pupil if pupil_epochs_all is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs_all])
+            ps_group += [i] * len(epochs_pupil)
+            print(f"ps_group length is {len(ps_group)}")
 
-        return pupil_epochs, event_ids, ps_group
+        return pupil_epochs_all, event_ids, ps_group
 
     def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None):
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
-        eeg_epochs = None  # clear epochs
+        eeg_epochs_all = None  # clear epochs
         event_ids = None
         ps_group = []
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
@@ -126,11 +127,11 @@ class RenaDataFrame:
                 warnings.warn(f'No epochs found for participant {p} session {s} after rejection, skipping')
             else:
                 print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
-                eeg_epochs = epochs if eeg_epochs is None else mne.concatenate_epochs([epochs, eeg_epochs])
+                eeg_epochs_all = epochs if eeg_epochs_all is None else mne.concatenate_epochs([epochs, eeg_epochs_all])
             ps_group += [i] * len(epochs)
         print("Auto rejecting epochs")
         ar = AutoReject(n_jobs=20, verbose=False)
-        eeg_epochs_clean, log = ar.fit_transform(eeg_epochs, return_log=True)
+        eeg_epochs_clean, log = ar.fit_transform(eeg_epochs_all, return_log=True)
         ps_group = np.array(ps_group)[np.logical_not(log.bad_epochs)]
 
         return eeg_epochs_clean, event_ids, log, ps_group

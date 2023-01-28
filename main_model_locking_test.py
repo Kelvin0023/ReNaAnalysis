@@ -32,7 +32,7 @@ plt.rcParams.update({'font.size': 22})
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
 event_names = ["Distractor", "Target"]
-locking_name_filters = {
+locking_name_filters_vs = {
                         # 'RSVP-Item-Onset': [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                         #                     lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]],
                         #
@@ -46,7 +46,9 @@ locking_name_filters = {
                         'VS-I-VT': [lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT' and x.dtn==dtnn_types["Distractor"],
                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT' and x.dtn==dtnn_types["Target"]],
                        'VS-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
-                                 lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]],
+                                 lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]}
+
+locking_name_filters_constrained = {
 
                         'RSVP-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
@@ -65,12 +67,20 @@ locking_name_filters = {
                                         lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-VT' and x.dtn == dtnn_types["Target"]],
                         'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
                                                 lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]} #nyamu <3
+
 models = ['HDCA', 'EEGCNN', 'EEGPupilCNN']
 
 results = dict()
 is_regenerate_epochs = True
+
 for m in models:
-    m_results = eval_lockings(rdf, event_names, locking_name_filters, participant='1', session=2, model=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
+    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
     is_regenerate_epochs = False
     results = {**m_results, **results}
+
+for m in models:
+    m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
+    is_regenerate_epochs = False
+    results = {**m_results, **results}
+
 pickle.dump(results, open('model_locking_performances', 'wb'))

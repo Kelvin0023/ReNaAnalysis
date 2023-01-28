@@ -22,7 +22,7 @@ from params import lr, epochs, batch_size, model_save_dir, patience, eeg_montage
 from utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, mean_min_sublists
 
 
-def eval_lockings(rdf, event_names, locking_name_filters, participant, session, model, regenerate_epochs=True, reduce_dim=False):
+def eval_lockings(rdf, event_names, locking_name_filters,  model, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
     # verify number of event types
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
