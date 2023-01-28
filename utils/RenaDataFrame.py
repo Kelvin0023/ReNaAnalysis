@@ -120,8 +120,11 @@ class RenaDataFrame:
         ps_group = []
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
-
-            epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax)
+            try:
+                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax)
+            except ValueError:
+                print(f"Not EEG epochs found participant {p}, session {s}, skipping")
+                continue
             # check_contraint_block_counts(events, deviant + len(epochs))  # TODO only taken into account constraint conditions
             if len(epochs) == 0:
                 warnings.warn(f'No epochs found for participant {p} session {s} after rejection, skipping')

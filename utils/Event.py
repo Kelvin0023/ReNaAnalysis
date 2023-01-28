@@ -61,7 +61,7 @@ def add_event_meta_info(event, events):
     :param events:
     :return:
     """
-    event.condition = get_closest_event_attribute_before(events, event.timestamp, 'block_condition',
+    event.block_condition = get_closest_event_attribute_before(events, event.timestamp, 'block_condition',
                                                          event_filter=lambda e: e.is_block_start)  # must be a block start event
     event.is_practice = get_closest_event_attribute_before(events, event.timestamp, 'is_practice',
                                                            event_filter=lambda e: e.is_block_start)  # must be a block start event
@@ -134,6 +134,7 @@ def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, 
     for i, e_filter in enumerate(event_filters):
         filtered_events = np.array([e for e in events if e_filter(e)])
         event_ts = [e.timestamp for e in filtered_events]
+
 
         event_data_indices = [np.argmin(np.abs(data_timestamp - t)) for t in event_ts if np.min(np.abs(data_timestamp - t)) < deviate]
 
