@@ -50,7 +50,7 @@ def plot_forward(activation, event_names, split_window, num_windows, notes):
             plot_topomap(a, info, axes=axes[i - 1], show=False, res=512, vlim=(np.min(activation), np.max(activation)))
             axes[i - 1].set_title(f"{int((i - 1) * split_window * 1e3)}-{int(i * split_window * 1e3)}ms")
         subfigs[class_index].suptitle(e_name)
-    fig.suptitle(f"Activation map from Fisher Discriminant Analysis. {notes}", fontsize='x-large')
+    fig.suptitle(f"{notes} Activation map from Fisher Discriminant Analysis. ", fontsize='x-large')
     plt.show()
 
 class linearRegression(torch.nn.Module):
@@ -274,7 +274,7 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
         # print(f'Fold {i}, auc is {roc_auc_folds[i]}')
 
     plot_forward(np.mean(activations_folds, axis=0), event_names, split_window_eeg, num_windows_eeg,
-                 notes=f"Average over {num_folds}-fold's test set")
+                 notes=f"{notes} Average over {num_folds}-fold's test set")
 
     if verbose:
         print(f"Mean EEG cross ROC-AUC is {np.mean(roc_auc_folds_eeg)}")
