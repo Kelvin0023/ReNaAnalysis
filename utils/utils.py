@@ -141,7 +141,7 @@ def get_dtn_events(event_markers, event_marker_timestamps, block_events):
     for i, dtn_time in enumerate(dtn_timestamps):
         e = Event(dtn_time, dtn=abs(dtn[i]), item_id=item_ids[i], obj_dist=obj_dists[i])
         e = add_event_meta_info(e, block_events)
-        if e.condition == conditions['Carousel']:
+        if e.block_condition == conditions['Carousel']:
             e.carousel_speed, e.carousel_angle = carousel_speed[i], carousel_angle[i]
 
         e.dtn_onffset = dtn[i] > 0
