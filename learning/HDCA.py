@@ -61,7 +61,7 @@ class linearRegression(torch.nn.Module):
         out = self.linear(x)
         return out
 
-def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, num_windows, method='torch'):
+def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, num_windows, method='sklearn', verbose=0):
     if method == 'torch':
         use_cuda = torch.cuda.is_available()
         device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -96,11 +96,11 @@ def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, n
                 loss_test = criterion(y_pred, _y_test) + l2_penalty
                 fpr, tpr, thresholds = metrics.roc_curve(y_test, y_pred.detach().cpu().numpy())
                 test_roc_auc = metrics.auc(fpr, tpr)
-            # print(f"epoch {epoch}, train loss is {loss.item()}, test loss is {loss_test.item()}, test auc is {test_roc_auc}")
+            if verbose: print(f"epoch {epoch}, train loss is {loss.item()}, test loss is {loss_test.item()}, test auc is {test_roc_auc}")
 
             if test_roc_auc > best_roc_auc:
                 torch.save(model.state_dict(), model_path)
-                # print(f'Best model auc improved from {best_roc_auc} to {test_roc_auc}, saved best model to {model_save_dir}')
+                if verbose: print(f'Best model auc improved from {best_roc_auc} to {test_roc_auc}, saved best model to {model_save_dir}')
                 best_roc_auc = test_roc_auc
         # load the best model back
         best_model = linearRegression(num_windows, 1).to(device)
@@ -110,7 +110,7 @@ def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, n
             y_pred = y_pred.detach().cpu().numpy()
             cross_window_weights = model.linear.weight.detach().cpu().numpy()[0, :]
     else:
-        model = LogisticRegression(random_state=random_seed, max_iter=epochs, fit_intercept=False, penalty='l2', solver='liblinear').fit(projection_train, y_train)
+        model = LogisticRegression(random_state=random_seed, max_iter=epochs, fit_intercept=True, penalty='l2', solver='saga').fit(projection_train, y_train)
         y_pred = model.predict(projection_test)
         cross_window_weights = np.squeeze(model.coef_, axis=0)
 
@@ -154,7 +154,7 @@ def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
     return weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial
 
 
-def hdca(x, y, event_names, is_plots=False, verbose=0):
+def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
 
     # split data into 100ms bins
     split_size_eeg = int(split_window_eeg * exg_resample_srate)
@@ -271,7 +271,7 @@ def hdca(x, y, event_names, is_plots=False, verbose=0):
         roc_auc_folds_eeg[i] = roc_auc_eeg
         fpr_folds_eeg.append(fpr_eeg)
         tpr_folds_eeg.append(tpr_eeg)
-        # print(f'Fold {i}, auc is {roc_auc_folds[-1]}')
+        # print(f'Fold {i}, auc is {roc_auc_folds[i]}')
 
     plot_forward(np.mean(activations_folds, axis=0), event_names, split_window_eeg, num_windows_eeg,
                  notes=f"Average over {num_folds}-fold's test set")
@@ -287,7 +287,7 @@ def hdca(x, y, event_names, is_plots=False, verbose=0):
         fig = plt.figure(figsize=(10, 10), constrained_layout=True)
         display.plot(ax=plt.gca(), name='ROC')
         plt.tight_layout()
-        plt.title("Pupil ROC of the best cross-val fold")
+        plt.title(f"{notes} Pupil ROC of the best cross-val fold")
         plt.show()
 
         best_fold_i = np.argmax(roc_auc_folds_pupil)
@@ -296,7 +296,7 @@ def hdca(x, y, event_names, is_plots=False, verbose=0):
         fig = plt.figure(figsize=(10, 10), constrained_layout=True)
         display.plot(ax=plt.gca(), name='ROC')
         plt.tight_layout()
-        plt.title("EEG ROC of the best cross-val fold")
+        plt.title(f"{notes} EEG ROC of the best cross-val fold")
         plt.show()
 
         fig = plt.figure(figsize=(15, 10), constrained_layout=True)
@@ -309,7 +309,7 @@ def hdca(x, y, event_names, is_plots=False, verbose=0):
         plt.xticks(ticks=x_ticks, labels=x_labels)
         plt.xlabel("100 ms windowed bins")
         plt.ylabel("Cross-bin weights")
-        plt.title(f'Cross-bin weights, {num_folds}-fold cross validation')
+        plt.title(f'{notes} Cross-bin weights, {num_folds}-fold cross validation')
         plt.legend()
         plt.tight_layout()
         plt.show()
@@ -324,7 +324,7 @@ def hdca(x, y, event_names, is_plots=False, verbose=0):
         plt.xticks(ticks=x_ticks, labels=x_labels)
         plt.xlabel("500 ms windowed bins")
         plt.ylabel("Cross-bin weights")
-        plt.title(f'Cross-bin weights, {num_folds}-fold cross validation')
+        plt.title(f'{notes} Cross-bin weights, {num_folds}-fold cross validation')
         plt.legend()
         plt.tight_layout()
         plt.show()

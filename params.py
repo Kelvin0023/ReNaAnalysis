@@ -8,8 +8,8 @@ from utils.Bidict import Bidict
 
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-# base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 export_data_root = 'C:/Data'
 # data_directory = "Subjects-Test"
@@ -110,7 +110,7 @@ pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 
 lr = 1e-3
 batch_size = 64
-epochs = 2000
+epochs = 5000
 patience = 75
 train_ratio = 0.8
 model_save_dir = 'learning/saved_models'

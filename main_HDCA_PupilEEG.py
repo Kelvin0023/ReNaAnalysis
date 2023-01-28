@@ -5,24 +5,15 @@ import time
 
 # analysis parameters ######################################################################################
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
-import torch.nn.functional as F
-from mne.decoding import UnsupervisedSpatialFilter
-from mne.viz import plot_topomap
 from numpy.lib.stride_tricks import sliding_window_view
 from sklearn import metrics
-from sklearn.decomposition import PCA, FastICA
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-import joblib
-from sklearn.model_selection import train_test_split, StratifiedGroupKFold, StratifiedKFold, StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit
 
-from RenaAnalysis import compute_forward, plot_forward, solve_crossbin_weights, \
-    compute_window_projections, get_rdf
-from utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
-from eye.eyetracking import GazeRayIntersect, Fixation
+from learning.HDCA import compute_forward, compute_window_projections, solve_crossbin_weights, plot_forward
 from learning.train import prepare_sample_label
 from params import *
+from utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
@@ -41,13 +32,17 @@ plt.rcParams.update({'font.size': 22})
 # colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 
 event_names = ["Distractor", "Target"]
-event_filters =[lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
-                     lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
+# event_filters =[lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
+#                  lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
 
-# x, y = prepare_sample_label(rdf, event_names, event_filters, picks=None, participant='1', session=2, data_type='both')  # pick all EEG channels
-# x, y, groups = prepare_sample_label(rdf, event_names, event_filters, picks=None)  # pick all EEG channels
-# pickle.dump(x, open('x_p1_s2_FLGI.p', 'wb'))
-# pickle.dump(y, open('y_p1_s2_FLGI.p', 'wb'))
+event_filters = [
+        lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Distractor"],
+        lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]
+]
+
+# x, y = prepare_sample_label(rdf, event_names, event_filters, picks=None, data_type='both')  # pick all EEG channels
+# pickle.dump(x, open('x_item_onset.p', 'wb'))
+# pickle.dump(y, open('y_item_onset.p', 'wb'))
 
 # pickle.dump(x, open('x_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
 # pickle.dump(y, open('y_allParticipantSessions_constrained_ItemLocked.p', 'wb'))
@@ -57,9 +52,8 @@ event_filters =[lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and
 # y = pickle.load(open('y_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
 # groups = pickle.load(open('g_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
 
-x = pickle.load(open('x_p1_s2_FLGI.p', 'rb'))
-y = pickle.load(open('y_p1_s2_FLGI.p', 'rb'))
-
+x = pickle.load(open('x_item_onset.p', 'rb'))
+y = pickle.load(open('y_item_onset.p', 'rb'))
 
 use_pupil = True
 
@@ -131,15 +125,15 @@ for i, (train, test) in enumerate(cross_val_folds.split(x[0], y)):  # cross-vali
     projection_train_window_trial_eeg, projection_test_window_trial_eeg = z_norm_projection(projection_train_window_trial_eeg, projection_test_window_trial_eeg)
 
     print('Solving cross bin weights')
-    cw_weights_eeg, roc_auc_eeg, fpr_eeg, tpr_eeg = solve_crossbin_weights(projection_train_window_trial_eeg, projection_test_window_trial_eeg, y_train, y_test, num_windows_eeg)
+    cw_weights_eeg, roc_auc_eeg, fpr_eeg, tpr_eeg = solve_crossbin_weights(projection_train_window_trial_eeg, projection_test_window_trial_eeg, y_train, y_test, num_windows_eeg, method='liblinear', verbose=1)
 
     if use_pupil:
-        cw_weights_pupil, roc_auc_pupil, fpr_pupil, tpr_pupil = solve_crossbin_weights(projection_train_window_trial_pupil, projection_test_window_trial_pupil, y_train, y_test, num_windows_pupil)
+        cw_weights_pupil, roc_auc_pupil, fpr_pupil, tpr_pupil = solve_crossbin_weights(projection_train_window_trial_pupil, projection_test_window_trial_pupil, y_train, y_test, num_windows_pupil, method='liblinear', verbose=1)
 
         projection_combined_train = np.concatenate([projection_train_window_trial_eeg, projection_train_window_trial_pupil], axis=1)
         projection_combined_test = np.concatenate([projection_test_window_trial_eeg, projection_test_window_trial_pupil], axis=1)
 
-        cw_weights_combined, roc_auc_combined, fpr_combined, tpr_combined = solve_crossbin_weights(projection_train_window_trial_pupil, projection_test_window_trial_pupil, y_train, y_test, num_windows_pupil)
+        cw_weights_combined, roc_auc_combined, fpr_combined, tpr_combined = solve_crossbin_weights(projection_train_window_trial_pupil, projection_test_window_trial_pupil, y_train, y_test, num_windows_pupil, method='liblinear', verbose=1)
 
         cw_weights_pupil_folds[i] = cw_weights_pupil
         roc_auc_folds_pupil[i] = roc_auc_pupil
@@ -158,8 +152,11 @@ for i, (train, test) in enumerate(cross_val_folds.split(x[0], y)):  # cross-vali
     fpr_folds.append(fpr_eeg if not use_pupil else fpr_combined)
     tpr_folds.append(tpr_eeg if not use_pupil else tpr_combined)
 
-    print(f'Fold {i}, auc is {roc_auc_folds[-1]}')
+    print(f'Fold {i}, auc is {roc_auc_folds[i]}')
 
+print(f'Average auc is {np.mean(roc_auc_folds)} ')
+print(f'Average EEG auc is {np.mean(roc_auc_folds_eeg)} ')
+print(f'Average Pupil auc is {np.mean(roc_auc_folds_pupil)} ')
 plot_forward(np.mean(activations_folds, axis=0), event_names, split_window_eeg, num_windows_eeg, notes=f"Average over {num_folds}-fold's test set")
 
 print(f"Best cross ROC-AUC is {np.max(roc_auc_folds)}")
