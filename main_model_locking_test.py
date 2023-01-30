@@ -67,18 +67,19 @@ locking_name_filters_constrained = {
                         'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
                                                 lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]} #nyamu <3
 
-models = ['EEGCNN', 'HDCA', 'EEGPupilCNN']
+models = ['EEGPupilCNN', 'EEGCNN', 'HDCA']
 
 results = dict()
 is_regenerate_epochs = False
 
 for m in models:
-    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
+    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
     is_regenerate_epochs = False
     results = {**m_results, **results}
 
+is_regenerate_epochs = True
 for m in models:
-    m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
+    m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
     is_regenerate_epochs = False
     results = {**m_results, **results}
 

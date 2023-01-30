@@ -481,9 +481,10 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
                                 desc='Validating {}'.format(test_name))
                     pbar.update(mini_batch_i := 0)
                 batch_losses = []
-                batch_aucs =[]
+                # batch_aucs =[]
                 num_correct_preds = 0
-
+                y_val = np.empty((0, 2))
+                y_val_pred = np.empty((0, 2))
                 for (x_eeg, y), (x_pupil, y) in zip(val_dataloader_eeg, val_dataloader_pupil):
                     mini_batch_i += 1
                     if verbose >= 1: pbar.update(1)
@@ -492,13 +493,17 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
                     # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                     y_tensor = y.to(device)
                     loss = criterion(y_tensor, y_pred)
-                    roc_auc = metrics.roc_auc_score(y, y_pred.detach().cpu().numpy())
-                    batch_aucs.append(roc_auc)
+                    # roc_auc = metrics.roc_auc_score(y, y_pred.detach().cpu().numpy())
+                    # batch_aucs.append(roc_auc)
+
+                    y_val = np.concatenate([y_val, y.detach().cpu().numpy()])
+                    y_val_pred = np.concatenate([y_val_pred, y_pred.detach().cpu().numpy()])
+
                     batch_losses.append(loss.item())
                     num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
                     if verbose >= 1:pbar.set_description('Validating [{}]: loss:{:.8f}, loss:{:.8f}'.format(mini_batch_i, loss.item(),roc_auc))
 
-                val_aucs.append(np.mean(batch_aucs))
+                val_aucs.append(metrics.roc_auc_score(y_val, y_val_pred))
                 val_losses.append(np.mean(batch_losses))
                 val_accs.append(num_correct_preds / val_size)
                 if verbose >= 1:pbar.close()
