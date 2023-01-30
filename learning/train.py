@@ -22,13 +22,13 @@ from params import lr, epochs, batch_size, model_save_dir, patience, eeg_montage
 from utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, mean_min_sublists
 
 
-def eval_lockings(rdf, event_names, locking_name_filters,  model, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
+def eval_lockings(rdf, event_names, locking_name_filters,  model_name, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
     # verify number of event types
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
-    is_using_pupil = 'pupil' in str.lower(model)
+    is_using_pupil = 'pupil' in str.lower(model_name)
     for locking_name, locking_filter in locking_name_filters.items():
-        test_name = f'Locking-{locking_name}, Model-{model}, P-{participant}, S-{session} Visual Search'
+        test_name = f'Locking-{locking_name}_Model-{model_name}_P-{participant}_S-{session}_Visual-Search'
         if regenerate_epochs:
             # x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
             x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session)
@@ -39,12 +39,12 @@ def eval_lockings(rdf, event_names, locking_name_filters,  model, participant=No
                 x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
                 y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
             except FileNotFoundError:
-                raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model == 'EEGPupil' else "")
+                raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model_name == 'EEGPupil' else "")
         x_eeg = np.copy(x[0])
         if reduce_dim:
             x[0] = compute_pca_ica(x[0], num_top_compoenents)
 
-        if model == 'HDCA':
+        if model_name == 'HDCA':
             roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n')  # give the original eeg data
             locking_performance[locking_name, 'HDCA EEG'] = {'folds val auc': roc_auc_eeg}
             locking_performance[locking_name, 'HDCA Pupil'] = {'folds val auc': roc_auc_pupil}
@@ -52,13 +52,13 @@ def eval_lockings(rdf, event_names, locking_name_filters,  model, participant=No
             print(f'{test_name}: folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}')
 
         else:
-            if model == 'EEGPupilCNN':
+            if model_name == 'EEGPupilCNN':
                 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
             else:
-                if model == 'EEGCNN':
+                if model_name == 'EEGCNN':
                     model = EEGCNN(in_shape=x[0].shape, num_classes=2, in_channels=20 if reduce_dim else 64)
-                elif model == 'EEGInception':
+                elif model_name == 'EEGInception':
                     model = EEGInceptionNet(in_shape=x[0].shape, num_classes=2)
                 model, training_histories, criterion, label_encoder = train_model(x[0], y, model, test_name=test_name, verbose=0)
             folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
@@ -197,9 +197,10 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
                             desc='Validating {}'.format(test_name))
                     pbar.update(mini_batch_i := 0)
                 batch_losses = []
-                batch_aucs =[]
+                # batch_aucs =[]
                 num_correct_preds = 0
-
+                y_val = np.empty((0, 2))
+                y_val_pred = np.empty((0, 2))
                 for x, y in val_dataloader:
                     mini_batch_i += 1
                     if verbose >= 1: pbar.update(1)
@@ -209,13 +210,16 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
                     y_tensor = y.to(device)
                     loss = criterion(y_tensor, y_pred)
                     # fpr, tpr, thresholds = metrics.roc_curve(y, y_pred.detach().cpu().numpy())
-                    roc_auc = metrics.roc_auc_score(y, y_pred.detach().cpu().numpy())
-                    batch_aucs.append(roc_auc)
+                    # roc_auc = metrics.roc_auc_score(y, y_pred.detach().cpu().numpy())
+                    y_val = np.concatenate([y_val, y.detach().cpu().numpy()])
+                    y_val_pred = np.concatenate([y_val_pred, y_pred.detach().cpu().numpy()])
+
+                    # batch_aucs.append(roc_auc)
                     batch_losses.append(loss.item())
                     num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
-                    if verbose >= 1: pbar.set_description('Validating [{}]: loss:{:.8f}, auc:{:.8f}'.format(mini_batch_i, loss.item(), roc_auc))
+                    if verbose >= 1: pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
 
-                val_aucs.append(np.mean(batch_aucs))
+                val_aucs.append(metrics.roc_auc_score(y_val, y_val_pred))
                 val_losses.append(np.mean(batch_losses))
                 val_accs.append(num_correct_preds / val_size)
                 if verbose >= 1: pbar.close()

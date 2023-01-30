@@ -256,7 +256,7 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
             [projection_test_window_trial_eeg, projection_test_window_trial_pupil], axis=1)
 
         cw_weights_combined, roc_auc_combined, fpr_combined, tpr_combined = solve_crossbin_weights(
-            projection_train_window_trial_pupil, projection_test_window_trial_pupil, y_train, y_test,
+            projection_combined_train, projection_combined_test, y_train, y_test,
             num_windows_pupil)
 
         cw_weights_pupil_folds[i] = cw_weights_pupil
