@@ -38,7 +38,7 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 
 selected_locking = 'RSVP-Item-Onset'
 export_data_root = 'data/'
-is_regenerate_rdf = True
+is_regenerate_rdf = False
 
 
 # start of the main block ##############################################################################

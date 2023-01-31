@@ -32,7 +32,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1,
     colors = {'Distractor': 'blue', 'Target': 'red'}
     plt.rcParams.update({'font.size': 22})
     assert len(event_names) == len(event_filters) == 2
-    x, y, _ = prepare_sample_label(rdf, event_names, event_filters, picks=eeg_picks, data_type='eeg', tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg)
+    x, y = prepare_sample_label(rdf, event_names, event_filters, picks=eeg_picks, data_type='eeg', tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg)
     r_square_grid = np.zeros(x.shape[1:])
     d_prime_grid = np.zeros(x.shape[1:])
 
