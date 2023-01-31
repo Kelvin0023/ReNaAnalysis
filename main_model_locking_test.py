@@ -1,4 +1,5 @@
 # analysis parameters ######################################################################################
+import copy
 import os
 import pickle
 import time
@@ -67,7 +68,7 @@ locking_name_filters_constrained = {
                         'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
                                                 lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]} #nyamu <3
 
-models = ['EEGPupilCNN', 'EEGCNN', 'HDCA']
+models = ['HDCA', 'EEGPupilCNN', 'EEGCNN']
 
 results = dict()
 is_regenerate_epochs = False
@@ -77,10 +78,51 @@ for m in models:
     is_regenerate_epochs = False
     results = {**m_results, **results}
 
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 for m in models:
     m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
     is_regenerate_epochs = False
     results = {**m_results, **results}
 
 pickle.dump(results, open('model_locking_performances', 'wb'))
+
+
+# import pickle
+#
+# results = pickle.load(open('model_locking_performances', 'rb'))
+# new_results = dict()
+# for key, value in results.items():
+#     new_key = copy.copy(key)
+#     if type(key[1]) is not str:
+#         i = str(key[1]).index('(')
+#         new_key = (new_key[0], str(new_key[1])[:i])
+#     new_results[new_key] = value
+# pickle.dump(new_results, open('model_locking_performances', 'wb'))
+# exit()
+plt.rcParams["figure.figsize"] = (24, 12)
+
+models = ['EEGPupilCNN', 'EEGCNN', 'HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil']
+constrained_conditions = ['RSVP', 'Carousel']
+conditions = ['RSVP', 'Carousel', 'VS']
+constrained_lockings = ['Item-Onset', 'I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
+lockings = ['I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
+
+width = 0.175
+
+for c in conditions:
+    this_lockings = lockings if c not in constrained_conditions else constrained_lockings
+    ind = np.arange(len(this_lockings))
+
+    for m_index, m in enumerate(models):
+        aucs = [results[(f'{c}-{l}', m)]['folds val auc'] for l in this_lockings]  # get the auc for each locking
+
+        plt.bar(ind + m_index * width, aucs, width, label=f'{m}')
+        for j in range(len(aucs)):
+            plt.text(ind[j] + m_index * width, aucs[j] + 0.05, str(round(aucs[j], 3)), horizontalalignment='center',verticalalignment='center')
+
+    plt.ylim(0.0, 1.1)
+    plt.ylabel('AUC')
+    plt.title(f'Condition {c}, Accuracy by model and lockings')
+    plt.xticks(ind + width / 2, this_lockings)
+    plt.legend(loc=4)
+    plt.show()
