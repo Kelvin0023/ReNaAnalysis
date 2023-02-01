@@ -10,9 +10,9 @@ import numpy as np
 import torch
 
 from RenaAnalysis import get_rdf
-from eye.eyetracking import Fixation, GazeRayIntersect
+from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.train import eval_lockings
-from params import *
+from renaanalysis.params.params import *
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
@@ -21,9 +21,9 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-# rdf = get_rdf()
-rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
-# pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
+rdf = get_rdf()
+# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # lockings test  ####################################################################################################
@@ -71,14 +71,14 @@ locking_name_filters_constrained = {
 models = ['HDCA', 'EEGPupilCNN', 'EEGCNN']
 
 results = dict()
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 
 for m in models:
     m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
     is_regenerate_epochs = False
     results = {**m_results, **results}
 
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 for m in models:
     m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
     is_regenerate_epochs = False

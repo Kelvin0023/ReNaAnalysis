@@ -3,7 +3,7 @@ from imblearn.over_sampling import SMOTE
 from mne.decoding import UnsupervisedSpatialFilter
 from sklearn.decomposition import PCA, FastICA
 
-from params import *
+from renaanalysis.params.params import *
 from renaanalysis.utils.utils import rescale_merge_exg
 
 

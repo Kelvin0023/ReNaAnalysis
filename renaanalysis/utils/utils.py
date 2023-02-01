@@ -2,15 +2,18 @@ import os
 
 import imblearn
 import matplotlib.pyplot as plt
+import mne
 import numpy as np
 import scipy
 from imblearn.over_sampling import SMOTE
 from mne import Epochs
 from scipy.interpolate import interp1d
 
-from eye.eyetracking import Saccade, GazeRayIntersect
-from params import *
-from utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, \
+from renaanalysis.eye.eyetracking import Saccade, GazeRayIntersect
+from renaanalysis.params.params import eventmarker_preset, conditions, item_marker_names, eyetracking_resample_srate, \
+    tmax_pupil, tmin_pupil_viz, tmax_pupil_viz, tmin_pupil, eeg_picks, tmin_eeg_viz, tmax_eeg_viz, eeg_channel_names, \
+    ecg_ch_name, eeg_montage, exg_resample_srate, is_regenerate_ica, tmin_eeg, tmax_eeg
+from renaanalysis.utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, \
     add_event_meta_info, \
     get_block_startend_times, get_last_block_end_time
 
@@ -457,7 +460,7 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., bad_channels=None, is_ica_selection_inclusive=True, n_worker=20):
+def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., bad_channels=None, is_running_ica=True, is_ica_selection_inclusive=True, n_worker=20):
     eeg_data = data[0][1:65, :]  # take only the EEG channels
     ecg_data = data[0][65:67, :]
     exg_data = rescale_merge_exg(eeg_data, ecg_data)
@@ -479,50 +482,50 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, hig
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_worker)
     raw = raw.resample(exg_resample_srate, n_jobs=n_worker)
 
-    if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
-        ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
-        ica.fit(raw, picks='eeg')
-        ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name='ECG00', method='correlation',
-                                                    threshold='auto')
-        # ica.plot_scores(ecg_scores)
-        if len(ecg_indices) > 0:
-            [print(
-                'Found ECG component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, ecg_scores[x]))
-             for x in ecg_indices]
-            ica.exclude += ecg_indices
+    if is_running_ica:
+        if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
+            ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
+            ica.fit(raw, picks='eeg')
+            ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name='ECG00', method='correlation',
+                                                        threshold='auto')
+            # ica.plot_scores(ecg_scores)
+            if len(ecg_indices) > 0:
+                [print(
+                    'Found ECG component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, ecg_scores[x]))
+                 for x in ecg_indices]
+                ica.exclude += ecg_indices
+            else:
+                print('No channel found to be significantly correlated with ECG, skipping auto ECG artifact removal')
+            ica.plot_sources(raw)
+            ica.plot_components()
+            if is_ica_selection_inclusive:
+                ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
+                if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ')]
+            else:
+                ica_includes = input("Enter manual ICA components to INCLUDE (use space to deliminate): ")
+                ica_includes = [int(x) for x in ica_includes.split(' ')]
+                if len(ica_includes) > 0: ica.exclude += [int(x) for x in range(ica.n_components) if x not in ica_includes]
+                print('Excluding ' + str([int(x) for x in range(ica.n_components) if x not in ica_includes]))
+
+            f = open(ica_path + '.txt', "w")
+            f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
+            f.close()
+            ica.save(ica_path + '-ica.fif', overwrite=True)
+
+            print('Saving ICA components', end='')
         else:
-            print('No channel found to be significantly correlated with ECG, skipping auto ECG artifact removal')
-        ica.plot_sources(raw)
-        ica.plot_components()
-        if is_ica_selection_inclusive:
-            ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
-            if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ')]
-        else:
-            ica_includes = input("Enter manual ICA components to INCLUDE (use space to deliminate): ")
-            ica_includes = [int(x) for x in ica_includes.split(' ')]
-            if len(ica_includes) > 0: ica.exclude += [int(x) for x in range(ica.n_components) if x not in ica_includes]
-            print('Excluding ' + str([int(x) for x in range(ica.n_components) if x not in ica_includes]))
+            ica = mne.preprocessing.read_ica(ica_path + '-ica.fif')
+            with open(ica_path + '.txt', 'r') as filehandle:
+                ica.exclude = [int(line.rstrip()) for line in filehandle.readlines()]
 
-        f = open(ica_path + '.txt', "w")
-        f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
-        f.close()
-        ica.save(ica_path + '-ica.fif', overwrite=True)
+            print('Found and loaded existing ICA file', end='')
 
-        print('Saving ICA components', end='')
-    else:
-        ica = mne.preprocessing.read_ica(ica_path + '-ica.fif')
-        with open(ica_path + '.txt', 'r') as filehandle:
-            ica.exclude = [int(line.rstrip()) for line in filehandle.readlines()]
-
-        print('Found and loaded existing ICA file', end='')
-
-    print(': ICA exlucde component {0}'.format(str(ica.exclude)))
-    raw_ica_recon = raw.copy()
-    ica.apply(raw_ica_recon)
+        print(': ICA exlucde component {0}'.format(str(ica.exclude)))
+        ica.apply(raw)
     # raw.plot(scalings='auto')
     # reconst_raw.plot(show_scrollbars=False, scalings='auto')
 
-    return raw, raw_ica_recon, raw.get_data(picks='timestamps')[0]  # return includes the timestamps squeezing the first dimension
+    return raw, raw.get_data(picks='timestamps')[0]  # return includes the timestamps squeezing the first dimension
 
 def validate_get_epoch_args(event_names, event_filters):
     try:

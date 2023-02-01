@@ -11,7 +11,7 @@ from moviepy.video.io import ImageSequenceClip
 from eye.EyeUtils import prepare_image_for_sim_score, temporal_filter_fixation
 from eye.eyetracking import Fixation, Saccade, GazeRayIntersect
 from utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_target
-from params import *
+from renaanalysis.params.params import *
 
 def visualiza_session(events):
     plt.rcParams["figure.figsize"] = [40, 3.5]

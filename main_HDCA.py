@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 
 from renaanalysis.learning.train import prepare_sample_label
 from eye.eyetracking import GazeRayIntersect
-from params import *
+from renaanalysis.params.params import *
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)

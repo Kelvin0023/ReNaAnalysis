@@ -4,7 +4,7 @@ from typing import Union
 import numpy as np
 from mne.io import RawArray
 
-from params import *
+from renaanalysis.params.params import *
 
 class Event:
     def __init__(self, timestamp, *args, **kwargs):

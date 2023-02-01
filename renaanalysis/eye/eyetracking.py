@@ -4,10 +4,10 @@ import numpy as np
 import scipy
 from matplotlib import pyplot as plt
 
-from eye.EyeUtils import temporal_filter_fixation
-from params import *
-from utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info, \
-    get_overlapping_events
+from renaanalysis.eye.EyeUtils import temporal_filter_fixation
+from renaanalysis.params.params import varjoEyetracking_preset, headtracker_preset, dtnn_types, SACCADE_CODE, \
+    FIXATION_CODE
+from renaanalysis.utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info, get_overlapping_events
 from copy import copy
 
 

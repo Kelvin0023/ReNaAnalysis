@@ -14,13 +14,13 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedShuffleSplit
-from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
+from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
 from renaanalysis.learning.train import epochs_to_class_samples
 from renaanalysis.learning.train import prepare_sample_label
-from params import *
-from utils.RenaDataFrame import RenaDataFrame
-from utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
-from utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
+from renaanalysis.params.params import *
+from renaanalysis.utils.RenaDataFrame import RenaDataFrame
+from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
+from renaanalysis.utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
 from renaanalysis.utils.utils import get_item_events, visualize_pupil_epochs
 
 
@@ -148,11 +148,9 @@ def get_rdf(is_loading_saved_analysis = False):
 
                 # add gaze behaviors from I-DT
                 events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events)
-                events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events,
-                                                    headtracking_data_timestamps=data['Unity.HeadTracker'])
+                events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events, headtracking_data_timestamps=data['Unity.HeadTracker'])
                 # add gaze behaviors from patch sim
-                events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1],
-                                                        events)
+                events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
                 # visualize_gaze_events(events, 6)
                 rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels,

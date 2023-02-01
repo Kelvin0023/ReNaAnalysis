@@ -4,12 +4,12 @@ import json
 import mne
 import numpy as np
 
-from utils.Bidict import Bidict
+from renaanalysis.utils.Bidict import Bidict
 
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-# base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 export_data_root = 'C:/Data'
 # data_directory = "Subjects-Test"
@@ -113,7 +113,7 @@ batch_size = 64
 epochs = 5000
 patience = 75
 train_ratio = 0.8
-model_save_dir = 'renaanalysis/learning/saved_models'
+model_save_dir = '../learning/saved_models'
 l2_weight = 1e-5
 
 random_seed = 42

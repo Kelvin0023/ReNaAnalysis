@@ -8,7 +8,7 @@ from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet, EEGCNN
 from renaanalysis.learning.train import epochs_to_class_samples, eval_model, train_model
-from params import *
+from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################
@@ -18,7 +18,7 @@ import time
 from collections import defaultdict
 
 from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation, GazeRayIntersect
-from params import *
+from renaanalysis.params.params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
 from renaanalysis.utils.utils import get_item_events, viz_pupil_epochs, viz_eeg_epochs

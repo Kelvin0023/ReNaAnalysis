@@ -1,11 +1,12 @@
 # analysis parameters ######################################################################################
-import os
 
 # analysis parameters ######################################################################################
 import os
 
 # analysis parameters ######################################################################################
 import matplotlib.pyplot as plt
+import mne
+import numpy as np
 import torch
 from mne.viz import plot_topomap
 from numpy.lib.stride_tricks import sliding_window_view
@@ -14,8 +15,11 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedShuffleSplit
 
-from params import *
-from utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
+from renaanalysis.params.params import eyetracking_resample_srate, \
+    eeg_channel_names, \
+    eeg_montage, exg_resample_srate, model_save_dir, epochs, \
+    l2_weight, random_seed, split_window_eeg, split_window_pupil, num_folds, num_top_compoenents
+from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
 
 
 def compute_forward(x_windowed, y, projection):

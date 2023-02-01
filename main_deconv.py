@@ -10,7 +10,7 @@ import torch
 
 from eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.train import eval_lockings
-from params import *
+from renaanalysis.params.params import *
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)

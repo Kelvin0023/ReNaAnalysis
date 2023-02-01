@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 from matplotlib import pyplot as plt
 
-from params import item_marker_names
+from renaanalysis.params.params import item_marker_names
 
 data_path = 'C:/Users/S-Vec/Dropbox/ReNa/Data/ReNaPilot-2022Fall/Subjects/0/0.p'
 

@@ -16,10 +16,10 @@ from torchsummary import summary
 from tqdm import tqdm
 
 from renaanalysis.learning.HDCA import hdca
-from learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
-from params import lr, epochs, batch_size, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
+from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
+from renaanalysis.params.params import lr, epochs, batch_size, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
     export_data_root, num_top_compoenents
-from utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, mean_min_sublists
+from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, mean_min_sublists
 
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):

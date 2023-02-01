@@ -6,11 +6,10 @@ import torch
 
 from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import Fixation, GazeRayIntersect
-from params import *
+from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################
-from utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event
 
 """
 Parameters (in the file /params.py):

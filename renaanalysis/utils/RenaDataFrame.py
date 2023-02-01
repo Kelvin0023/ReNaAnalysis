@@ -1,9 +1,11 @@
 import warnings
 
+import mne
+import numpy as np
 from autoreject import AutoReject
 
-from params import *
-from utils.Event import add_events_to_data
+from renaanalysis.params.params import varjoEyetracking_preset
+from renaanalysis.utils.Event import add_events_to_data
 from renaanalysis.utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
     validate_get_epoch_args, \
     interpolate_zeros
@@ -18,12 +20,12 @@ class RenaDataFrame:
         self.participant_session_dict[(participant, session_index)] = data, events, bad_channels, ica_path
         self.participant_session_videos[(participant, session_index)] = video_dir
 
-    def preprocess(self):
+    def preprocess(self, is_running_ica=True):
         for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items():
             if 'BioSemi'in data.keys():
                 print(f"Preprocessing EEG for participant {p}, session {s}")
-                eeg_raw, eeg_ica_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, bad_channels=bad_channels)
-                data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'ica': eeg_ica_raw, 'timestamps': downsampled_timestamps}
+                eeg_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, is_running_ica=is_running_ica, bad_channels=bad_channels)
+                data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'timestamps': downsampled_timestamps}
             if 'Unity.VarjoEyeTrackingComplete' in data.keys():
                 print(f"Preprocessing pupil for participant {p}, session {s}")
                 left = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('left_pupil_size')].copy()
