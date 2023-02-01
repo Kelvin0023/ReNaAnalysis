@@ -7,7 +7,8 @@ import torch
 from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet, EEGCNN, EEGPupilCNN
-from renaanalysis.learning.train import epochs_to_class_samples, eval_model, train_model, train_model_pupil_eeg
+from renaanalysis.learning.train import eval_model, train_model, train_model_pupil_eeg
+from renaanalysis.utils.data_utils import epochs_to_class_samples
 from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np

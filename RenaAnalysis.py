@@ -15,11 +15,10 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedShuffleSplit
 from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
-from renaanalysis.learning.train import epochs_to_class_samples
 from renaanalysis.learning.train import prepare_sample_label
 from renaanalysis.params.params import *
 from renaanalysis.utils.RenaDataFrame import RenaDataFrame
-from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
+from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes, epochs_to_class_samples
 from renaanalysis.utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
 from renaanalysis.utils.utils import get_item_events, visualize_pupil_epochs
 

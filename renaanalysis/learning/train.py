@@ -4,7 +4,6 @@ import pickle
 
 import numpy as np
 import torch
-from matplotlib import pyplot as plt
 from sklearn import preprocessing, metrics
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch import nn
@@ -17,9 +16,10 @@ from tqdm import tqdm
 
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
-from renaanalysis.params.params import lr, epochs, batch_size, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
+from renaanalysis.params.params import lr, epochs, batch_size, model_save_dir, patience, l2_weight, random_seed, \
     export_data_root, num_top_compoenents
-from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, mean_min_sublists
+from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, \
+    mean_min_sublists, epochs_to_class_samples
 
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
@@ -282,91 +282,6 @@ def eval_model(model, x, y, criterion, label_encoder):
         accuracy = num_correct_preds / len(x)
 
     return loss, accuracy
-
-def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8):
-    """
-    script will always z norm along channels for the input
-    @param: data_type: can be eeg, pupil or mixed
-    """
-    if data_type == 'both':
-        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
-        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session)
-        epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
-        ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
-        assert np.all(ps_group_pupil == ps_group_eeg)
-        y = []
-        x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
-        x_pupil = [epochs_pupil[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
-        x_eeg = np.concatenate(x_eeg, axis=0)
-        x_pupil = np.concatenate(x_pupil, axis=0)
-
-        for event_name, event_class in event_ids.items():
-            y += [event_class] * len(epochs_pupil[event_name].get_data())
-        if np.min(y) == 1:
-            y = np.array(y) - 1
-        if rebalance:
-            x_eeg, y_eeg = rebalance_classes(x_eeg, y)
-            x_pupil, y_pupil = rebalance_classes(x_pupil, y)
-            assert np.all(y_eeg == y_pupil)
-            y = y_eeg
-        sanity_check_eeg(x_eeg, y, picks)
-        sanity_check_pupil(x_pupil, y)
-        return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
-
-    if data_type == 'eeg':
-        epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
-    elif data_type == 'pupil':
-        epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session)
-    else:
-        raise NotImplementedError(f'data type {data_type} is not implemented')
-
-    x = []
-    y = []
-    for event_name, event_class in event_ids.items():
-        x.append(epochs[event_name].get_data(picks=picks))
-        y += [event_class] * len(epochs[event_name].get_data())
-    x = np.concatenate(x, axis=0)
-
-    if np.min(y) == 1:
-        y = np.array(y) - 1
-
-    if rebalance:
-        x, y = rebalance_classes(x, y)
-
-    x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)  # z normalize x
-
-    if data_type == 'eeg':
-        sanity_check_eeg(x, y, picks)
-    elif data_type == 'pupil':
-        sanity_check_pupil(x, y)
-
-    # return x, y, epochs, event_ids, ps_group_eeg
-    return x, y, epochs, event_ids
-
-
-def sanity_check_eeg(x, y, picks):
-    coi = picks.index('CPz') if picks else eeg_montage.ch_names.index('CPz')
-    x_distractors = x[:, coi, :][y == 0]
-    x_targets = x[:, coi, :][y == 1]
-    x_distractors = np.mean(x_distractors, axis=0)
-    x_targets = np.mean(x_targets, axis=0)
-    plt.plot(x_distractors, label='distractor')
-    plt.plot(x_targets, label='target')
-    plt.title('EEG sample sanity check')
-    plt.legend()
-    plt.show()
-
-def sanity_check_pupil(x, y):
-    x_distractors = x[y == 0]
-    x_targets = x[y == 1]
-    x_distractors = np.mean(x_distractors, axis=(0, 1))  # also average left and right
-    x_targets = np.mean(x_targets, axis=(0, 1))
-
-    plt.plot(x_distractors, label='distractor')
-    plt.plot(x_targets, label='target')
-    plt.title('Pupil sample sanity check')
-    plt.legend()
-    plt.show()
 
 
 def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):

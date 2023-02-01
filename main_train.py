@@ -3,7 +3,8 @@ import pickle
 from RenaAnalysis import r_square_test
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet
-from renaanalysis.learning.train import train_model, epochs_to_class_samples, eval_model
+from renaanalysis.learning.train import train_model, eval_model
+from renaanalysis.utils.data_utils import epochs_to_class_samples
 from renaanalysis.params.params import conditions, dtnn_types
 
 # analysis parameters ######################################################################################

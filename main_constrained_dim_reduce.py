@@ -8,7 +8,8 @@ from RenaAnalysis import get_rdf, r_square_test
 from utils.data_utils import compute_pca_ica, rebalance_classes
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet, EEGCNN
-from renaanalysis.learning.train import epochs_to_class_samples, eval_model, train_model
+from renaanalysis.learning.train import eval_model, train_model
+from renaanalysis.utils.data_utils import epochs_to_class_samples
 from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np
