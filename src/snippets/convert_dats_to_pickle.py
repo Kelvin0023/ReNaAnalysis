@@ -6,7 +6,7 @@ import numpy as np
 from rena.utils.data_utils import RNStream
 
 #################################################################################################
-from utils.utils import flatten_list
+from src.utils.utils import flatten_list
 
 data_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/Subjects"
 

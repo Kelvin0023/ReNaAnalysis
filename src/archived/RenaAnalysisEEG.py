@@ -16,17 +16,16 @@ import pickle
 import time
 from collections import defaultdict
 
-import matplotlib.pyplot as plt
 import numpy as np
 import mne
 
 from eye.eyetracking import gaze_event_detection
 from utils.fs_utils import load_participant_session_dict
 from params import event_ids_dict, event_viz_groups
-from utils.utils import generate_pupil_event_epochs, \
+from src.utils.utils import generate_pupil_event_epochs, \
     flatten_list, generate_eeg_event_epochs, visualize_pupil_epochs, visualize_eeg_epochs, \
     read_file_lines_as_list, get_gaze_ray_events, get_item_events, rescale_merge_exg, create_gaze_behavior_events, \
-    extract_block_data, find_fixation_saccade_targets, flat2gen
+    find_fixation_saccade_targets
 
 #################################################################################################
 is_data_preloaded = False

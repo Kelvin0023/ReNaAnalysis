@@ -15,13 +15,13 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedShuffleSplit
 from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
-from learning.train import epochs_to_class_samples
-from learning.train import prepare_sample_label
+from src.learning.train import epochs_to_class_samples
+from src.learning.train import prepare_sample_label
 from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
 from utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
-from utils.utils import get_item_events, visualize_pupil_epochs
+from src.utils.utils import get_item_events, visualize_pupil_epochs
 
 
 # def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):

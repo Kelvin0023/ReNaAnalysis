@@ -2,8 +2,8 @@
 import pickle
 import time
 
-from learning.HDCA import *
-from learning.train import prepare_sample_label
+from src.learning.HDCA import *
+from src.learning.train import prepare_sample_label
 
 # analysis parameters ######################################################################################
 

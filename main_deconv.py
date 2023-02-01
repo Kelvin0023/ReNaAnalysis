@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 from eye.eyetracking import Fixation, GazeRayIntersect
-from learning.train import eval_lockings
+from src.learning.train import eval_lockings
 from params import *
 
 torch.manual_seed(random_seed)

@@ -8,7 +8,7 @@ from rena.utils.data_utils import RNStream
 
 # file paths
 # data_path = 'C:/Recordings/11_17_2021_22_56_15-Exp_myexperiment-Sbj_someone-Ssn_0.dats'
-from utils.utils import generate_pupil_event_epochs, \
+from src.utils.utils import generate_pupil_event_epochs, \
     visualize_pupil_epochs
 
 data_root = "C:/Users/S-Vec/Dropbox/ReNa/data"
