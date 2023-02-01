@@ -1,7 +1,7 @@
 import pickle
 
 from learning.models import EEGInceptionNet, EEGCNN
-from src.learning.train import train_model
+from renaanalysis.learning.train import train_model
 # analysis parameters ######################################################################################
 import time
 from collections import defaultdict

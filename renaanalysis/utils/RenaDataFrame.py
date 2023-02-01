@@ -4,7 +4,7 @@ from autoreject import AutoReject
 
 from params import *
 from utils.Event import add_events_to_data
-from src.utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
+from renaanalysis.utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
     validate_get_epoch_args, \
     interpolate_zeros
 

@@ -4,7 +4,7 @@ from mne.decoding import UnsupervisedSpatialFilter
 from sklearn.decomposition import PCA, FastICA
 
 from params import *
-from src.utils.utils import rescale_merge_exg
+from renaanalysis.utils.utils import rescale_merge_exg
 
 
 # analysis parameters ######################################################################################

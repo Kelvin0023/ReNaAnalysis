@@ -18,7 +18,7 @@ from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_Patc
 from params import *
 from utils.RenaDataFrame import RenaDataFrame
 from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
-from src.utils.utils import get_item_events, viz_pupil_epochs, viz_eeg_epochs
+from renaanalysis.utils.utils import get_item_events, viz_pupil_epochs, viz_eeg_epochs
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################

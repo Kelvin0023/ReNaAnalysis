@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
-from src.learning.HDCA import hdca
+from renaanalysis.learning.HDCA import hdca
 from learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from params import lr, epochs, batch_size, model_save_dir, patience, eeg_montage, l2_weight, random_seed, \
     export_data_root, num_top_compoenents

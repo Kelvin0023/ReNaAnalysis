@@ -10,7 +10,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from sklearn import metrics
 from sklearn.model_selection import StratifiedShuffleSplit
 
-from src.learning.HDCA import compute_forward, compute_window_projections, solve_crossbin_weights, plot_forward
+from renaanalysis.learning.HDCA import compute_forward, compute_window_projections, solve_crossbin_weights, plot_forward
 from params import *
 from utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
 

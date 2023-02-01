@@ -13,7 +13,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 import joblib
 from sklearn.model_selection import train_test_split
 
-from src.learning.train import prepare_sample_label
+from renaanalysis.learning.train import prepare_sample_label
 from eye.eyetracking import GazeRayIntersect
 from params import *
 

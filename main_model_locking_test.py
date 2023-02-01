@@ -11,7 +11,7 @@ import torch
 
 from RenaAnalysis import get_rdf
 from eye.eyetracking import Fixation, GazeRayIntersect
-from src.learning.train import eval_lockings
+from renaanalysis.learning.train import eval_lockings
 from params import *
 
 torch.manual_seed(random_seed)
