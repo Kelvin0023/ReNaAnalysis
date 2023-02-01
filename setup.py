@@ -39,5 +39,8 @@ setuptools.setup(
     ],
     packages=setuptools.find_packages(),
     python_requires=">=3.9",
-    install_requires=requires
+    install_requires=requires,
+
+    package_data={'': ['renaanalysis/params/*.json']},
+    include_package_data=True
 )

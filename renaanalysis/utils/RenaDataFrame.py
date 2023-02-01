@@ -4,7 +4,7 @@ import mne
 import numpy as np
 from autoreject import AutoReject
 
-from renaanalysis.params.params import varjoEyetracking_preset
+from renaanalysis.params.params import varjoEyetracking_chs, varjoEyetracking_stream_name
 from renaanalysis.utils.Event import add_events_to_data
 from renaanalysis.utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
     validate_get_epoch_args, \
@@ -28,15 +28,15 @@ class RenaDataFrame:
                 data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'timestamps': downsampled_timestamps}
             if 'Unity.VarjoEyeTrackingComplete' in data.keys():
                 print(f"Preprocessing pupil for participant {p}, session {s}")
-                left = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('left_pupil_size')].copy()
+                left = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('left_pupil_size')].copy()
                 assert np.sum(left == np.nan) == 0
                 left = interpolate_zeros(left)
-                data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('left_pupil_size')] = left
+                data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('left_pupil_size')] = left
 
-                right = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('right_pupil_size')].copy()
+                right = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('right_pupil_size')].copy()
                 assert np.sum(right == np.nan) == 0
                 right = interpolate_zeros(right)
-                data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_preset['ChannelNames'].index('right_pupil_size')] = right
+                data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('right_pupil_size')] = right
 
     def get_data_events(self, participant=None, session=None) -> dict:
         """
@@ -96,12 +96,12 @@ class RenaDataFrame:
 
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
             # print('Getting pupil epochs for participant {} session {}'.format(p, s))
-            eye_data = data[varjoEyetracking_preset["StreamName"]][0]
-            pupil_left_data = eye_data[varjoEyetracking_preset["ChannelNames"].index('left_pupil_size'), :]
-            pupil_right_data = eye_data[varjoEyetracking_preset["ChannelNames"].index('right_pupil_size'), :]
+            eye_data = data[varjoEyetracking_stream_name][0]
+            pupil_left_data = eye_data[varjoEyetracking_chs.index('left_pupil_size'), :]
+            pupil_right_data = eye_data[varjoEyetracking_chs.index('right_pupil_size'), :]
             pupil_data = np.concatenate([np.expand_dims(pupil_left_data, axis=1), np.expand_dims(pupil_right_data, axis=1)], axis=1)
 
-            pupil_data_with_events, event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_preset["StreamName"]][1], events, event_names, event_filters)
+            pupil_data_with_events, event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_stream_name][1], events, event_names, event_filters)
             epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids)
             # check_contraint_block_counts(events, deviant + len(epochs_pupil))  # TODO only taken into account constraint conditions
             if len(epochs_pupil) == 0:

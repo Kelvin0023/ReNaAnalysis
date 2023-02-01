@@ -66,7 +66,7 @@ preloaded_block_path = 'data/participant_condition_block_dict.p'
 base_root = "C:/Users/Lab-User/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
 # base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Spring/"
 data_directory = "Subjects"
-varjoEyetrackingComplete_preset_path = 'presets/VarjoEyeDataComplete.json'
+varjoEyetrackingComplete_preset_path = 'renaanalysis/params/VarjoEyeDataComplete.json'
 
 eventMarker_eventMarkerIndex_dict = {
     'RSVP': slice(0, 4),

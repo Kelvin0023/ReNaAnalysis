@@ -10,9 +10,9 @@ from mne import Epochs
 from scipy.interpolate import interp1d
 
 from renaanalysis.eye.eyetracking import Saccade, GazeRayIntersect
-from renaanalysis.params.params import eventmarker_preset, conditions, item_marker_names, eyetracking_resample_srate, \
+from renaanalysis.params.params import conditions, item_marker_names, eyetracking_resample_srate, \
     tmax_pupil, tmin_pupil_viz, tmax_pupil_viz, tmin_pupil, eeg_picks, tmin_eeg_viz, tmax_eeg_viz, eeg_channel_names, \
-    ecg_ch_name, eeg_montage, exg_resample_srate, is_regenerate_ica, tmin_eeg, tmax_eeg
+    ecg_ch_name, eeg_montage, exg_resample_srate, is_regenerate_ica, tmin_eeg, tmax_eeg, eventmarker_chs
 from renaanalysis.utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, \
     add_event_meta_info, \
     get_block_startend_times, get_last_block_end_time
@@ -91,11 +91,11 @@ def get_practice_block_marker(block_marker, practice_length=5):
 
 def get_block_events(event_markers, event_marker_timestamps):
     events = []
-    block_ids = event_markers[eventmarker_preset["ChannelNames"].index('BlockIDStartEnd'), :]
+    block_ids = event_markers[eventmarker_chs.index('BlockIDStartEnd'), :]
     block_id_timestamps = event_marker_timestamps[block_ids != 0]
     block_ids = block_ids[block_ids != 0]
 
-    block_condition = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]
+    block_condition = event_markers[eventmarker_chs.index('BlockMarker'), :]
     block_conditions_timestamps = event_marker_timestamps[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in block_condition])]
     block_condition = block_condition[np.logical_and(block_condition != 0, [bm in conditions.values() for bm in block_condition])]  # check both non-zero (there is an event), and the marker is for a condition, i.e., not for change of metablocks
 
@@ -117,7 +117,7 @@ def get_block_events(event_markers, event_marker_timestamps):
         events.append(Event(b_timestamp, block_id=abs(b_id), block_condition=b_condition, is_block_end=True, block_is_practice=b_is_practice))
 
     # add the meta block events
-    meta_block_marker = event_markers[eventmarker_preset["ChannelNames"].index('BlockMarker'), :]
+    meta_block_marker = event_markers[eventmarker_chs.index('BlockMarker'), :]
     meta_block_indices = np.logical_and(meta_block_marker != 0, [bm not in conditions.values() for bm in meta_block_marker])
     meta_block_marker_timestamps = event_marker_timestamps[meta_block_indices]
     meta_block_marker = meta_block_marker[meta_block_indices]
@@ -130,15 +130,15 @@ def get_block_events(event_markers, event_marker_timestamps):
 def get_dtn_events(event_markers, event_marker_timestamps, block_events):
     events = []
 
-    dtn = event_markers[eventmarker_preset["ChannelNames"].index('DTN'), :]
+    dtn = event_markers[eventmarker_chs.index('DTN'), :]
     mask = np.logical_and(event_marker_timestamps < get_last_block_end_time(block_events), dtn != 0)
 
     dtn_timestamps = event_marker_timestamps[mask]
 
-    item_ids = event_markers[eventmarker_preset["ChannelNames"].index('itemID'), mask]
-    obj_dists = event_markers[eventmarker_preset["ChannelNames"].index('objDistFromPlayer'), mask]
-    carousel_speed = event_markers[eventmarker_preset["ChannelNames"].index('CarouselSpeed'), mask]
-    carousel_angle = event_markers[eventmarker_preset["ChannelNames"].index('CarouselAngle'), mask]
+    item_ids = event_markers[eventmarker_chs.index('itemID'), mask]
+    obj_dists = event_markers[eventmarker_chs.index('objDistFromPlayer'), mask]
+    carousel_speed = event_markers[eventmarker_chs.index('CarouselSpeed'), mask]
+    carousel_angle = event_markers[eventmarker_chs.index('CarouselAngle'), mask]
     dtn = dtn[dtn != 0]
 
     for i, dtn_time in enumerate(dtn_timestamps):

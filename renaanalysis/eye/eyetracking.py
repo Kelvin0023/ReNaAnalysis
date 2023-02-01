@@ -5,8 +5,8 @@ import scipy
 from matplotlib import pyplot as plt
 
 from renaanalysis.eye.EyeUtils import temporal_filter_fixation
-from renaanalysis.params.params import varjoEyetracking_preset, headtracker_preset, dtnn_types, SACCADE_CODE, \
-    FIXATION_CODE
+from renaanalysis.params.params import dtnn_types, SACCADE_CODE, \
+    FIXATION_CODE, varjoEyetracking_chs
 from renaanalysis.utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info, get_overlapping_events
 from copy import copy
 
@@ -54,10 +54,9 @@ def running_mean(x, N):
 
 def gaze_event_detection_I_VT(eyetracking_data_timestamps, events, headtracking_data_timestamps=None):
     eyetracking_data, eyetracking_timestamps = eyetracking_data_timestamps
-    assert eyetracking_data.shape[0] == len(varjoEyetracking_preset['ChannelNames'])
-    varjoEyetracking_channelNames = varjoEyetracking_preset['ChannelNames']
-    gaze_xy = eyetracking_data[[varjoEyetracking_channelNames.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
-    gaze_status = eyetracking_data[varjoEyetracking_channelNames.index('status')]
+    assert eyetracking_data.shape[0] == len(varjoEyetracking_chs)
+    gaze_xy = eyetracking_data[[varjoEyetracking_chs.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y']]]
+    gaze_status = eyetracking_data[varjoEyetracking_chs.index('status')]
 
     head_rotation_xy_eyesampled = None
     if headtracking_data_timestamps is not None:
