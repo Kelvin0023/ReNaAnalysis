@@ -68,7 +68,7 @@ locking_name_filters_constrained = {
                         'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
                                                 lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]} #nyamu <3
 
-models = ['HDCA', 'EEGPupilCNN', 'EEGCNN']
+models = ['EEGPupilCNN', 'EEGCNN', 'HDCA']
 
 results = dict()
 is_regenerate_epochs = True

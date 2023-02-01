@@ -53,13 +53,13 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, participan
         else:
             if model_name == 'EEGPupilCNN':
                 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
-                model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
+                model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=1)
             else:
                 if model_name == 'EEGCNN':
                     model = EEGCNN(in_shape=x[0].shape, num_classes=2, in_channels=20 if reduce_dim else 64)
                 elif model_name == 'EEGInception':
                     model = EEGInceptionNet(in_shape=x[0].shape, num_classes=2)
-                model, training_histories, criterion, label_encoder = train_model(x[0], y, model, test_name=test_name, verbose=0)
+                model, training_histories, criterion, label_encoder = train_model(x[0], y, model, test_name=test_name, verbose=1)
             folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
             folds_val_auc = mean_max_sublists(training_histories['auc_val'])
             print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')

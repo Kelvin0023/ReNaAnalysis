@@ -5,27 +5,22 @@ import time
 import torch
 
 from RenaAnalysis import get_rdf, r_square_test
-from eye.eyetracking import Fixation
-from learning.models import EEGInceptionNet, EEGCNN
+from renaanalysis.eye.eyetracking import Fixation
 from renaanalysis.learning.train import eval_model, train_model
 from renaanalysis.utils.data_utils import epochs_to_class_samples
-from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################
-from utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event
 import os
 import time
-from collections import defaultdict
 
-from eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation, GazeRayIntersect
+from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation, GazeRayIntersect
 from renaanalysis.params.params import *
-from utils.RenaDataFrame import RenaDataFrame
-from utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
-from renaanalysis.utils.utils import get_item_events, viz_pupil_epochs, viz_eeg_epochs
+from renaanalysis.utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
+from renaanalysis.utils.utils import viz_pupil_epochs, viz_eeg_epochs
 import matplotlib.pyplot as plt
 import numpy as np
-from utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event
+from renaanalysis.utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event
 import matplotlib.pyplot as plt
 
 
@@ -39,7 +34,7 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 
 selected_locking = 'RSVP-Item-Onset'
 export_data_root = 'data/'
-is_regenerate_rdf = False
+is_regenerate_rdf = True
 
 
 # start of the main block ##############################################################################

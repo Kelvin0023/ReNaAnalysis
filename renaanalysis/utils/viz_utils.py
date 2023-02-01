@@ -8,10 +8,12 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from moviepy.video.io import ImageSequenceClip
 
-from eye.EyeUtils import prepare_image_for_sim_score, temporal_filter_fixation
-from eye.eyetracking import Fixation, Saccade, GazeRayIntersect
-from utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_target
+from renaanalysis.eye.EyeUtils import temporal_filter_fixation
+from renaanalysis.eye.eyetracking import Fixation, Saccade, GazeRayIntersect
+from renaanalysis.utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_target
 from renaanalysis.params.params import *
+from renaanalysis.utils.TorchUtils import prepare_image_for_sim_score
+
 
 def visualiza_session(events):
     plt.rcParams["figure.figsize"] = [40, 3.5]
