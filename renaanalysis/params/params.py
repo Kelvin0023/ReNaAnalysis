@@ -171,7 +171,7 @@ batch_size = 64
 epochs = 5000
 patience = 75
 train_ratio = 0.8
-model_save_dir = '../learning/saved_models'
+model_save_dir = 'renaanalysis/learning/saved_models'
 l2_weight = 1e-5
 
 random_seed = 42

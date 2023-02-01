@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 
 from renaanalysis.eye.EyeUtils import temporal_filter_fixation
 from renaanalysis.params.params import dtnn_types, SACCADE_CODE, \
-    FIXATION_CODE, varjoEyetracking_chs
+    FIXATION_CODE, varjoEyetracking_chs, headtracker_chs
 from renaanalysis.utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info, get_overlapping_events
 from copy import copy
 
@@ -62,7 +62,7 @@ def gaze_event_detection_I_VT(eyetracking_data_timestamps, events, headtracking_
     if headtracking_data_timestamps is not None:
         print("Processing headtracking data")
         headtracking_data, head_tracker_timestamps = headtracking_data_timestamps
-        yaw_pitch_indices = headtracker_preset['ChannelNames'].index("Head Yaw"), headtracker_preset['ChannelNames'].index("Head Pitch")
+        yaw_pitch_indices = headtracker_chs.index("Head Yaw"), headtracker_chs.index("Head Pitch")
         head_rotation_xy = headtracking_data[yaw_pitch_indices, :]
         # find the closest head tracking data point for each eyetracking point
         head_rotation_xy_eyesampled = scipy.signal.resample(head_rotation_xy, len(eyetracking_timestamps),axis=1)
