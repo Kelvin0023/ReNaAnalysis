@@ -60,13 +60,13 @@ def get_data_file_paths(base_root, data_directory):
         dict)  # create a dict that holds participant -> sessions -> list of sessionFiles
 
     data_root = os.path.join(base_root, data_directory)
-    participant_list = [x for x in os.listdir(data_root) if x != '.DS_Store']
-    participant_directory_list = [os.path.join(data_root, x) for x in participant_list if not x.startswith('.')]
+    participant_list = [x for x in os.listdir(data_root) if not x.startswith('.')]
+    participant_directory_list = [os.path.join(data_root, x) for x in participant_list]
 
     for participant, participant_directory in zip(participant_list, participant_directory_list):
         file_names = os.listdir(participant_directory)
         #  That is, we have a itemCatalog, SessionLog and data file for each experiment session.
-        num_sessions = [int(txt.strip('.p')) for txt in file_names if txt != '.DS_Store' and txt.strip('.p').isdigit()]
+        num_sessions = [int(txt.strip('.p')) for txt in file_names if not txt.startswith('.') and txt.strip('.p').isdigit()]
         num_sessions = len(np.unique(num_sessions))
         if os.path.exists(os.path.join(participant_directory, 'badchannels.txt')):  # load bad channels for this participant
             participant_badchannel_dict[participant] = read_file_lines_as_list(
