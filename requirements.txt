@@ -1,5 +1,5 @@
 numpy
-scipy~=1.7.2
+scipy
 mne
 matplotlib~=3.5.0
 pyxdf~=1.16.3
@@ -10,4 +10,7 @@ seaborn
 imageio
 tqdm
 autoreject
-scikit-learn==1.0.2
+scikit-learn
+renalabapp
+moviepy
+lpips

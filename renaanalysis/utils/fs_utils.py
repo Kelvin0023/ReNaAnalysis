@@ -61,7 +61,7 @@ def get_data_file_paths(base_root, data_directory):
 
     data_root = os.path.join(base_root, data_directory)
     participant_list = [x for x in os.listdir(data_root) if x != '.DS_Store']
-    participant_directory_list = [os.path.join(data_root, x) for x in participant_list if x != '.DS_Store']
+    participant_directory_list = [os.path.join(data_root, x) for x in participant_list if not x.startswith('.')]
 
     for participant, participant_directory in zip(participant_list, participant_directory_list):
         file_names = os.listdir(participant_directory)

@@ -118,8 +118,7 @@ def get_rdf(is_loading_saved_analysis = False):
     preloaded_dats_path, preloaded_epoch_path, preloaded_block_path, gaze_statistics_path, gaze_behavior_path, epoch_data_export_root = get_analysis_result_paths(
         base_root, note)
     # get the paths to the data files
-    participant_list, participant_session_file_path_dict, participant_badchannel_dict = get_data_file_paths(base_root,
-                                                                                                            data_directory)
+    participant_list, participant_session_file_path_dict, participant_badchannel_dict = get_data_file_paths(base_root, data_directory)
 
     rdf = RenaDataFrame()
 
