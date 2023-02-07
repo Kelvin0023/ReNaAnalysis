@@ -148,13 +148,15 @@ def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
         this_x_train = x_train_windowed[:, :, k, :].reshape((num_train_trials, -1))
         this_x_test = x_test_windowed[:, :, k, :].reshape((num_test_trials, -1))
         lda = LinearDiscriminantAnalysis(solver='svd')
-        lda.fit(this_x_train, y_train)
+        projectionTrain_window_trial[:, k] = lda.fit_transform(this_x_train, y_train).squeeze(axis=1)
+        projectionTest_window_trial[:, k] = lda.transform(this_x_test).squeeze(axis=1)
+
         _weights = np.squeeze(lda.coef_, axis=0)
         weights_channelWindow[k] = _weights
-        for j in range(num_train_trials):
-            projectionTrain_window_trial[j, k] = np.dot(_weights, this_x_train[j])
-        for j in range(num_test_trials):
-            projectionTest_window_trial[j, k] = np.dot(_weights, this_x_test[j])
+        # for j in range(num_train_trials):
+        #     projectionTrain_window_trial[j, k] = np.dot(_weights, this_x_train[j]) + lda.intercept_
+        # for j in range(num_test_trials):
+        #     projectionTest_window_trial[j, k] = np.dot(_weights, this_x_test[j])
     return weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial
 
 
@@ -215,10 +217,10 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
         num_train_trials, num_channels_eeg, num_windows_eeg, num_timepoints_per_window_eeg = x_eeg_transformed_train_windowed.shape
         num_test_trials = len(x_eeg_transformed_test)
         # compute Fisher's LD for each temporal window
-        if verbose: print("Computing windowed LDA per channel, and project per window and trial")
+        if verbose >= 2: print("Computing windowed LDA per channel, and project per window and trial")
         weights_channelWindow_eeg, projection_train_window_trial_eeg, projection_test_window_trial_eeg = compute_window_projections(
             x_eeg_transformed_train_windowed, x_eeg_transformed_test_windowed, y_train)
-        if verbose: print('Computing forward model from window projections for test set')
+        if verbose >= 2: print('Computing forward model from window projections for test set')
         activation = compute_forward(x_eeg_test_windowed, y_test, projection_test_window_trial_eeg)
         # train classifier, use gradient descent to find the cross-window weights
 
@@ -229,12 +231,8 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
         x_pupil_train = (x_pupil_train - pupil_mean) / pupil_std
         x_pupil_test = (x_pupil_test - pupil_mean) / pupil_std
 
-        x_pupil_train_windowed = sliding_window_view(x_pupil_train, window_shape=split_size_pupil, axis=2)[:, :,
-                                 0::split_size_pupil,
-                                 :]  # shape = #trials, #channels, #windows, #time points per window
-        x_pupil_test_windowed = sliding_window_view(x_pupil_test, window_shape=split_size_pupil, axis=2)[:, :,
-                                0::split_size_pupil,
-                                :]  # shape = #trials, #channels, #windows, #time points per window
+        x_pupil_train_windowed = sliding_window_view(x_pupil_train, window_shape=split_size_pupil, axis=2)[:, :,0::split_size_pupil,:]  # shape = #trials, #channels, #windows, #time points per window
+        x_pupil_test_windowed = sliding_window_view(x_pupil_test, window_shape=split_size_pupil, axis=2)[:, :,0::split_size_pupil,:]  # shape = #trials, #channels, #windows, #time points per window
         _, num_channels_pupil, num_windows_pupil, num_timepoints_per_window_pupil = x_pupil_train_windowed.shape
         weights_channelWindow_pupil, projection_train_window_trial_pupil, projection_test_window_trial_pupil = compute_window_projections(
             x_pupil_train_windowed, x_pupil_test_windowed, y_train)
@@ -245,7 +243,7 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
         projection_train_window_trial_eeg, projection_test_window_trial_eeg = z_norm_projection(
             projection_train_window_trial_eeg, projection_test_window_trial_eeg)
 
-        if verbose: print('Solving cross bin weights')
+        if verbose >= 2: print('Solving cross bin weights')
         cw_weights_eeg, roc_auc_eeg, fpr_eeg, tpr_eeg = solve_crossbin_weights(projection_train_window_trial_eeg,
                                                                                projection_test_window_trial_eeg,
                                                                                y_train, y_test, num_windows_eeg)

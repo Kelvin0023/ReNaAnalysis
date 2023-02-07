@@ -21,9 +21,9 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf()
-# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
-pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
+# rdf = get_rdf()
+rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # lockings test  ####################################################################################################
@@ -68,10 +68,10 @@ locking_name_filters_constrained = {
                         'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
                                                 lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]} #nyamu <3
 
-models = ['EEGPupilCNN', 'EEGCNN', 'HDCA']
+models = ['HDCA', 'EEGPupilCNN', 'EEGCNN']
 
 results = dict()
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 
 for m in models:
     m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)

@@ -44,7 +44,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, participan
             x[0] = compute_pca_ica(x[0], num_top_compoenents)
 
         if model_name == 'HDCA':
-            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n')  # give the original eeg data
+            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', verbose=1)  # give the original eeg data
             locking_performance[locking_name, 'HDCA EEG'] = {'folds val auc': roc_auc_eeg}
             locking_performance[locking_name, 'HDCA Pupil'] = {'folds val auc': roc_auc_pupil}
             locking_performance[locking_name, 'HDCA EEG-Pupil'] = {'folds val auc': roc_auc_combined}
@@ -53,7 +53,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, participan
         else:
             if model_name == 'EEGPupilCNN':
                 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
-                model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=1)
+                model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
             else:
                 if model_name == 'EEGCNN':
                     model = EEGCNN(in_shape=x[0].shape, num_classes=2, in_channels=20 if reduce_dim else 64)
@@ -415,7 +415,7 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
 
                     batch_losses.append(loss.item())
                     num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
-                    if verbose >= 1:pbar.set_description('Validating [{}]: loss:{:.8f}, loss:{:.8f}'.format(mini_batch_i, loss.item(),roc_auc))
+                    if verbose >= 1:pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
 
                 val_aucs.append(metrics.roc_auc_score(y_val, y_val_pred))
                 val_losses.append(np.mean(batch_losses))
