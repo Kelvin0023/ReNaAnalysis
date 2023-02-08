@@ -447,7 +447,10 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, v
 
         for event_name, events in event_groups.items():
             try:
-                epochs[events].average().plot_topomap(times=np.linspace(tmin_eeg_viz, tmax_eeg_viz, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vlim=(vmin_EEG, vmax_EEG))
+                try:
+                    epochs[events].average().plot_topomap(times=np.linspace(tmin_eeg_viz, tmax_eeg_viz, 6), size=3., title='{0} {1}'.format(event_name, title), time_unit='s', scalings=dict(eeg=1.), vlim=(vmin_EEG, vmax_EEG))
+                except TypeError:
+                    epochs[events].average().plot_topomap(times=np.linspace(tmin_eeg_viz, tmax_eeg_viz, 6), size=3., time_unit='s', scalings=dict(eeg=1.), vlim=(vmin_EEG, vmax_EEG))
             except KeyError:  # meaning this event does not exist in these epochs
                 continue
 
