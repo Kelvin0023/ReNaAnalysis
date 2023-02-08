@@ -33,7 +33,7 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 '''
 
 selected_locking = 'RSVP-Item-Onset'
-export_data_root = 'data/'
+export_data_root = '/data'
 is_regenerate_rdf = False
 
 
@@ -44,6 +44,8 @@ start_time = time.time()  # record the start time of the analysis
 
 if is_regenerate_rdf:
     rdf = get_rdf()
+    if os.path.exists(export_data_root):
+        os.mkdir(export_data_root)
     pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 else:
     try:
@@ -58,7 +60,6 @@ plt.rcParams.update({'font.size': 22})
 
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 event_names = ["Distractor", "Target"]
-
 
 
 locking_filters = {
