@@ -72,14 +72,14 @@ def rebalance_classes(x, y):
     return x, y
 
 
-def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8):
+def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, n_jobs=1):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
     """
     if data_type == 'both':
         epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
-        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session)
+        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_jobs=n_jobs)
         epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
         ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
         assert np.all(ps_group_pupil == ps_group_eeg)
@@ -105,7 +105,7 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
     if data_type == 'eeg':
         epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
     elif data_type == 'pupil':
-        epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session)
+        epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_job=n_jobs)
     else:
         raise NotImplementedError(f'data type {data_type} is not implemented')
 
