@@ -104,7 +104,7 @@ viz_pupil_epochs(rdf, event_names, event_filters, colors, title=f'{selected_lock
 r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
 
 if is_regenerate_epochs:
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=2)
+    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0)
     pickle.dump(x, open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'wb'))
     pickle.dump(y, open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'wb'))
 else:

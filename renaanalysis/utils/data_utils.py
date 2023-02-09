@@ -105,7 +105,7 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
     if data_type == 'eeg':
         epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
     elif data_type == 'pupil':
-        epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_job=n_jobs)
+        epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_jobs=n_jobs)
     else:
         raise NotImplementedError(f'data type {data_type} is not implemented')
 
