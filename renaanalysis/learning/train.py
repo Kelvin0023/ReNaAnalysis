@@ -44,7 +44,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, participan
             x[0] = compute_pca_ica(x[0], num_top_compoenents)
 
         if model_name == 'HDCA':
-            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', verbose=0, reduce_dim=(not reduce_dim))  # give the original eeg data, no need to apply HDCA again
+            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', verbose=0)  # give the original eeg data, no need to apply HDCA again
             locking_performance[locking_name, 'HDCA EEG'] = {'folds val auc': roc_auc_eeg}
             locking_performance[locking_name, 'HDCA Pupil'] = {'folds val auc': roc_auc_pupil}
             locking_performance[locking_name, 'HDCA EEG-Pupil'] = {'folds val auc': roc_auc_combined}

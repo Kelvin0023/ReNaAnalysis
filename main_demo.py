@@ -111,6 +111,7 @@ else:
     x = pickle.load(open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'rb'))
     y = pickle.load(open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'rb'))
 
+x_eeg = np.copy(x[0])
 if is_reduce_eeg_dim:
     x[0] = compute_pca_ica(x[0], num_top_compoenents)
 
@@ -120,5 +121,5 @@ folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_subl
 folds_val_auc = mean_max_sublists(training_histories['auc_val'])
 print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
 
-roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca(x, y, event_names, is_plots=True, notes=test_name + '\n', verbose=0, reduce_dim=(not is_reduce_eeg_dim))  # give the original eeg data
+roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', verbose=0, reduce_dim=(not is_reduce_eeg_dim))  # give the original eeg data
 print(f'HDCA: {test_name}: folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}')
