@@ -160,7 +160,7 @@ def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
     return weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial
 
 
-def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
+def hdca(x, y, event_names, is_plots=False, notes="", verbose=0, reduce_dim=True):
 
     # split data into 100ms bins
     split_size_eeg = int(split_window_eeg * exg_resample_srate)
@@ -188,7 +188,7 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
     fpr_folds_pupil = []
     tpr_folds_pupil = []
 
-    x_eeg_transformed = compute_pca_ica(x[0], num_top_compoenents)  # apply ICA and PCA
+    x_eeg_transformed = compute_pca_ica(x[0], num_top_compoenents) if reduce_dim else x[0] # apply ICA and PCA
 
     for i, (train, test) in enumerate(cross_val_folds.split(x[0],
                                                             y)):  # cross-validation; group arguement is not necessary unless using grouped folds

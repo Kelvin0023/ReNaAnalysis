@@ -6,8 +6,10 @@ import torch
 
 from RenaAnalysis import get_rdf, r_square_test
 from renaanalysis.eye.eyetracking import Fixation
-from renaanalysis.learning.train import eval_model, train_model
-from renaanalysis.utils.data_utils import epochs_to_class_samples
+from renaanalysis.learning.HDCA import hdca
+from renaanalysis.learning.models import EEGCNN, EEGPupilCNN
+from renaanalysis.learning.train import eval_model, train_model, train_model_pupil_eeg
+from renaanalysis.utils.data_utils import epochs_to_class_samples, compute_pca_ica, mean_max_sublists, mean_min_sublists
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################
@@ -35,7 +37,9 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 selected_locking = 'RSVP-Item-Onset'
 export_data_root = '/data'
 is_regenerate_rdf = False
-
+is_regenerate_epochs = False
+is_reduce_eeg_dim = True
+test_name = 'demo'
 
 # start of the main block ##############################################################################
 torch.manual_seed(random_seed)
@@ -44,7 +48,7 @@ start_time = time.time()  # record the start time of the analysis
 
 if is_regenerate_rdf:
     rdf = get_rdf()
-    if os.path.exists(export_data_root):
+    if not os.path.exists(export_data_root):
         os.mkdir(export_data_root)
     pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 else:
@@ -99,16 +103,22 @@ viz_eeg_epochs(rdf, event_names, event_filters, colors, title=f'{selected_lockin
 viz_pupil_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
 r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
 
-# x, y, _, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
+if is_regenerate_epochs:
+    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=2)
+    pickle.dump(x, open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'wb'))
+    pickle.dump(y, open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'wb'))
+else:
+    x = pickle.load(open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'rb'))
+    y = pickle.load(open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'rb'))
 
-# pickle.dump(x, open(f'x_p1_s2_{event_locking}.p', 'wb'))
-# pickle.dump(y, open(f'y_p1_s2_{event_locking}.p', 'wb'))
+if is_reduce_eeg_dim:
+    x[0] = compute_pca_ica(x[0], num_top_compoenents)
 
-# x = pickle.load(open(f'x_p1_s2_{event_locking}.p', 'rb'))
-# y = pickle.load(open(f'y_p1_s2_{event_locking}.p', 'rb'))
+model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2, eeg_in_channels=x[0].shape[0])
+model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
+folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
+folds_val_auc = mean_max_sublists(training_histories['auc_val'])
+print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
 
-# model = EEGCNN(in_shape=x.shape, num_classes=2)
-# model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=f'Locked to {event_locking}, P1, S2, Visaul Search')
-
-# r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to first long gaze ray intersect")
-
+roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca(x, y, event_names, is_plots=True, notes=test_name + '\n', verbose=0, reduce_dim=(not is_reduce_eeg_dim))  # give the original eeg data
+print(f'HDCA: {test_name}: folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}')
