@@ -114,7 +114,7 @@ else:
 if is_reduce_eeg_dim:
     x[0] = compute_pca_ica(x[0], num_top_compoenents)
 
-model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2, eeg_in_channels=x[0].shape[0])
+model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2, eeg_in_channels=x[0].shape[1])
 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
 folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
 folds_val_auc = mean_max_sublists(training_histories['auc_val'])
