@@ -112,7 +112,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1,
     plt.show()
 
 
-def get_rdf(is_loading_saved_analysis = False):
+def get_rdf(is_loading_saved_analysis=False, n_jobs=1):
     start_time = time.time()  # record the start time of the analysis
     # get the list of paths to save the analysis results
     preloaded_dats_path, preloaded_epoch_path, preloaded_block_path, gaze_statistics_path, gaze_behavior_path, epoch_data_export_root = get_analysis_result_paths(
@@ -154,7 +154,7 @@ def get_rdf(is_loading_saved_analysis = False):
                 rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels,
                                             session_ICA_path, video_path)  # also preprocess the EEG data
 
-    rdf.preprocess()
+    rdf.preprocess(n_jobs=n_jobs)
     end_time = time.time()
     print("Getting RDF Took {0} seconds".format(end_time - start_time))
     return rdf

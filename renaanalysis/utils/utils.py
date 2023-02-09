@@ -324,7 +324,7 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events, long_gaze_
     return rtn
 
 
-def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_ids, srate=200, verbose='WARNING'):  # use a fixed sampling rate for the sampling rate to match between recordings
+def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_ids, srate=200, verbose='WARNING', n_jobs=1):  # use a fixed sampling rate for the sampling rate to match between recordings
     mne.set_log_level(verbose=verbose)
 
     info = mne.create_info(
@@ -332,7 +332,7 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
         sfreq=srate,
         ch_types=data_channel_types)
     raw = mne.io.RawArray(data_.transpose(), info)
-    raw = raw.resample(eyetracking_resample_srate, n_jobs=20)
+    raw = raw.resample(eyetracking_resample_srate, n_jobs=n_jobs)
 
     found_events = mne.find_events(raw, stim_channel='stim', shortest_event=1)
     # pupil epochs
@@ -463,7 +463,7 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., bad_channels=None, is_running_ica=True, is_ica_selection_inclusive=True, n_worker=20):
+def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., bad_channels=None, is_running_ica=True, is_ica_selection_inclusive=True, n_jobs=20):
     eeg_data = data[0][1:65, :]  # take only the EEG channels
     ecg_data = data[0][65:67, :]
     exg_data = rescale_merge_exg(eeg_data, ecg_data)
@@ -481,9 +481,9 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, hig
         raw.info['bads'] = bad_channels
         raw.interpolate_bads(method={'eeg': 'spline'}, verbose='INFO')
 
-    raw = raw.filter(l_freq=lowcut, h_freq=highcut, n_jobs=n_worker)  # bandpass filter
-    raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_worker)
-    raw = raw.resample(exg_resample_srate, n_jobs=n_worker)
+    raw = raw.filter(l_freq=lowcut, h_freq=highcut, n_jobs=n_jobs)  # bandpass filter
+    raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_jobs)
+    raw = raw.resample(exg_resample_srate, n_jobs=n_jobs)
 
     if is_running_ica:
         if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
@@ -536,8 +536,8 @@ def validate_get_epoch_args(event_names, event_filters):
     except AssertionError:
         raise ValueError('Number of event names must match the number of event filters')
 
-def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None):
-    pupil_epochs, pupil_event_ids, _ = rdf.get_pupil_epochs(event_names, event_filters, participant, session)
+def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, n_jobs=1):
+    pupil_epochs, pupil_event_ids, _ = rdf.get_pupil_epochs(event_names, event_filters, participant, session, n_jobs=n_jobs)
     visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, title=title)
 
 def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=tmin_eeg, tmax=tmax_eeg):

@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 from RenaAnalysis import get_rdf
-from eye.eyetracking import Fixation, GazeRayIntersect
+from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.train import eval_lockings
 from renaanalysis.params.params import *
 
@@ -20,7 +20,7 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf()
+rdf = get_rdf(n_jobs=20)
 # rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")

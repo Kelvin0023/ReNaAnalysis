@@ -47,7 +47,7 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 if is_regenerate_rdf:
-    rdf = get_rdf()
+    rdf = get_rdf(n_jobs=20)
     if not os.path.exists(export_data_root):
         os.mkdir(export_data_root)
     pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive

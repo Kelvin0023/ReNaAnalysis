@@ -20,11 +20,11 @@ class RenaDataFrame:
         self.participant_session_dict[(participant, session_index)] = data, events, bad_channels, ica_path
         self.participant_session_videos[(participant, session_index)] = video_dir
 
-    def preprocess(self, is_running_ica=True):
+    def preprocess(self, n_jobs=1, is_running_ica=True):
         for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items():
             if 'BioSemi'in data.keys():
                 print(f"Preprocessing EEG for participant {p}, session {s}")
-                eeg_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, is_running_ica=is_running_ica, bad_channels=bad_channels)
+                eeg_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, is_running_ica=is_running_ica, bad_channels=bad_channels, n_jobs=n_jobs)
                 data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'timestamps': downsampled_timestamps}
             if 'Unity.VarjoEyeTrackingComplete' in data.keys():
                 print(f"Preprocessing pupil for participant {p}, session {s}")
@@ -80,7 +80,7 @@ class RenaDataFrame:
         else:
             raise TypeError("Unsupported session type, must be int, list or None")
         return keys
-    def get_pupil_epochs(self, event_names, event_filters, participant=None, session=None):
+    def get_pupil_epochs(self, event_names, event_filters, participant=None, session=None, n_jobs=1):
         """
         event_filters:
         @param event_filters: list of callables, each corresponding to the event name
@@ -102,7 +102,7 @@ class RenaDataFrame:
             pupil_data = np.concatenate([np.expand_dims(pupil_left_data, axis=1), np.expand_dims(pupil_right_data, axis=1)], axis=1)
 
             pupil_data_with_events, event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_stream_name][1], events, event_names, event_filters)
-            epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids)
+            epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids, n_jobs=n_jobs)
             # check_contraint_block_counts(events, deviant + len(epochs_pupil))  # TODO only taken into account constraint conditions
             if len(epochs_pupil) == 0:
                 warnings.warn(f'No epochs found for participant {p} session {s} after rejection, skipping')
