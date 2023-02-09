@@ -36,8 +36,8 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 
 selected_locking = 'RSVP-Item-Onset'
 export_data_root = '/data'
-is_regenerate_rdf = False
-is_regenerate_epochs = False
+is_regenerate_rdf = True
+is_regenerate_epochs = True
 is_reduce_eeg_dim = True
 test_name = 'demo'
 
