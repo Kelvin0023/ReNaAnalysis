@@ -71,7 +71,7 @@ locking_name_filters_constrained = {
 models = ['HDCA', 'EEGPupilCNN', 'EEGCNN']
 
 results = dict()
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 
 for m in models:
     m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
@@ -101,7 +101,7 @@ pickle.dump(results, open('model_locking_performances', 'wb'))
 # exit()
 plt.rcParams["figure.figsize"] = (24, 12)
 
-models = ['EEGPupilCNN', 'EEGCNN', 'HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil']
+models = ['HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil', 'EEGPupilCNN', 'EEGCNN']
 constrained_conditions = ['RSVP', 'Carousel']
 conditions = ['RSVP', 'Carousel', 'VS']
 constrained_lockings = ['Item-Onset', 'I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
