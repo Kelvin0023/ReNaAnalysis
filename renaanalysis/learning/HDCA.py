@@ -160,10 +160,20 @@ def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
     return weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial
 
 
-def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
+def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", verbose=0):
+    """
 
-    # split data into 100ms bins
-    split_size_eeg = int(split_window_eeg * exg_resample_srate)
+    :param x: array or list of arrays, if array, must provide if this array is EEG or pupil, if list, it is assumed that
+    the array with more channels is EEG. If the two arraies have the same number of channels, an error will be raised
+    :param y:
+    :param event_names:
+    :param is_plots:
+    :param notes:
+    :param verbose:
+    :return:
+    """
+
+    split_size_eeg = int(split_window_eeg * exg_resample_srate)  # split data into 100ms bins
     split_size_pupil = int(split_window_pupil * eyetracking_resample_srate)
     # multi-fold cross-validation
     cross_val_folds = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
