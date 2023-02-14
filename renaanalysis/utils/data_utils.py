@@ -78,7 +78,7 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
     @param: data_type: can be eeg, pupil or mixed
     """
     if data_type == 'both':
-        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
+        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs)
         epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_jobs=n_jobs)
         epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
         ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
@@ -103,7 +103,7 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
         return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
 
     if data_type == 'eeg':
-        epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session)
+        epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs)
     elif data_type == 'pupil':
         epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_jobs=n_jobs)
     else:

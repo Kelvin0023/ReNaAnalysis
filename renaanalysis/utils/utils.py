@@ -540,7 +540,7 @@ def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', particip
     pupil_epochs, pupil_event_ids, _ = rdf.get_pupil_epochs(event_names, event_filters, participant, session, n_jobs=n_jobs)
     visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, title=title)
 
-def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=tmin_eeg, tmax=tmax_eeg):
-    eeg_epochs, eeg_event_ids, _, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin, tmax, participant, session)
+def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=tmin_eeg, tmax=tmax_eeg, n_jobs=1):
+    eeg_epochs, eeg_event_ids, _, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin, tmax, participant, session, n_jobs=n_jobs)
     visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)
 
