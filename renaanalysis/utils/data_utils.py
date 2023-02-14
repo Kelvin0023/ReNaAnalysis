@@ -27,6 +27,12 @@ class Fischer:
 
 
 def compute_pca_ica(X, n_components):
+    """
+    data will be normaly distributed after applying this dimensionality reduction
+    @param X:
+    @param n_components:
+    @return:
+    """
     print("applying pca followed by ica")
     # ev = mne.EvokedArray(np.mean(X, axis=0),
     #                      mne.create_info(64, exg_resample_srate,

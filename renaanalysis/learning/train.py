@@ -294,7 +294,6 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
     y = label_encoder.fit_transform(np.array(Y).reshape(-1, 1)).toarray()
     X = model.prepare_data(X)
 
-
     skf = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
     train_losses_folds = []
     train_accs_folds = []
