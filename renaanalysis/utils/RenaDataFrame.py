@@ -114,7 +114,7 @@ class RenaDataFrame:
 
         return pupil_epochs_all, event_ids, ps_group
 
-    def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None, n_jobs=1):
+    def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None, n_jobs=1, reject='auto'):
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
         eeg_epochs_all = None  # clear epochs
@@ -135,9 +135,12 @@ class RenaDataFrame:
                 eeg_epochs_all = epochs if eeg_epochs_all is None else mne.concatenate_epochs([epochs, eeg_epochs_all])
             ps_group += [i] * len(epochs)
         print("Auto rejecting epochs")
-        ar = AutoReject(n_jobs=n_jobs, verbose=False)
-        eeg_epochs_clean, log = ar.fit_transform(eeg_epochs_all, return_log=True)
-        ps_group = np.array(ps_group)[np.logical_not(log.bad_epochs)]
-
+        if reject == 'auto':
+            ar = AutoReject(n_jobs=n_jobs, verbose=False)
+            eeg_epochs_clean, log = ar.fit_transform(eeg_epochs_all, return_log=True)
+            ps_group = np.array(ps_group)[np.logical_not(log.bad_epochs)]
+        else:
+            eeg_epochs_clean = eeg_epochs_all
+            log = None
         return eeg_epochs_clean, event_ids, log, ps_group
 

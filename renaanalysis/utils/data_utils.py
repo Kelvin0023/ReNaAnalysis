@@ -1,5 +1,6 @@
 # analysis parameters ######################################################################################
 import numpy as np
+from autoreject import AutoReject
 from imblearn.over_sampling import SMOTE
 from matplotlib import pyplot as plt
 from mne.decoding import UnsupervisedSpatialFilter
@@ -77,28 +78,49 @@ def rebalance_classes(x, y):
     x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
     return x, y
 
+def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1):
+    try:
+        assert len(epochs_pupil) == len(epochs_eeg)
+    except AssertionError:
+        raise ValueError(f'reject_combined: eeg and pupil have different number of epochs, eeg {len(epochs_eeg)}, pupil {len(epochs_pupil)}')
+    ar = AutoReject(n_jobs=n_jobs, verbose=False)
+    eeg_epochs_clean, log = ar.fit_transform(epochs_eeg, return_log=True)
+    epochs_pupil = epochs_pupil[np.logical_not(log.bad_epochs)]
 
-def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, n_jobs=1):
+    x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids)
+    return [x_eeg, x_pupil], y
+
+
+def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None):
+    y = []
+    x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
+    x_pupil = [epochs_pupil[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
+    x_eeg = np.concatenate(x_eeg, axis=0)
+    x_pupil = np.concatenate(x_pupil, axis=0)
+
+    for event_name, event_class in event_ids.items():
+        y += [event_class] * len(epochs_pupil[event_name].get_data())
+    if np.min(y) == 1:
+        y = np.array(y) - 1
+
+    return x_eeg, x_pupil, y
+
+def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, n_jobs=1, reject='auto'):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
     """
     if data_type == 'both':
-        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs)
+        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs, reject=reject)
         epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_jobs=n_jobs)
-        epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
-        ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
-        assert np.all(ps_group_pupil == ps_group_eeg)
-        y = []
-        x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
-        x_pupil = [epochs_pupil[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
-        x_eeg = np.concatenate(x_eeg, axis=0)
-        x_pupil = np.concatenate(x_pupil, axis=0)
+        if reject == 'auto':  # if using auto rejection
+            epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
+            ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
 
-        for event_name, event_class in event_ids.items():
-            y += [event_class] * len(epochs_pupil[event_name].get_data())
-        if np.min(y) == 1:
-            y = np.array(y) - 1
+        assert np.all(ps_group_pupil == ps_group_eeg)
+
+        x_eeg, x_pupil, y= _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids)
+
         if rebalance:
             x_eeg, y_eeg = rebalance_classes(x_eeg, y)
             x_pupil, y_pupil = rebalance_classes(x_pupil, y)
