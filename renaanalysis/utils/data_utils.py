@@ -85,9 +85,9 @@ def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1):
         raise ValueError(f'reject_combined: eeg and pupil have different number of epochs, eeg {len(epochs_eeg)}, pupil {len(epochs_pupil)}')
     ar = AutoReject(n_jobs=n_jobs, verbose=False)
     eeg_epochs_clean, log = ar.fit_transform(epochs_eeg, return_log=True)
-    epochs_pupil = epochs_pupil[np.logical_not(log.bad_epochs)]
+    epochs_pupil_clean = epochs_pupil[np.logical_not(log.bad_epochs)]
 
-    x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil, eeg_epochs_clean, event_ids)
+    x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil_clean, eeg_epochs_clean, event_ids)
     return [x_eeg, x_pupil], y
 
 
