@@ -208,5 +208,5 @@ def get_last_block_end_time(events):
 def get_events(event_filters, events):
     rtn = []
     for i, e_filter in enumerate(event_filters):
-        rtn += np.array([e for e in events if e_filter(e)])
+        rtn += [e for e in events if e_filter(e)]
     return rtn
