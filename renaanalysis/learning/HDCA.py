@@ -198,7 +198,7 @@ def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", verbose=0):
     fpr_folds_pupil = []
     tpr_folds_pupil = []
 
-    x_eeg_transformed = compute_pca_ica(x[0], num_top_compoenents)
+    x_eeg_transformed, pca, ica = compute_pca_ica(x[0], num_top_compoenents)
 
     for i, (train, test) in enumerate(cross_val_folds.split(x[0],
                                                             y)):  # cross-validation; group arguement is not necessary unless using grouped folds

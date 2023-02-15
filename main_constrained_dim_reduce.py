@@ -94,7 +94,7 @@ y = pickle.load(open('y_allParticipantSessions_constrained_ItemLocked.p', 'rb'))
 #                  lambda x: type(x)==Fixation and x.detection_alg == 'Patch-Sim' and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]]
 # viz_eeg_epochs(rdf, ["Distractor", "Target"], event_filters, colors, title='Locked to Patch-Sim', session=2, participant='1')
 # x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='eeg', rebalance=True, session=2, participant='1')
-x = compute_pca_ica(x, num_top_compoenents)
+x, pca, ica = compute_pca_ica(x, num_top_compoenents)
 
 model = EEGCNN(in_shape=x.shape, num_classes=2, in_channels=20)
 model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=f'Locked to item popping, all constralled')

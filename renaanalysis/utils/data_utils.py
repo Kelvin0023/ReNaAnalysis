@@ -51,7 +51,7 @@ def compute_pca_ica(X, n_components):
     # ev1 = mne.EvokedArray(np.mean(ica_data, axis=0),mne.create_info(n_components, exg_resample_srate,ch_types='eeg'), tmin=-0.1)
     # ev1.plot(window_title='ICA', time_unit='s')
 
-    return ica_data
+    return ica_data, pca, ica
 
 def mean_sublists(l):
     return np.mean([np.mean(x) for x in l])

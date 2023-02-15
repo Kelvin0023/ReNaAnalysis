@@ -41,7 +41,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, participan
                 raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model_name == 'EEGPupil' else "")
         x_eeg = np.copy(x[0])
         if reduce_dim:
-            x[0] = compute_pca_ica(x[0], num_top_compoenents)
+            x[0], pca, ica = compute_pca_ica(x[0], num_top_compoenents)
 
         if model_name == 'HDCA':
             roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', verbose=0)  # give the original eeg data, no need to apply HDCA again
@@ -80,7 +80,7 @@ def eval_lockings_models(rdf, event_names, locking_name_filters, participant, se
             x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'rb'))
             y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'rb'))
         if reduce_dim:
-            x[0] = compute_pca_ica(x[0], num_top_compoenents)  # reduce dimension of eeg data at index 0
+            x[0], pca, ica = compute_pca_ica(x[0], num_top_compoenents)  # reduce dimension of eeg data at index 0
 
         # data is ready for this locking from above, now iterate over the models
         for m in models:
