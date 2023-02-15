@@ -32,7 +32,7 @@ class Event:
 
         # object related markers
         self.item_index = kwargs['item_index'] if 'item_index' in kwargs.keys() else None
-        self.item_id = kwargs['item_id'] if 'itemID' in kwargs.keys() else None
+        self.item_id = kwargs['item_id'] if 'item_id' in kwargs.keys() else None
         self.obj_dist = kwargs['obj_dist'] if 'objDistFromPlayer' in kwargs.keys() else None
         self.carousel_speed = kwargs['carousel_speed'] if 'CarouselSpeed' in kwargs.keys() else None
         self.carousel_angle = kwargs['carousel_angle'] if 'CarouselAngle' in kwargs.keys() else None
