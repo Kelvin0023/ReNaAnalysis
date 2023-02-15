@@ -27,7 +27,7 @@ class Fischer:
         pass
 
 
-def compute_pca_ica(X, n_components):
+def compute_pca_ica(X, n_components, pca=None, ica=None):
     """
     data will be normaly distributed after applying this dimensionality reduction
     @param X:
@@ -39,13 +39,13 @@ def compute_pca_ica(X, n_components):
     #                      mne.create_info(64, exg_resample_srate,
     #                                      ch_types='eeg'), tmin=-0.1)
     # ev.plot(window_title="original", time_unit='s')
-    pca = UnsupervisedSpatialFilter(PCA(n_components), average=False)
+    pca = UnsupervisedSpatialFilter(PCA(n_components), average=False) if pca is None else pca
     pca_data = pca.fit_transform(X)
     # ev = mne.EvokedArray(np.mean(pca_data, axis=0),
     #                      mne.create_info(n_components, exg_resample_srate,
     #                                      ch_types='eeg'), tmin=-0.1)
     # ev.plot( window_title="PCA", time_unit='s')
-    ica = UnsupervisedSpatialFilter(FastICA(n_components, whiten='unit-variance'), average=False)
+    ica = UnsupervisedSpatialFilter(FastICA(n_components, whiten='unit-variance'), average=False) if ica is None else ica
     ica_data = ica.fit_transform(pca_data)
 
     # ev1 = mne.EvokedArray(np.mean(ica_data, axis=0),mne.create_info(n_components, exg_resample_srate,ch_types='eeg'), tmin=-0.1)
