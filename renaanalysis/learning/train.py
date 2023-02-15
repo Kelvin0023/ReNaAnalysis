@@ -464,8 +464,7 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, ve
 
 
 
-def train_model_pupil_eeg_no_folds(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
-
+def train_model_pupil_eeg_no_folds(X, Y, model, num_epochs=5000, test_name="CNN-EEG-Pupil", verbose=1):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     model.to(device)
@@ -498,7 +497,7 @@ def train_model_pupil_eeg_no_folds(X, Y, model, test_name="CNN-EEG-Pupil", verbo
     best_loss = np.inf
     patience_counter = []
 
-    for epoch in range(epochs):
+    for epoch in range(num_epochs):
         mini_batch_i = 0
         batch_losses = []
         num_correct_preds = 0

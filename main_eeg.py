@@ -98,7 +98,7 @@ locking_filters = {
                                             lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]} #nyamu <3
 
 event_filters = locking_filters[selected_locking]
-
+# a = get_events(event_filters, rdf.get_event())
 # viz_eeg_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
 # viz_pupil_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
 # r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')

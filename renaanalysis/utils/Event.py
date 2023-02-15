@@ -135,7 +135,6 @@ def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, 
         filtered_events = np.array([e for e in events if e_filter(e)])
         event_ts = [e.timestamp for e in filtered_events]
 
-
         event_data_indices = [np.argmin(np.abs(data_timestamp - t)) for t in event_ts if np.min(np.abs(data_timestamp - t)) < deviate]
 
         if len(event_data_indices) > 0:
@@ -206,3 +205,8 @@ def get_last_block_end_time(events):
     filter_events = [e for e in events if e.is_block_end]
     return filter_events[-1].timestamp
 
+def get_events(event_filters, events):
+    rtn = []
+    for i, e_filter in enumerate(event_filters):
+        rtn += np.array([e for e in events if e_filter(e)])
+    return rtn
