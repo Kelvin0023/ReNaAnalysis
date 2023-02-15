@@ -8,7 +8,7 @@ from RenaAnalysis import get_rdf, r_square_test
 from renaanalysis.eye.eyetracking import Fixation
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.models import EEGCNN, EEGPupilCNN
-from renaanalysis.learning.train import eval_model, train_model, train_model_pupil_eeg
+from renaanalysis.learning.train import eval_model, train_model, train_model_pupil_eeg, train_model_pupil_eeg_no_folds
 from renaanalysis.utils.data_utils import epochs_to_class_samples, compute_pca_ica, mean_max_sublists, mean_min_sublists
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,7 +37,7 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 selected_locking = 'RSVP-Item-Onset'
 export_data_root = '/data'
 is_regenerate_rdf = False
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 is_reduce_eeg_dim = True
 test_name = 'demo'
 
@@ -117,7 +117,8 @@ if is_reduce_eeg_dim:
     x[0] = compute_pca_ica(x[0], num_top_compoenents)
 
 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2, eeg_in_channels=x[0].shape[1])
-model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
+# model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
+model, training_histories, criterion, label_encoder = train_model_pupil_eeg_no_folds(x, y, model, test_name=test_name)
 
 # folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
 # folds_val_auc = mean_max_sublists(training_histories['auc_val'])

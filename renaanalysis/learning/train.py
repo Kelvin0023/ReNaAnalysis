@@ -464,6 +464,106 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, ve
 
 
 
+def train_model_pupil_eeg_no_folds(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
+
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+    model.to(device)
+    # create the train dataset
+    label_encoder = preprocessing.OneHotEncoder()
+    y = label_encoder.fit_transform(np.array(Y).reshape(-1, 1)).toarray()
+    y_train = torch.Tensor(y)
+
+    X = model.prepare_data(X)
+
+    criterion = nn.CrossEntropyLoss()
+
+    x_eeg_train = torch.Tensor(X[0])  # transform to torch tensor
+    x_pupil_train = torch.Tensor(X[1])  # transform to torch tensor
+    train_size = len(x_eeg_train)
+
+
+    train_dataset_eeg = TensorDataset(x_eeg_train, y_train)
+    train_dataloader_eeg = DataLoader(train_dataset_eeg, batch_size=batch_size)
+
+    train_dataset_pupil = TensorDataset(x_pupil_train, y_train)
+    train_dataloader_pupil = DataLoader(train_dataset_pupil, batch_size=batch_size)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+    scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+
+    train_losses = []
+    train_accs = []
+    best_loss = np.inf
+    patience_counter = []
+
+    for epoch in range(epochs):
+        mini_batch_i = 0
+        batch_losses = []
+        num_correct_preds = 0
+        if verbose >= 1:
+            pbar = tqdm(total=math.ceil(len(train_dataloader_eeg.dataset) / train_dataloader_eeg.batch_size),
+                        desc='Training {}'.format(test_name))
+            pbar.update(mini_batch_i)
+
+        model.train()  # set the model in training model (dropout and batchnormal behaves differently in train vs. eval)
+        for (x_eeg, y), (x_pupil, y) in zip(train_dataloader_eeg, train_dataloader_pupil):
+            optimizer.zero_grad()
+
+            mini_batch_i += 1
+            if verbose >= 1:pbar.update(1)
+
+            y_pred = model([x_eeg.to(device), x_pupil.to(device)])
+            y_pred = F.softmax(y_pred, dim=1)
+            # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
+            y_tensor = y.to(device)
+
+            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+            loss = criterion(y_tensor, y_pred) + l2_penalty
+            # loss = criterion(y_tensor, y_pred)
+            loss.backward()
+            optimizer.step()
+
+            # measure accuracy
+            num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
+
+            if verbose >= 1: pbar.set_description('Training [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+            batch_losses.append(loss.item())
+        train_losses.append(np.mean(batch_losses))
+        train_accs.append(num_correct_preds / train_size)
+        if verbose >= 1: pbar.close()
+        scheduler.step()
+
+        if verbose >= 1:
+            print("Epoch {}: train accuracy = {:.8f}, train loss={:.8f};".format(epoch, train_accs[-1], train_losses[-1]))
+        # Save training histories after every epoch
+        training_histories = {'loss_train': train_losses, 'acc_train': train_accs}
+        pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
+        if train_losses[-1] < best_loss:
+            torch.save(model.state_dict(), os.path.join(model_save_dir, test_name))
+            if verbose >= 1:
+                print('Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, train_losses[-1], model_save_dir))
+            best_loss = train_losses[-1]
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter > patience:
+                if verbose >= 1:
+                    print(f'Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                break
+
+        # plt.plot(training_histories['acc_train'])
+        # plt.plot(training_histories['acc_val'])
+        # plt.title(f"Accuracy, {test_name}")
+        # plt.show()
+        #
+        # plt.plot(training_histories['loss_train'])
+        # plt.plot(training_histories['loss_val'])
+        # plt.title(f"Loss, {test_name}")
+        # plt.show()
+
+    return model, {'train accs': train_accs, 'train losses': train_losses}, criterion, label_encoder
 
 def prepare_sample_label(rdf, event_names, event_filters, data_type='eeg', picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
     assert len(event_names) == len(event_filters) == 2
