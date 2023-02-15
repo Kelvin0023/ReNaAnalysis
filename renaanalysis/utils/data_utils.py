@@ -119,7 +119,9 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
 
         assert np.all(ps_group_pupil == ps_group_eeg)
 
-        x_eeg, x_pupil, y= _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids)
+        if epochs_eeg is None:
+            return None, None, None, event_ids
+        x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids)
 
         if rebalance:
             x_eeg, y_eeg = rebalance_classes(x_eeg, y)

@@ -95,11 +95,18 @@ def add_event_info_to_gaze(fixations, events, long_gaze_threshold=0.15):
     sac_in_block = []
     gaze_intersects = [x for x in events if type(x) == GazeRayIntersect]
     fixated = []
-    for f in fixations:
+    for i, f in enumerate(fixations):
         if is_event_in_block(f, events):
             f = add_event_meta_info(f, events)
-            f.preceding_saccade = add_event_meta_info(f.preceding_saccade, events)
-            # gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
+            try:
+                f.preceding_saccade = add_event_meta_info(f.preceding_saccade, events)
+            except ValueError as e:
+                if i == 0:  # the saccade of the first fixation maybe outside of the block
+                    f.preceding_saccade.block_condition = f.block_condition
+                    f.preceding_saccade.is_practice = f.is_practice
+                    f.preceding_saccade.block_id = f.block_id
+                else: raise e
+                    # gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
             overlapping_gaze_intersects = get_overlapping_events(f.onset_time, f.offset_time, gaze_intersects)
 
             if len(overlapping_gaze_intersects) > 0:
