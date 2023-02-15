@@ -99,7 +99,7 @@ def eval_lockings_models(rdf, event_names, locking_name_filters, participant, se
             performance[m, locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
     return performance
 
-def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
+def train_model(X, Y, model, num_folds=10, test_name="CNN", n_folds=10, verbose=1):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     model = model.to(device)
@@ -108,7 +108,7 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", verbose=1):
     label_encoder = label_encoder.fit(np.array(Y).reshape(-1, 1))
     X = model.prepare_data(X)
 
-    skf = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
+    skf = StratifiedShuffleSplit(n_splits=n_folds, random_state=random_seed)
     train_losses_folds = []
     train_accs_folds = []
     val_losses_folds = []
@@ -284,7 +284,7 @@ def eval_model(model, x, y, criterion, label_encoder):
     return loss, accuracy
 
 
-def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
+def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, verbose=1):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -294,7 +294,7 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
     y = label_encoder.fit_transform(np.array(Y).reshape(-1, 1)).toarray()
     X = model.prepare_data(X)
 
-    skf = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
+    skf = StratifiedShuffleSplit(n_splits=n_folds, random_state=random_seed)
     train_losses_folds = []
     train_accs_folds = []
     val_losses_folds = []
@@ -461,6 +461,8 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", verbose=1):
         # plt.show()
 
     return model, training_histories_folds, criterion, label_encoder
+
+
 
 
 def prepare_sample_label(rdf, event_names, event_filters, data_type='eeg', picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
