@@ -87,7 +87,7 @@ def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1):
     eeg_epochs_clean, log = ar.fit_transform(epochs_eeg, return_log=True)
     epochs_pupil = epochs_pupil[np.logical_not(log.bad_epochs)]
 
-    x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids)
+    x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil, eeg_epochs_clean, event_ids)
     return [x_eeg, x_pupil], y
 
 
