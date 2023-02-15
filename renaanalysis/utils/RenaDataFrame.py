@@ -115,7 +115,7 @@ class RenaDataFrame:
                 print(f'Found {len(epochs_pupil)} pupil epochs for participant {p} session {s}')
             pupil_epochs_all = epochs_pupil if pupil_epochs_all is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs_all])
             ps_group += [i] * len(epochs_pupil)
-            print(f"ps_group length is {len(ps_group)}")
+            # print(f"ps_group length is {len(ps_group)}")
 
         return pupil_epochs_all, event_ids, ps_group
 
