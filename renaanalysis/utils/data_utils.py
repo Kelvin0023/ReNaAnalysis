@@ -5,6 +5,7 @@ from imblearn.over_sampling import SMOTE
 from matplotlib import pyplot as plt
 from mne.decoding import UnsupervisedSpatialFilter
 from sklearn.decomposition import PCA, FastICA
+from sklearn.metrics import confusion_matrix
 
 from renaanalysis.params.params import *
 from renaanalysis.params.params import eeg_montage
@@ -39,15 +40,20 @@ def compute_pca_ica(X, n_components, pca=None, ica=None):
     #                      mne.create_info(64, exg_resample_srate,
     #                                      ch_types='eeg'), tmin=-0.1)
     # ev.plot(window_title="original", time_unit='s')
-    pca = UnsupervisedSpatialFilter(PCA(n_components), average=False) if pca is None else pca
-    pca_data = pca.fit_transform(X)
+    if pca is None:
+        pca = UnsupervisedSpatialFilter(PCA(n_components), average=False)
+        pca_data = pca.fit_transform(X)
+    else:
+        pca_data = pca.transform(X)
     # ev = mne.EvokedArray(np.mean(pca_data, axis=0),
     #                      mne.create_info(n_components, exg_resample_srate,
     #                                      ch_types='eeg'), tmin=-0.1)
     # ev.plot( window_title="PCA", time_unit='s')
-    ica = UnsupervisedSpatialFilter(FastICA(n_components, whiten='unit-variance'), average=False) if ica is None else ica
-    ica_data = ica.fit_transform(pca_data)
-
+    if ica is None:
+        ica = UnsupervisedSpatialFilter(FastICA(n_components, whiten='unit-variance'), average=False)
+        ica_data = ica.fit_transform(pca_data)
+    else:
+        ica_data = ica.transform(pca_data)
     # ev1 = mne.EvokedArray(np.mean(ica_data, axis=0),mne.create_info(n_components, exg_resample_srate,ch_types='eeg'), tmin=-0.1)
     # ev1.plot(window_title='ICA', time_unit='s')
 
@@ -188,3 +194,16 @@ def sanity_check_pupil(x, y):
     plt.title('Pupil sample sanity check')
     plt.legend()
     plt.show()
+
+def binary_classification_metric(y_true, y_pred):
+    acc = np.sum(y_pred == y_true).item() / len(y_true)
+    cm = confusion_matrix(y_true, y_pred)
+    FP = np.sum(cm, axis=0) - np.diag(cm)
+    FN = np.sum(cm, axis=1) - np.diag(cm)
+    TP = np.diag(cm)
+    TN = cm.sum() - (FP + FN + TP)
+    # Sensitivity, hit rate, recall, or true positive rate
+    TPR = TP / (TP + FN)
+    # Specificity or true negative rate
+    TNR = TN / (TN + FP)
+    return acc, TPR, TNR
