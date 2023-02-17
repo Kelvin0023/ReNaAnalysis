@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import imblearn
 import matplotlib.pyplot as plt
@@ -342,6 +343,8 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
                           preload=True,
                           verbose=False,
                           picks=['pupil_left', 'pupil_right'])
+    if len(epochs_pupil) < len(found_events):
+        warnings.warn(f"generate_pupil_event_epochs: generated fewer than found_event number of epochs, possibly due to incomplete last epoch. Found {len(found_events)} events. But have {len(epochs_pupil)} epochs.")
     return epochs_pupil, epochs_pupil.events[:, 2]
 
 

@@ -123,9 +123,10 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
         if reject == 'auto':  # if using auto rejection
             epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
             ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
-
-        assert np.all(ps_group_pupil == ps_group_eeg)
-
+        try:
+            assert np.all(ps_group_pupil == ps_group_eeg)
+        except AssertionError:
+            raise ValueError(f"pupil and eeg groups does not match: {ps_group_pupil}, {ps_group_eeg}")
         if epochs_eeg is None:
             return None, None, None, event_ids
         x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids)
