@@ -25,7 +25,7 @@ from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, re
 def compute_forward(x_windowed, y, projection):
     num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_windowed.shape
     activation = np.empty((2, num_channels, num_windows, num_timepoints_per_window))
-    for class_index in range(2):  # for test set
+    for class_index in np.sort(np.unique(y)):  # for test set, in increasing order
         this_x = x_windowed[y == class_index]
         this_projection = projection[y == class_index]
         for j in range(num_windows):

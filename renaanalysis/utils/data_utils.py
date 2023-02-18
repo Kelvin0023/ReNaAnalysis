@@ -84,7 +84,7 @@ def rebalance_classes(x, y):
     x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
     return x, y
 
-def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, ar=None):
+def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, ar=None, return_rejections=False):
     try:
         assert len(epochs_pupil) == len(epochs_eeg)
     except AssertionError:
@@ -97,21 +97,30 @@ def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, ar=None):
     epochs_pupil_clean = epochs_pupil[np.logical_not(log.bad_epochs)]
 
     x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil_clean, eeg_epochs_clean, event_ids)
-    # return [x_eeg, x_pupil], y, np.logical_not(log.bad_epochs), ar
-    return x_eeg, x_pupil, y, ar
+    if return_rejections:
+        return x_eeg, x_pupil, y, ar, np.logical_not(log.bad_epochs)
+    else:
+        return x_eeg, x_pupil, y, ar
 
 
-def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None):
+def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve_order=True):
     y = []
-    x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
-    x_pupil = [epochs_pupil[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
-    x_eeg = np.concatenate(x_eeg, axis=0)
-    x_pupil = np.concatenate(x_pupil, axis=0)
 
-    for event_name, event_class in event_ids.items():
-        y += [event_class] * len(epochs_pupil[event_name].get_data())
-    if np.min(y) == 1:
-        y = np.array(y) - 1
+    if not perserve_order:
+        x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
+        x_pupil = [epochs_pupil[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
+        x_eeg = np.concatenate(x_eeg, axis=0)
+        x_pupil = np.concatenate(x_pupil, axis=0)
+
+        for event_name, event_class in event_ids.items():
+            y += [event_class] * len(epochs_pupil[event_name].get_data())
+        if np.min(y) == 1:
+            y = np.array(y) - 1
+    else:
+        y = epochs_eeg.events[:, 2]
+        if min(y) > 0: y = y - min(y)
+        x_eeg = epochs_eeg.get_data(picks=picks)
+        x_pupil = epochs_pupil.get_data(picks=picks)
 
     return x_eeg, x_pupil, y
 
@@ -181,8 +190,8 @@ def sanity_check_eeg(x, y, picks):
     x_targets = x[:, coi, :][y == 1]
     x_distractors = np.mean(x_distractors, axis=0)
     x_targets = np.mean(x_targets, axis=0)
-    plt.plot(x_distractors, label='distractor')
-    plt.plot(x_targets, label='target')
+    plt.plot(x_distractors, label=f'distractor, n={np.sum(y == 0)}')
+    plt.plot(x_targets, label=f'target, n={np.sum(y == 1)}')
     plt.title('EEG sample sanity check')
     plt.legend()
     plt.show()
@@ -194,8 +203,8 @@ def sanity_check_pupil(x, y):
     x_distractors = np.mean(x_distractors, axis=(0, 1))  # also average left and right
     x_targets = np.mean(x_targets, axis=(0, 1))
 
-    plt.plot(x_distractors, label='distractor')
-    plt.plot(x_targets, label='target')
+    plt.plot(x_distractors, label=f'distractor, n={np.sum(y == 0)}')
+    plt.plot(x_targets, label=f'target, n={np.sum(y == 1)}')
     plt.title('Pupil sample sanity check')
     plt.legend()
     plt.show()
