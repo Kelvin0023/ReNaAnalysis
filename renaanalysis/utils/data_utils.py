@@ -84,17 +84,21 @@ def rebalance_classes(x, y):
     x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
     return x, y
 
-def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1):
+def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, ar=None):
     try:
         assert len(epochs_pupil) == len(epochs_eeg)
     except AssertionError:
         raise ValueError(f'reject_combined: eeg and pupil have different number of epochs, eeg {len(epochs_eeg)}, pupil {len(epochs_pupil)}')
-    ar = AutoReject(n_jobs=n_jobs, verbose=False)
-    eeg_epochs_clean, log = ar.fit_transform(epochs_eeg, return_log=True)
+    if ar is not None:
+        eeg_epochs_clean, log = ar.transform(epochs_eeg, return_log=True)
+    else:
+        ar = AutoReject(n_jobs=n_jobs, verbose=False)
+        eeg_epochs_clean, log = ar.fit_transform(epochs_eeg, return_log=True)
     epochs_pupil_clean = epochs_pupil[np.logical_not(log.bad_epochs)]
 
     x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil_clean, eeg_epochs_clean, event_ids)
-    return [x_eeg, x_pupil], y, np.logical_not(log.bad_epochs)
+    # return [x_eeg, x_pupil], y, np.logical_not(log.bad_epochs), ar
+    return x_eeg, x_pupil, y, ar
 
 
 def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None):
