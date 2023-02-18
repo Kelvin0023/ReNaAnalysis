@@ -205,8 +205,21 @@ def get_last_block_end_time(events):
     filter_events = [e for e in events if e.is_block_end]
     return filter_events[-1].timestamp
 
-def get_events(event_filters, events):
+def get_events(event_filters, events, order) -> list:
+    """
+    order can be either events or time
+    :param event_filters:
+    :param events:
+    :param order:
+    :return:
+    """
     rtn = []
     for i, e_filter in enumerate(event_filters):
         rtn += [e for e in events if e_filter(e)]
-    return rtn
+    if order == 'events':
+        return rtn
+    elif order == 'time':
+        rtn.sort(key=lambda x: x.timestamp)
+        return rtn
+    else:
+        raise NotImplementedError(f"Unsupported order type {order}")
