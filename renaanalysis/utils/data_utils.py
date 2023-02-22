@@ -84,7 +84,7 @@ def rebalance_classes(x, y):
     x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
     return x, y
 
-def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, ar=None, return_rejections=False):
+def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, n_folds=10, ar=None, return_rejections=False):
     try:
         assert len(epochs_pupil) == len(epochs_eeg)
     except AssertionError:
@@ -92,7 +92,7 @@ def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, ar=None, retu
     if ar is not None:
         eeg_epochs_clean, log = ar.transform(epochs_eeg, return_log=True)
     else:
-        ar = AutoReject(n_jobs=n_jobs, verbose=False)
+        ar = AutoReject(n_jobs=n_jobs, verbose=False, cv=n_folds)
         eeg_epochs_clean, log = ar.fit_transform(epochs_eeg, return_log=True)
     epochs_pupil_clean = epochs_pupil[np.logical_not(log.bad_epochs)]
 
