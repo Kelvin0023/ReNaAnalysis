@@ -103,7 +103,7 @@ def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, n_folds=10, a
         return x_eeg, x_pupil, y, ar
 
 
-def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve_order=True):
+def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve_order=True, event_marker_to_label=True):
     y = []
 
     if not perserve_order:
@@ -114,11 +114,11 @@ def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve
 
         for event_name, event_class in event_ids.items():
             y += [event_class] * len(epochs_pupil[event_name].get_data())
-        if np.min(y) == 1:
+        if event_marker_to_label:
             y = np.array(y) - 1
     else:
         y = epochs_eeg.events[:, 2]
-        if min(y) > 0: y = y - min(y)
+        if event_marker_to_label: y = y - 1
         x_eeg = epochs_eeg.get_data(picks=picks)
         x_pupil = epochs_pupil.get_data(picks=picks)
 
