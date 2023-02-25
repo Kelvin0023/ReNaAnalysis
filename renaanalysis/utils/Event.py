@@ -32,7 +32,7 @@ class Event:
 
         # object related markers
         self.item_index = kwargs['item_index'] if 'item_index' in kwargs.keys() else None
-        self.item_id = kwargs['item_id'] if 'itemID' in kwargs.keys() else None
+        self.item_id = kwargs['item_id'] if 'item_id' in kwargs.keys() else None
         self.obj_dist = kwargs['obj_dist'] if 'objDistFromPlayer' in kwargs.keys() else None
         self.carousel_speed = kwargs['carousel_speed'] if 'CarouselSpeed' in kwargs.keys() else None
         self.carousel_angle = kwargs['carousel_angle'] if 'CarouselAngle' in kwargs.keys() else None
@@ -135,7 +135,6 @@ def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, 
         filtered_events = np.array([e for e in events if e_filter(e)])
         event_ts = [e.timestamp for e in filtered_events]
 
-
         event_data_indices = [np.argmin(np.abs(data_timestamp - t)) for t in event_ts if np.min(np.abs(data_timestamp - t)) < deviate]
 
         if len(event_data_indices) > 0:
@@ -206,3 +205,21 @@ def get_last_block_end_time(events):
     filter_events = [e for e in events if e.is_block_end]
     return filter_events[-1].timestamp
 
+def get_events(event_filters, events, order) -> list:
+    """
+    order can be either events or time
+    :param event_filters:
+    :param events:
+    :param order:
+    :return:
+    """
+    rtn = []
+    for i, e_filter in enumerate(event_filters):
+        rtn += [e for e in events if e_filter(e)]
+    if order == 'events':
+        return rtn
+    elif order == 'time':
+        rtn.sort(key=lambda x: x.timestamp)
+        return rtn
+    else:
+        raise NotImplementedError(f"Unsupported order type {order}")

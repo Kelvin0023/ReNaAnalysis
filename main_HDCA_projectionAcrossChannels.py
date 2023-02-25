@@ -57,7 +57,7 @@ roc_auc_folds = np.empty(num_folds)
 fpr_folds = []
 tpr_folds = []
 
-x_transformed = compute_pca_ica(x, num_top_compoenents)  # apply ICA and PCA
+x_transformed, pca, ica = compute_pca_ica(x, num_top_compoenents)  # apply ICA and PCA
 
 for i, (train, test) in enumerate(cross_val_folds.split(x, y)):  # cross-validation; group arguement is not necessary unless using grouped folds
     print(f"Working on {i+1} fold of {num_folds}")

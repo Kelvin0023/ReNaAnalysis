@@ -8,7 +8,7 @@ from RenaAnalysis import get_rdf, r_square_test
 from renaanalysis.eye.eyetracking import Fixation
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.models import EEGCNN, EEGPupilCNN
-from renaanalysis.learning.train import eval_model, train_model, train_model_pupil_eeg
+from renaanalysis.learning.train import eval_model, train_model, train_model_pupil_eeg, train_model_pupil_eeg_no_folds
 from renaanalysis.utils.data_utils import epochs_to_class_samples, compute_pca_ica, mean_max_sublists, mean_min_sublists
 import matplotlib.pyplot as plt
 import numpy as np
@@ -98,28 +98,31 @@ locking_filters = {
                                             lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]} #nyamu <3
 
 event_filters = locking_filters[selected_locking]
-
-viz_eeg_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
-viz_pupil_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
-r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
+# a = get_events(event_filters, rdf.get_event())
+# viz_eeg_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
+# viz_pupil_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
+# r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
 
 if is_regenerate_epochs:
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0)
-    pickle.dump(x, open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'wb'))
-    pickle.dump(y, open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'wb'))
+    x, y, epochs, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True)
+    pickle.dump(x, open(os.path.join(export_data_root, f'x_pAll_sAll_{selected_locking}.p'), 'wb'))
+    pickle.dump(epochs, open(os.path.join(export_data_root, f'epochs_pAll_sAll_{selected_locking}.p'), 'wb'))
+    pickle.dump(y, open(os.path.join(export_data_root, f'y_pAll_sAll_{selected_locking}.p'), 'wb'))
 else:
-    x = pickle.load(open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'rb'))
-    y = pickle.load(open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'rb'))
+    x = pickle.load(open(os.path.join(export_data_root, f'x_pAll_sAll_{selected_locking}.p'), 'rb'))
+    y = pickle.load(open(os.path.join(export_data_root, f'y_pAll_sAll_{selected_locking}.p'), 'rb'))
 
 x_eeg = np.copy(x[0])
 if is_reduce_eeg_dim:
-    x[0], _, _ = compute_pca_ica(x[0], num_top_compoenents)
+    x[0], pca, ica = compute_pca_ica(x[0], num_top_compoenents)
 
 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2, eeg_in_channels=x[0].shape[1])
-model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
-folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
-folds_val_auc = mean_max_sublists(training_histories['auc_val'])
-print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
+# model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
+model, training_histories, criterion, label_encoder = train_model_pupil_eeg_no_folds(x, y, model, test_name=test_name)
 
-roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', verbose=0)  # give the original eeg data
-print(f'HDCA: {test_name}: folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}')
+# folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
+# folds_val_auc = mean_max_sublists(training_histories['auc_val'])
+# print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
+#
+# roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', verbose=0)  # give the original eeg data
+# print(f'HDCA: {test_name}: folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}')

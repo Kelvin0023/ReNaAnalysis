@@ -25,7 +25,7 @@ from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, re
 def compute_forward(x_windowed, y, projection):
     num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_windowed.shape
     activation = np.empty((2, num_channels, num_windows, num_timepoints_per_window))
-    for class_index in range(2):  # for test set
+    for class_index in np.sort(np.unique(y)):  # for test set, in increasing order
         this_x = x_windowed[y == class_index]
         this_projection = projection[y == class_index]
         for j in range(num_windows):
@@ -160,10 +160,20 @@ def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
     return weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial
 
 
-def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
+def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", verbose=0):
+    """
 
-    # split data into 100ms bins
-    split_size_eeg = int(split_window_eeg * exg_resample_srate)
+    :param x: array or list of arrays, if array, must provide if this array is EEG or pupil, if list, it is assumed that
+    the array with more channels is EEG. If the two arraies have the same number of channels, an error will be raised
+    :param y:
+    :param event_names:
+    :param is_plots:
+    :param notes:
+    :param verbose:
+    :return:
+    """
+
+    split_size_eeg = int(split_window_eeg * exg_resample_srate)  # split data into 100ms bins
     split_size_pupil = int(split_window_pupil * eyetracking_resample_srate)
     # multi-fold cross-validation
     cross_val_folds = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
@@ -188,7 +198,7 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
     fpr_folds_pupil = []
     tpr_folds_pupil = []
 
-    x_eeg_transformed = compute_pca_ica(x[0], num_top_compoenents)
+    x_eeg_transformed, pca, ica = compute_pca_ica(x[0], num_top_compoenents)
 
     for i, (train, test) in enumerate(cross_val_folds.split(x[0],
                                                             y)):  # cross-validation; group arguement is not necessary unless using grouped folds
