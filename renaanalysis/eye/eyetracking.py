@@ -99,7 +99,8 @@ def add_event_info_to_gaze(fixations, events, long_gaze_threshold=0.15):
         if is_event_in_block(f, events):
             f = add_event_meta_info(f, events)
             try:
-                f.preceding_saccade = add_event_meta_info(f.preceding_saccade, events)
+                if len(fix_in_block) != 0:  # ignore the first saccade in block
+                    f.preceding_saccade = add_event_meta_info(f.preceding_saccade, events)
             except ValueError as e:
                 if i == 0:  # the saccade of the first fixation maybe outside of the block
                     f.preceding_saccade.block_condition = f.block_condition
