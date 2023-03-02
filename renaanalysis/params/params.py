@@ -35,7 +35,7 @@ dtn_color_dict = {None: 'grey', 1: 'blue', 2: 'red', 3: 'orange', 4: 'grey'}
 event_viz = 'GazeRayIntersect'
 
 
-conditions = Bidict({'RSVP': 1., 'Carousel': 2., 'VS': 3., 'TS': 4., 'TS-gnd': 8, 'TS-id': 9})
+conditions = Bidict({'RSVP': 1., 'Carousel': 2., 'VS': 3., 'TS': 4., 'TSgnd': 8, 'TSid': 9})
 dtnn_types = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
 meta_blocks = Bidict({'cp': 5, 'ip': 7})
 

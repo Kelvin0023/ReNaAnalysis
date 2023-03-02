@@ -34,8 +34,12 @@ class Event:
         self.item_index = kwargs['item_index'] if 'item_index' in kwargs.keys() else None
         self.item_id = kwargs['item_id'] if 'item_id' in kwargs.keys() else None
         self.obj_dist = kwargs['obj_dist'] if 'objDistFromPlayer' in kwargs.keys() else None
+
+        # condition specific attributes
         self.carousel_speed = kwargs['carousel_speed'] if 'CarouselSpeed' in kwargs.keys() else None
         self.carousel_angle = kwargs['carousel_angle'] if 'CarouselAngle' in kwargs.keys() else None
+        self.ts_hand_left = kwargs['ts_hand_left'] if 'ts_hand_left' in kwargs.keys() else None
+        self.ts_hand_right = kwargs['ts_hand_right'] if 'ts_hand_right' in kwargs.keys() else None
 
         self.likert = kwargs['Likert'] if 'Likert' in kwargs.keys() else None  # TODO to be added
 

@@ -129,6 +129,14 @@ def get_block_events(event_markers, event_marker_timestamps):
     return events
 
 def get_dtn_events(event_markers, event_marker_timestamps, block_events):
+    """
+    this function must be called after processing the block events so the block information can
+    be added to ecah of the dtn events
+    :param event_markers:
+    :param event_marker_timestamps:
+    :param block_events:
+    :return:
+    """
     events = []
 
     dtn = event_markers[eventmarker_chs.index('DTN'), :]
@@ -140,6 +148,8 @@ def get_dtn_events(event_markers, event_marker_timestamps, block_events):
     obj_dists = event_markers[eventmarker_chs.index('objDistFromPlayer'), mask]
     carousel_speed = event_markers[eventmarker_chs.index('CarouselSpeed'), mask]
     carousel_angle = event_markers[eventmarker_chs.index('CarouselAngle'), mask]
+    ts_hand_left = event_markers[eventmarker_chs.index('TSHandLeft'), mask]
+    ts_hand_right = event_markers[eventmarker_chs.index('TSHandRight'), mask]
     dtn = dtn[dtn != 0]
 
     for i, dtn_time in enumerate(dtn_timestamps):
@@ -147,6 +157,7 @@ def get_dtn_events(event_markers, event_marker_timestamps, block_events):
         e = add_event_meta_info(e, block_events)
         if e.block_condition == conditions['Carousel']:
             e.carousel_speed, e.carousel_angle = carousel_speed[i], carousel_angle[i]
+        # if e.block_condition == conditions['TS']  # TODO add ts events
 
         e.dtn_onffset = dtn[i] > 0
         events.append(e)
