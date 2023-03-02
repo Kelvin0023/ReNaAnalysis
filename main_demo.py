@@ -19,10 +19,10 @@ import time
 from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation, GazeRayIntersect
 from renaanalysis.params.params import *
 from renaanalysis.utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
-from renaanalysis.utils.utils import viz_pupil_epochs, viz_eeg_epochs
 import matplotlib.pyplot as plt
 import numpy as np
-from renaanalysis.utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event
+from renaanalysis.utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event, viz_pupil_epochs, \
+    viz_eeg_epochs
 import matplotlib.pyplot as plt
 
 

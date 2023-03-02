@@ -5,7 +5,7 @@ import time
 import torch
 
 from RenaAnalysis import get_rdf, r_square_test
-from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
+from RenaAnalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np

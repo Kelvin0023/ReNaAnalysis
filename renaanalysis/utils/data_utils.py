@@ -9,7 +9,7 @@ from sklearn.metrics import confusion_matrix
 
 from renaanalysis.params.params import *
 from renaanalysis.params.params import eeg_montage
-from renaanalysis.utils.utils import rescale_merge_exg
+from renaanalysis.utils.utils import rescale_merge_exg, visualize_eeg_epochs, visualize_pupil_epochs
 
 
 # analysis parameters ######################################################################################
@@ -125,10 +125,11 @@ def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve
     return x_eeg, x_pupil, y
 
 
-def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, n_jobs=1, reject='auto'):
+def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, n_jobs=1, reject='auto', plots='sanity-check', colors=None, title=None):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
+    @param: plots: can be 'sanity_check', 'full', or none
     """
     if data_type == 'both':
         epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs, reject=reject)
@@ -149,8 +150,14 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
             x_pupil, y_pupil = rebalance_classes(x_pupil, y)
             assert np.all(y_eeg == y_pupil)
             y = y_eeg
-        sanity_check_eeg(x_eeg, y, picks)
-        sanity_check_pupil(x_pupil, y)
+
+        if plots == 'sanity_check':
+            sanity_check_eeg(x_eeg, y, picks)
+            sanity_check_pupil(x_pupil, y)
+        elif plots == 'full':
+            visualize_eeg_epochs(epochs_eeg, event_ids, colors, title='EEG Epochs ' + title)
+            visualize_pupil_epochs(epochs_pupil, event_ids, colors, title='Pupil Epochs ' + title)
+
         return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
 
     if data_type == 'eeg':
@@ -177,8 +184,16 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
 
     if data_type == 'eeg':
         sanity_check_eeg(x, y, picks)
+        if plots == 'sanity_check':
+            sanity_check_eeg(x, y, picks)
+        elif plots == 'full':
+            visualize_eeg_epochs(epochs, event_ids, colors, title='EEG Epochs ' + title)
     elif data_type == 'pupil':
         sanity_check_pupil(x, y)
+        if plots == 'sanity_check':
+            sanity_check_pupil(x, y)
+        elif plots == 'full':
+            visualize_pupil_epochs(epochs, event_ids, colors, title='Pupil Epochs ' + title)
 
     # return x, y, epochs, event_ids, ps_group_eeg
     return x, y, epochs, event_ids

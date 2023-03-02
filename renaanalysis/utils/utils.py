@@ -1,19 +1,18 @@
 import os
 import warnings
 
-import imblearn
 import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import scipy
-from imblearn.over_sampling import SMOTE
 from mne import Epochs
 from scipy.interpolate import interp1d
 
 from renaanalysis.eye.eyetracking import Saccade, GazeRayIntersect
 from renaanalysis.params.params import conditions, item_marker_names, eyetracking_resample_srate, \
     tmax_pupil, tmin_pupil_viz, tmax_pupil_viz, tmin_pupil, eeg_picks, tmin_eeg_viz, tmax_eeg_viz, eeg_channel_names, \
-    ecg_ch_name, eeg_montage, exg_resample_srate, is_regenerate_ica, tmin_eeg, tmax_eeg, eventmarker_chs
+    ecg_ch_name, eeg_montage, exg_resample_srate, is_regenerate_ica, eventmarker_chs, \
+    proxy_eog_ch_names
 from renaanalysis.utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, \
     add_event_meta_info, \
     get_block_startend_times, get_last_block_end_time
@@ -359,11 +358,13 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
     return epochs_pupil, epochs_pupil.events[:, 2]
 
 
-def rescale_merge_exg(data_array_EEG, data_array_ECG):
+def rescale_merge_exg(data_array_EEG, data_array_ECG, data_array_EOG):
     data_array_EEG = data_array_EEG * 1e-6
     data_array_ECG = data_array_ECG * 1e-6
+    data_array_EOG = data_array_EOG * 1e-6
+
     data_array_ECG = (data_array_ECG[0] - data_array_ECG[1])[None, :]
-    data_array = np.concatenate([data_array_EEG, data_array_ECG])
+    data_array = np.concatenate([data_array_EEG, data_array_ECG, data_array_EOG])
     return data_array
 
 def generate_eeg_event_epochs(raw, event_ids, tmin, tmax):
@@ -477,16 +478,32 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, highcut=50., bad_channels=None, is_running_ica=True, is_ica_selection_inclusive=True, n_jobs=20):
+def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut_eeg=1, lowcut_ecg='0.67', lowcut_eog=0.3, highcut_eeg=50., highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=20):
+    """
+
+    :param data:
+    :param timestamps:
+    :param ica_path:
+    :param srate:
+    :param lowcut_eeg:
+    :param highcut_eeg:
+    :param bad_channels:
+    :param is_running_ica:
+    :param is_ica_selection_inclusive:
+    :param ocular_artifact_mode: can be 'proxy' or manual
+    :param n_jobs:
+    :return:
+    """
     eeg_data = data[0][1:65, :]  # take only the EEG channels
     ecg_data = data[0][65:67, :]
-    exg_data = rescale_merge_exg(eeg_data, ecg_data)
-    data_channels = ['timestamps'] + eeg_channel_names + [ecg_ch_name] + ['stim']
-    data_channel_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['stim']
-    info = mne.create_info(
-        data_channels,
-        sfreq=srate,
-        ch_types=data_channel_types)  # with 3 additional info markers and design matrix
+    proxy_horizontal_eog_data = eeg_data[(eeg_channel_names.index('F7'), eeg_channel_names.index('F8')), :] - eeg_data[eeg_channel_names.index('Fpz'), :]
+
+    exg_data = rescale_merge_exg(eeg_data, ecg_data, proxy_horizontal_eog_data)
+    # eog data is proxied
+
+    data_channels = ['timestamps'] + eeg_channel_names + [ecg_ch_name] + proxy_eog_ch_names + ['stim']
+    data_channel_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['eog'] * 2 + ['stim']
+    info = mne.create_info(data_channels, sfreq=srate, ch_types=data_channel_types)  # with 3 additional info markers and design matrix
     raw = mne.io.RawArray(np.concatenate([timestamps[None, :], exg_data, np.zeros([1, len(timestamps)])], axis=0), info)
     raw.set_montage(eeg_montage)
     raw, _ = mne.set_eeg_reference(raw, 'average', projection=False)
@@ -495,7 +512,10 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, hig
         raw.info['bads'] = bad_channels
         raw.interpolate_bads(method={'eeg': 'spline'}, verbose='INFO')
 
-    raw = raw.filter(l_freq=lowcut, h_freq=highcut, n_jobs=n_jobs)  # bandpass filter
+    raw = raw.filter(l_freq=lowcut_eeg, h_freq=highcut_eeg, n_jobs=n_jobs, picks='eeg')  # bandpass filter for brain
+    raw = raw.filter(l_freq=lowcut_ecg, h_freq=highcut_ecg, n_jobs=n_jobs, picks='ecg')  # bandpass filter for heart
+    raw = raw.filter(l_freq=lowcut_eog, h_freq=highcut_eog, n_jobs=n_jobs, picks='eog')  # bandpass filter for eye
+
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_jobs)
     raw = raw.resample(exg_resample_srate, n_jobs=n_jobs)
 
@@ -503,33 +523,49 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut=1, hig
         if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
             ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
             ica.fit(raw, picks='eeg')
-            ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name='ECG00', method='correlation',
-                                                        threshold='auto')
+            ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name='ECG00', method='correlation', threshold='auto')
             # ica.plot_scores(ecg_scores)
             if len(ecg_indices) > 0:
-                [print(
-                    'Found ECG component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, ecg_scores[x]))
-                 for x in ecg_indices]
+                [print('Found ECG component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, ecg_scores[x])) for x in ecg_indices]
                 ica.exclude += ecg_indices
             else:
                 print('No channel found to be significantly correlated with ECG, skipping auto ECG artifact removal')
-            ica.plot_sources(raw)
-            ica.plot_components()
-            if is_ica_selection_inclusive:
-                ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
-                if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ')]
-            else:
-                ica_includes = input("Enter manual ICA components to INCLUDE (use space to deliminate): ")
-                ica_includes = [int(x) for x in ica_includes.split(' ')]
-                if len(ica_includes) > 0: ica.exclude += [int(x) for x in range(ica.n_components) if x not in ica_includes]
-                print('Excluding ' + str([int(x) for x in range(ica.n_components) if x not in ica_includes]))
 
-            f = open(ica_path + '.txt', "w")
-            f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
-            f.close()
-            ica.save(ica_path + '-ica.fif', overwrite=True)
+            if ocular_artifact_mode == 'proxy':
+                print("proxying blink with Fpz, and left right eye movements with F8-Fpz, F7-Fpz")
+                blink_indices, blink_scores = ica.find_bads_eog(raw, ch_name='Fpz', threshold='auto')
+                if len(blink_indices) > 0:
+                    [print('Found Blink component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, blink_scores[x])) for x in blink_indices]
+                    ica.exclude += blink_indices
+                else:
+                    warnings.warn('HIGHLY UNLIKELY TO HAPPEN: No channel found to be significantly correlated with blink, skipping auto blink artifact removal')
 
-            print('Saving ICA components', end='')
+                eyemovement_indices, eyemovement_scores = ica.find_bads_eog(raw, ch_name=proxy_eog_ch_names, threshold='auto')
+                if len(eyemovement_indices) > 0:
+                    [print('Found Eye Movement component at ICA index {0} with score: [left {1}] [right {2}], adding to ICA exclude'.format(x, eyemovement_scores[0][x], eyemovement_scores[1][x])) for x in eyemovement_indices]
+                    ica.exclude += eyemovement_indices
+                else:
+                    warnings.warn('HIGHLY UNLIKELY TO HAPPEN: No channel found to be significantly correlated with Horizontal Eyemovement, skipping auto eyemovement artifact removal')
+
+                ica.plot_sources(raw)
+                ica.plot_components()
+            elif ocular_artifact_mode == 'manual':
+                ica.plot_sources(raw)
+                ica.plot_components()
+                if is_ica_selection_inclusive:
+                    ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
+                    if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ')]
+                else:
+                    ica_includes = input("Enter manual ICA components to INCLUDE (use space to deliminate): ")
+                    ica_includes = [int(x) for x in ica_includes.split(' ')]
+                    if len(ica_includes) > 0: ica.exclude += [int(x) for x in range(ica.n_components) if x not in ica_includes]
+                    print('Excluding ' + str([int(x) for x in range(ica.n_components) if x not in ica_includes]))
+
+                f = open(ica_path + '.txt', "w")
+                f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
+                f.close()
+                ica.save(ica_path + '-ica.fif', overwrite=True)
+                print('Saving ICA components', end='')
         else:
             ica = mne.preprocessing.read_ica(ica_path + '-ica.fif')
             with open(ica_path + '.txt', 'r') as filehandle:
@@ -550,11 +586,4 @@ def validate_get_epoch_args(event_names, event_filters):
     except AssertionError:
         raise ValueError('Number of event names must match the number of event filters')
 
-def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, n_jobs=1):
-    pupil_epochs, pupil_event_ids, _ = rdf.get_pupil_epochs(event_names, event_filters, participant, session, n_jobs=n_jobs)
-    visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, title=title)
-
-def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=tmin_eeg, tmax=tmax_eeg, n_jobs=1):
-    eeg_epochs, eeg_event_ids, _, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin, tmax, participant, session, n_jobs=n_jobs)
-    visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)
 

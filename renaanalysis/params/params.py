@@ -8,9 +8,9 @@ import pkg_resources
 
 from renaanalysis.utils.Bidict import Bidict
 
-# base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
+base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 # base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 data_directory = "Subjects"
 export_data_root = 'C:/Data'
@@ -125,6 +125,7 @@ eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 eeg_montage = mne.channels.make_standard_montage('biosemi64')
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
 ecg_ch_name='ECG00'
+proxy_eog_ch_names=['EOG00', 'EOG01']
 
 note = "test_v3"
 
@@ -160,7 +161,7 @@ num_items_per_constrainted_block = 30
 
 reject = dict(eeg=100e-6)  # DO NOT reject or we will have a mismatch between EEG and pupil
 
-is_regenerate_ica = False
+is_regenerate_ica = True
 debug = True
 
 eeg_epoch_ticks = np.array([0, 0.3, 0.6, 0.8])
