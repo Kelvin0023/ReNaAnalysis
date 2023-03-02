@@ -147,6 +147,7 @@ def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
     for k in range(num_windows):  # iterate over different windows
         this_x_train = x_train_windowed[:, :, k, :].reshape((num_train_trials, -1))
         this_x_test = x_test_windowed[:, :, k, :].reshape((num_test_trials, -1))
+
         lda = LinearDiscriminantAnalysis(solver='svd')
         projectionTrain_window_trial[:, k] = lda.fit_transform(this_x_train, y_train).squeeze(axis=1)
         projectionTest_window_trial[:, k] = lda.transform(this_x_test).squeeze(axis=1)
@@ -215,14 +216,9 @@ def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", verbose=0):
 
         x_eeg_test = x[0][test]
 
-        x_eeg_transformed_train_windowed = sliding_window_view(x_eeg_transformed_train, window_shape=split_size_eeg,
-                                                               axis=2)[:, :, 0::split_size_eeg,
-                                           :]  # shape = #trials, #channels, #windows, #time points per window
-        x_eeg_transformed_test_windowed = sliding_window_view(x_eeg_transformed_test, window_shape=split_size_eeg,
-                                                              axis=2)[:, :, 0::split_size_eeg,
-                                          :]  # shape = #trials, #channels, #windows, #time points per window
-        x_eeg_test_windowed = sliding_window_view(x_eeg_test, window_shape=split_size_eeg, axis=2)[:, :,
-                              0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
+        x_eeg_transformed_train_windowed = sliding_window_view(x_eeg_transformed_train, window_shape=split_size_eeg, axis=2)[:, :, 0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
+        x_eeg_transformed_test_windowed = sliding_window_view(x_eeg_transformed_test, window_shape=split_size_eeg, axis=2)[:, :, 0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
+        x_eeg_test_windowed = sliding_window_view(x_eeg_test, window_shape=split_size_eeg, axis=2)[:, :, 0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
 
         num_train_trials, num_channels_eeg, num_windows_eeg, num_timepoints_per_window_eeg = x_eeg_transformed_train_windowed.shape
         num_test_trials = len(x_eeg_transformed_test)
@@ -250,8 +246,7 @@ def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", verbose=0):
             projection_train_window_trial_pupil, projection_test_window_trial_pupil)
 
         # z-norm the projections
-        projection_train_window_trial_eeg, projection_test_window_trial_eeg = z_norm_projection(
-            projection_train_window_trial_eeg, projection_test_window_trial_eeg)
+        projection_train_window_trial_eeg, projection_test_window_trial_eeg = z_norm_projection(projection_train_window_trial_eeg, projection_test_window_trial_eeg)
 
         if verbose >= 2: print('Solving cross bin weights')
         cw_weights_eeg, roc_auc_eeg, fpr_eeg, tpr_eeg = solve_crossbin_weights(projection_train_window_trial_eeg,

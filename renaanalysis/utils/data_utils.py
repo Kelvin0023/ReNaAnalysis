@@ -125,7 +125,7 @@ def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve
     return x_eeg, x_pupil, y
 
 
-def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, n_jobs=1, reject='auto', plots='sanity-check', colors=None, title=None):
+def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, n_jobs=1, reject='auto', plots='sanity-check', colors=None, title=''):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed

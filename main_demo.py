@@ -36,7 +36,7 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 
 selected_locking = 'RSVP-Item-Onset'
 export_data_root = '/data'
-is_regenerate_rdf = True
+is_regenerate_rdf = False
 is_regenerate_epochs = True
 is_reduce_eeg_dim = True
 test_name = 'demo'
@@ -62,9 +62,7 @@ print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 plt.rcParams.update({'font.size': 22})
 
-colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 event_names = ["Distractor", "Target"]
-
 
 locking_filters = {
                     'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
@@ -99,12 +97,10 @@ locking_filters = {
 
 event_filters = locking_filters[selected_locking]
 
-viz_eeg_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
-viz_pupil_epochs(rdf, event_names, event_filters, colors, title=f'{selected_locking}')
 r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
 
 if is_regenerate_epochs:
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0)
+    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0, plots='full')
     pickle.dump(x, open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'wb'))
     pickle.dump(y, open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'wb'))
 else:
