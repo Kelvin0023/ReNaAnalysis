@@ -415,7 +415,7 @@ def visualize_pupil_epochs(epochs, event_ids, colors, title='', srate=200, verbo
 
 
 # TODO visualize_eeg_epochs
-def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=True, gaze_behavior=None):
+def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_timeseries=True, is_plot_topo_map=False, gaze_behavior=None):
     mne.set_log_level(verbose=verbose)
     plt.rcParams["figure.figsize"] = fig_size
 
