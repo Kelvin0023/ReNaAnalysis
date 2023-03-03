@@ -565,7 +565,7 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut_eeg=1,
                 ica.plot_components()
                 if is_ica_selection_inclusive:
                     ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
-                    if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ')]
+                    if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ') if x.isdigit()]
                 else:
                     ica_includes = input("Enter manual ICA components to INCLUDE (use space to deliminate): ")
                     ica_includes = [int(x) for x in ica_includes.split(' ')]
