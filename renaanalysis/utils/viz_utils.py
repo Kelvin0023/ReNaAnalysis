@@ -10,7 +10,6 @@ from moviepy.video.io import ImageSequenceClip
 
 from renaanalysis.eye.EyeUtils import temporal_filter_fixation
 from renaanalysis.eye.eyetracking import Fixation, Saccade, GazeRayIntersect
-from renaanalysis.params.params import tmin_eeg, tmax_eeg
 from renaanalysis.utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_target
 from renaanalysis.params.params import *
 from renaanalysis.utils.TorchUtils import prepare_image_for_sim_score
@@ -350,6 +349,6 @@ def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', particip
     visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, title=title)
 
 
-def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=tmin_eeg, tmax=tmax_eeg, n_jobs=1):
+def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=-0.1, tmax=0.8, n_jobs=1):
     eeg_epochs, eeg_event_ids, _, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin, tmax, participant, session, n_jobs=n_jobs)
     visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)

@@ -111,11 +111,8 @@ tmax_pupil = 3.
 tmin_pupil_viz = -0.1
 tmax_pupil_viz = 3.
 
-tmin_eeg = -1.2
-tmax_eeg = 2.4
-
 tmin_eeg_viz = -0.1
-tmax_eeg_viz = 1.
+tmax_eeg_viz = 0.8
 
 eyetracking_srate = 200
 eyetracking_resample_srate = 20
