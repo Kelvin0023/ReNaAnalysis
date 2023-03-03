@@ -58,7 +58,7 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf()
+rdf = get_rdf(is_regenerate_ica=False)
 # rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 pickle.dump(os.path.join(export_data_root, 'rdf.p'), open('rdf.p', 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
@@ -100,4 +100,4 @@ locking_filters = {
 
 event_filters = locking_filters[selected_locking]
 
-x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0, plots='full', colors=colors, title='')
+x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, plots='full', colors=colors, title='')

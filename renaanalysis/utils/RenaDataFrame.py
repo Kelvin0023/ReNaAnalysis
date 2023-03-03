@@ -20,7 +20,7 @@ class RenaDataFrame:
         self.participant_session_dict[(participant, session_index)] = data, events, bad_channels, ica_path
         self.participant_session_videos[(participant, session_index)] = video_dir
 
-    def preprocess(self, n_jobs=1, is_running_ica=True, ocular_artifact_mode='proxy'):
+    def preprocess(self, n_jobs=1, is_running_ica=True, ocular_artifact_mode='proxy', is_regenerate_ica=True):
         for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items():
             if 'BioSemi'in data.keys():
                 print(f"Preprocessing EEG for participant {p}, session {s}")

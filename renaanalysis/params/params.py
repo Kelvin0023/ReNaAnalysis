@@ -56,6 +56,7 @@ eventmarker_chs = [
     "CarouselSpeed",
     "CarouselAngle",
     "TSHandLeft","TSHandRight",
+    "TSCollectItem",
     "Likert"]
 
 headtracker_chs = [
@@ -161,7 +162,6 @@ num_items_per_constrainted_block = 30
 
 reject = dict(eeg=100e-6)  # DO NOT reject or we will have a mismatch between EEG and pupil
 
-is_regenerate_ica = True
 debug = True
 
 eeg_epoch_ticks = np.array([0, 0.3, 0.6, 0.8])
