@@ -96,19 +96,19 @@ def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, n_folds=10, a
         eeg_epochs_clean, log = ar.fit_transform(epochs_eeg, return_log=True)
     epochs_pupil_clean = epochs_pupil[np.logical_not(log.bad_epochs)]
 
-    x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil_clean, eeg_epochs_clean, event_ids)
+    x_eeg, x_pupil, y = _epochs_to_samples_eeg_pupil(epochs_pupil_clean, eeg_epochs_clean, event_ids)
     if return_rejections:
         return x_eeg, x_pupil, y, ar, np.logical_not(log.bad_epochs)
     else:
         return x_eeg, x_pupil, y, ar
 
 
-def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve_order=True, event_marker_to_label=True):
+def _epochs_to_samples_eeg_pupil(epochs_pupil, epochs_eeg, event_ids, picks_eeg=None, picks_pupil=None, perserve_order=True, event_marker_to_label=True):
     y = []
 
     if not perserve_order:
-        x_eeg = [epochs_eeg[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
-        x_pupil = [epochs_pupil[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
+        x_eeg = [epochs_eeg[event_name].get_data(picks=picks_eeg) for event_name, _ in event_ids.items()]
+        x_pupil = [epochs_pupil[event_name].get_data(picks=picks_pupil) for event_name, _ in event_ids.items()]
         x_eeg = np.concatenate(x_eeg, axis=0)
         x_pupil = np.concatenate(x_pupil, axis=0)
 
@@ -119,11 +119,35 @@ def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve
     else:
         y = epochs_eeg.events[:, 2]
         if event_marker_to_label: y = y - 1
-        x_eeg = epochs_eeg.get_data(picks=picks)
-        x_pupil = epochs_pupil.get_data(picks=picks)
+        x_eeg = epochs_eeg.get_data(picks=picks_eeg)
+        x_pupil = epochs_pupil.get_data(picks=picks_pupil)
 
     return x_eeg, x_pupil, y
 
+def _epoch_to_samples(epochs, event_ids, picks=None, perserve_order=True, event_marker_to_label=True):
+    y = []
+
+    if not perserve_order:
+        x = [epochs[event_name].get_data(picks=picks) for event_name, _ in event_ids.items()]
+        x = np.concatenate(x, axis=0)
+
+        for event_name, event_class in event_ids.items():
+            y += [event_class] * len(epochs[event_name].get_data())
+        if event_marker_to_label:
+            y = np.array(y) - 1
+    else:
+        y = epochs.events[:, 2]
+        if event_marker_to_label: y = y - 1
+        x = epochs.get_data(picks=picks)
+
+    return x, y
+
+def force_square_epochs(epochs, tmin, tmax):
+    # get the number of events overall, so we know what the number of time points should be to make the data matrix square
+    if epochs.get_data().shape[2] != (num_epochs := epochs.get_data().shape[0]):
+        target_resample_srate = num_epochs / (tmax - tmin)
+        square_epochs = epochs.resample(target_resample_srate)
+    return square_epochs
 
 def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, eeg_resample_srate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
     """
@@ -131,12 +155,16 @@ def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False,
     @param: data_type: can be eeg, pupil or mixed
     @param: force_square: whether to call resample again on the data to force the number of epochs to match the
     number of time points. Enabling this can help algorithms that requires square matrix as their input. Default
-    is disabled. Note when force_square is enabled, the resample rate (both eeg and pupil) will be ignored.
+    is disabled. Note when force_square is enabled, the resample rate (both eeg and pupil) will be ignored. rebalance
+    will also be disabled.
     @param: plots: can be 'sanity_check', 'full', or none
     """
+    if force_square:
+        eyetracking_resample_srate = eeg_resample_srate = None
+        rebalance = False
     if data_type == 'both':
-        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, resample_rate=eeg_resample_srate, n_jobs=n_jobs, reject=reject, force_square=force_square)
-        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, tmin=tmin_pupil, tmax=tmax_pupil, resample_rate=eyetracking_resample_srate, participant=participant, session=session, n_jobs=n_jobs, force_square=force_square)
+        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, resample_rate=eeg_resample_srate, n_jobs=n_jobs, reject=reject)
+        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, tmin=tmin_pupil, tmax=tmax_pupil, resample_rate=eyetracking_resample_srate, participant=participant, session=session, n_jobs=n_jobs)
         if reject == 'auto':  # if using auto rejection
             epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
             ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
@@ -146,7 +174,11 @@ def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False,
             raise ValueError(f"pupil and eeg groups does not match: {ps_group_pupil}, {ps_group_eeg}")
         if epochs_eeg is None:
             return None, None, None, event_ids
-        x_eeg, x_pupil, y = _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids)
+
+        if force_square:
+            epochs_eeg = force_square_epochs(epochs_eeg, tmin_eeg, tmax_eeg)
+            epochs_pupil = force_square_epochs(epochs_pupil, tmin_pupil, tmax_pupil)
+        x_eeg, x_pupil, y = _epochs_to_samples_eeg_pupil(epochs_pupil, epochs_eeg, event_ids)
 
         if rebalance:
             x_eeg, y_eeg = rebalance_classes(x_eeg, y)
@@ -162,44 +194,47 @@ def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False,
             visualize_pupil_epochs(epochs_pupil, event_ids, colors, title='Pupil Epochs ' + title)
 
         return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
-
-    if data_type == 'eeg':
-        epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs, reject=reject, force_square=force_square)
-    elif data_type == 'pupil':
-        epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, eyetracking_resample_srate, tmin=tmin_pupil, tmax=tmax_pupil, participant=participant, session=session, n_jobs=n_jobs, force_square=force_square)
     else:
-        raise NotImplementedError(f'data type {data_type} is not implemented')
+        if data_type == 'eeg':
+            tmin = tmin_eeg
+            tmax = tmax_eeg
+            epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs, reject=reject, force_square=force_square)
+        elif data_type == 'pupil':
+            tmin = tmin_pupil
+            tmax = tmax_pupil
+            epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, eyetracking_resample_srate, tmin=tmin_pupil, tmax=tmax_pupil, participant=participant, session=session, n_jobs=n_jobs, force_square=force_square)
+        else:
+            raise NotImplementedError(f'data type {data_type} is not implemented')
+        if force_square:
+            epochs = force_square_epochs(epochs, tmin, tmax)
+        x, y = _epoch_to_samples(epochs, event_ids)
+        # x = []
+        # y = []
+        # for event_name, event_class in event_ids.items():
+        #     x.append(epochs[event_name].get_data(picks=picks))
+        #     y += [event_class] * len(epochs[event_name].get_data())
+        # x = np.concatenate(x, axis=0)
 
-    x = []
-    y = []
-    for event_name, event_class in event_ids.items():
-        x.append(epochs[event_name].get_data(picks=picks))
-        y += [event_class] * len(epochs[event_name].get_data())
-    x = np.concatenate(x, axis=0)
+        if rebalance:
+            x, y = rebalance_classes(x, y)
 
-    if np.min(y) == 1:
-        y = np.array(y) - 1
+        # x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)  # z normalize x
 
-    if rebalance:
-        x, y = rebalance_classes(x, y)
-
-    x = (x - np.mean(x, axis=(0, 2), keepdims=True)) / np.std(x, axis=(0, 2), keepdims=True)  # z normalize x
-
-    if data_type == 'eeg':
-        sanity_check_eeg(x, y, picks)
-        if plots == 'sanity_check':
+        if data_type == 'eeg':
             sanity_check_eeg(x, y, picks)
-        elif plots == 'full':
-            visualize_eeg_epochs(epochs, event_ids, colors, title='EEG Epochs ' + title)
-    elif data_type == 'pupil':
-        sanity_check_pupil(x, y)
-        if plots == 'sanity_check':
+            if plots == 'sanity_check':
+                sanity_check_eeg(x, y, picks)
+            elif plots == 'full':
+                visualize_eeg_epochs(epochs, event_ids, colors, title='EEG Epochs ' + title)
+        elif data_type == 'pupil':
             sanity_check_pupil(x, y)
-        elif plots == 'full':
-            visualize_pupil_epochs(epochs, event_ids, colors, title='Pupil Epochs ' + title)
+            if plots == 'sanity_check':
+                sanity_check_pupil(x, y)
+            elif plots == 'full':
+                visualize_pupil_epochs(epochs, event_ids, colors, title='Pupil Epochs ' + title)
 
-    # return x, y, epochs, event_ids, ps_group_eeg
-    return x, y, epochs, event_ids
+        # return x, y, epochs, event_ids, ps_group_eeg
+        return x, y, epochs, event_ids
 
 
 def sanity_check_eeg(x, y, picks):

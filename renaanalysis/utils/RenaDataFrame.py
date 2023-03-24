@@ -87,7 +87,7 @@ class RenaDataFrame:
         else:
             raise TypeError("Unsupported session type, must be int, list or None")
         return keys
-    def get_pupil_epochs(self, event_names, event_filters, tmin, tmax, resample_rate=20, *, participant=None, session=None, n_jobs=1, force_square=False):
+    def get_pupil_epochs(self, event_names, event_filters, tmin, tmax, resample_rate=20, *, participant=None, session=None, n_jobs=1):
         """
         event_filters:
         @param event_filters: list of callables, each corresponding to the event name
@@ -110,9 +110,6 @@ class RenaDataFrame:
 
             pupil_data_with_events, event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_stream_name][1], events, event_names, event_filters)
             try:
-                if force_square:
-                    resample_rate = None
-                # ladsjvnapoewghf Implement force square
                 epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids, resample_rate=resample_rate, tmin_pupil=tmin, tmax_pupil=tmax, n_jobs=n_jobs)
             except ValueError:
                 print(f"No pupil epochs found participant {p}, session {s}, skipping")
@@ -127,15 +124,9 @@ class RenaDataFrame:
             ps_group += [i] * len(epochs_pupil)
             # print(f"ps_group length is {len(ps_group)}")
 
-        if force_square:
-            # get the number of events overall, so we know what the number of time points should be to make the data matrix square
-            if pupil_epochs_all.get_data().shape[2] != (num_epochs := pupil_epochs_all.get_data().shape[0]):
-                target_resample_srate = int(len(num_epochs) / (tmax - tmin))
-                pupil_epochs_all = pupil_epochs_all.resample(target_resample_srate)
-
         return pupil_epochs_all, event_ids, ps_group
 
-    def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None, n_jobs=1, resample_rate=128, reject='auto', force_square=False, ocular_artifact_mode='proxy'):
+    def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None, n_jobs=1, resample_rate=128, reject='auto'):
         """
         @param: force_square: whether to call resample again on the data to force the number of epochs to match the
         number of time points. Enabling this can help algorithms that requires square matrix as their input. Default
@@ -153,8 +144,6 @@ class RenaDataFrame:
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
             try:
-                if force_square:
-                    resample_rate = None
                 epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=resample_rate)
             except ValueError:
                 print(f"No EEG epochs found participant {p}, session {s}, skipping")
@@ -174,11 +163,6 @@ class RenaDataFrame:
         else:
             eeg_epochs_clean = eeg_epochs_all
             log = None
-        if force_square:
-            # get the number of events overall, so we know what the number of time points should be to make the data matrix square
-            if eeg_epochs_clean.get_data().shape[2] != (num_epochs := eeg_epochs_clean.get_data().shape[0]):
-                target_exg_resample_srate = int(len(num_epochs) / (tmax - tmin))
-                eeg_epochs_clean = eeg_epochs_clean.resample(target_exg_resample_srate)
 
         return eeg_epochs_clean, event_ids, log, ps_group
 
