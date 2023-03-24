@@ -33,11 +33,10 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 '''
 
 selected_locking = 'RSVP-Item-Onset'
-# export_data_root = '/data'
-export_data_root = export_data_root
+export_data_root = '/data'
 
 is_regenerate_rdf = True
-is_regenerate_ica = True
+is_regenerate_ica = True  # set this to True if you want to regenerate the ICA components, this should be set to True when you change how rdf is generated.
 is_regenerate_epochs = True
 is_reduce_eeg_dim = True
 test_name = 'demo'
