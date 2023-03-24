@@ -17,7 +17,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 from renaanalysis.params.params import eyetracking_resample_srate, \
     eeg_channel_names, \
-    eeg_montage, exg_resample_srate, model_save_dir, epochs, \
+    eeg_montage, model_save_dir, epochs, \
     l2_weight, random_seed, split_window_eeg, split_window_pupil, num_folds, num_top_compoenents
 from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
 
@@ -37,10 +37,10 @@ def compute_forward(x_windowed, y, projection):
             activation[class_index, :, j] = a
     return activation
 
-def plot_forward(activation, event_names, split_window, num_windows, notes):
+def plot_forward(activation, event_names, split_window, num_windows, exg_srate, notes):
     info = mne.create_info(
         eeg_channel_names,
-        sfreq=exg_resample_srate,
+        sfreq=exg_srate,
         ch_types=['eeg'] * len(eeg_channel_names))
     info.set_montage(eeg_montage)
 
@@ -161,7 +161,7 @@ def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
     return weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial
 
 
-def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", verbose=0):
+def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", exg_srate=128, verbose=0):
     """
 
     :param x: array or list of arrays, if array, must provide if this array is EEG or pupil, if list, it is assumed that
@@ -174,7 +174,7 @@ def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", verbose=0):
     :return:
     """
 
-    split_size_eeg = int(split_window_eeg * exg_resample_srate)  # split data into 100ms bins
+    split_size_eeg = int(split_window_eeg * exg_srate)  # split data into 100ms bins
     split_size_pupil = int(split_window_pupil * eyetracking_resample_srate)
     # multi-fold cross-validation
     cross_val_folds = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
@@ -280,7 +280,7 @@ def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", verbose=0):
         tpr_folds_eeg.append(tpr_eeg)
         # print(f'Fold {i}, auc is {roc_auc_folds[i]}')
 
-    plot_forward(np.mean(activations_folds, axis=0), event_names, split_window_eeg, num_windows_eeg,
+    plot_forward(np.mean(activations_folds, axis=0), event_names, split_window_eeg, num_windows_eeg, exg_srate=exg_srate,
                  notes=f"{notes} Average over {num_folds}-fold's test set")
 
     if verbose:

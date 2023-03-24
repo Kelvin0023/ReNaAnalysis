@@ -22,8 +22,9 @@ from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebala
     mean_min_sublists, epochs_to_class_samples
 
 
-def eval_lockings(rdf, event_names, locking_name_filters, model_name, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
+def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_srate=128, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
     # verify number of event types
+    assert rdf.exg_resample_srate == exg_resample_srate
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
     for locking_name, locking_filter in locking_name_filters.items():
@@ -44,7 +45,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, participan
             x[0], pca, ica = compute_pca_ica(x[0], num_top_compoenents)
 
         if model_name == 'HDCA':
-            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', verbose=0)  # give the original eeg data, no need to apply HDCA again
+            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, exg_srate=exg_resample_srate, notes=test_name + '\n', verbose=0)  # give the original eeg data, no need to apply HDCA again
             locking_performance[locking_name, 'HDCA EEG'] = {'folds val auc': roc_auc_eeg}
             locking_performance[locking_name, 'HDCA Pupil'] = {'folds val auc': roc_auc_pupil}
             locking_performance[locking_name, 'HDCA EEG-Pupil'] = {'folds val auc': roc_auc_combined}

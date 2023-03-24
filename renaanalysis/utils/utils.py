@@ -11,7 +11,7 @@ from scipy.interpolate import interp1d
 from renaanalysis.eye.eyetracking import Saccade, GazeRayIntersect
 from renaanalysis.params.params import conditions, item_marker_names, eyetracking_resample_srate, \
     tmax_pupil, tmin_pupil_viz, tmax_pupil_viz, tmin_pupil, eeg_picks, tmin_eeg_viz, tmax_eeg_viz, eeg_channel_names, \
-    ecg_ch_name, eeg_montage, exg_resample_srate, eventmarker_chs, \
+    ecg_ch_name, eeg_montage, eventmarker_chs, \
     proxy_eog_ch_names
 from renaanalysis.utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, \
     add_event_meta_info, \
@@ -482,7 +482,7 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut_eeg=1, lowcut_ecg='0.67', lowcut_eog=0.3, highcut_eeg=50., highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=20):
+def preprocess_session_eeg(data, timestamps, ica_path, exg_resample_rate=128, srate=2048, lowcut_eeg=1, lowcut_ecg='0.67', lowcut_eog=0.3, highcut_eeg=50., highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=20):
     """
 
     :param data:
@@ -521,7 +521,7 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut_eeg=1,
     raw = raw.filter(l_freq=lowcut_eog, h_freq=highcut_eog, n_jobs=n_jobs, picks='eog')  # bandpass filter for eye
 
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_jobs)
-    raw = raw.resample(exg_resample_srate, n_jobs=n_jobs)
+    raw = raw.resample(exg_resample_rate, n_jobs=n_jobs)
 
     if is_running_ica:
         if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):

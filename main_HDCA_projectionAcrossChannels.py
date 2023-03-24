@@ -14,7 +14,7 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-# rdf = get_rdf()
+# rdf = get_rdf(exg_resample_rate=exg_resample_srate)
 rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 # print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
