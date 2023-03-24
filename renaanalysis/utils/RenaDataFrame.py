@@ -1,21 +1,26 @@
 import warnings
+from functools import reduce
+from operator import concat
 
 import mne
 import numpy as np
 from autoreject import AutoReject
 
 from renaanalysis.params.params import varjoEyetracking_chs, varjoEyetracking_stream_name
-from renaanalysis.utils.Event import add_events_to_data
+from renaanalysis.utils.Event import add_events_to_data, get_filtered_events
 from renaanalysis.utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
     validate_get_epoch_args, \
     interpolate_zeros
 
 
 class RenaDataFrame:
-    def __init__(self):
-        self.exg_resample_rate = None
+    def __init__(self, eeg_srate=2048):
+        self.exg_srate = eeg_srate
+        self.exg_resample_rate = eeg_srate
+
         self.participant_session_videos = {}
         self.participant_session_dict = {}
+
 
     def add_participant_session(self, data, events, participant, session_index, bad_channels, ica_path, video_dir):
         self.participant_session_dict[(participant, session_index)] = data, events, bad_channels, ica_path
@@ -25,7 +30,7 @@ class RenaDataFrame:
         for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items():
             if 'BioSemi'in data.keys():
                 print(f"Preprocessing EEG for participant {p}, session {s}")
-                eeg_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, exg_resample_rate=exg_resample_rate, bad_channels=bad_channels, is_running_ica=is_running_ica, is_regenerate_ica=is_regenerate_ica, ocular_artifact_mode=ocular_artifact_mode, n_jobs=n_jobs)
+                eeg_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, srate=self.exg_srate, bad_channels=bad_channels, is_running_ica=is_running_ica, is_regenerate_ica=is_regenerate_ica, ocular_artifact_mode=ocular_artifact_mode, n_jobs=n_jobs)
                 data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'timestamps': downsampled_timestamps}
             if 'Unity.VarjoEyeTrackingComplete' in data.keys():
                 print(f"Preprocessing pupil for participant {p}, session {s}")
@@ -82,7 +87,7 @@ class RenaDataFrame:
         else:
             raise TypeError("Unsupported session type, must be int, list or None")
         return keys
-    def get_pupil_epochs(self, event_names, event_filters, participant=None, session=None, n_jobs=1):
+    def get_pupil_epochs(self, event_names, event_filters, tmin, tmax, resample_rate=20, *, participant=None, session=None, n_jobs=1, force_square=False):
         """
         event_filters:
         @param event_filters: list of callables, each corresponding to the event name
@@ -105,7 +110,10 @@ class RenaDataFrame:
 
             pupil_data_with_events, event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_stream_name][1], events, event_names, event_filters)
             try:
-                epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events,['pupil_left', 'pupil_right', 'stim'],['misc', 'misc', 'stim'], event_ids, n_jobs=n_jobs)
+                if force_square:
+                    resample_rate = None
+                # ladsjvnapoewghf Implement force square
+                epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids, resample_rate=resample_rate, tmin_pupil=tmin, tmax_pupil=tmax, n_jobs=n_jobs)
             except ValueError:
                 print(f"No pupil epochs found participant {p}, session {s}, skipping")
                 continue
@@ -119,18 +127,35 @@ class RenaDataFrame:
             ps_group += [i] * len(epochs_pupil)
             # print(f"ps_group length is {len(ps_group)}")
 
+        if force_square:
+            # get the number of events overall, so we know what the number of time points should be to make the data matrix square
+            if pupil_epochs_all.get_data().shape[2] != (num_epochs := pupil_epochs_all.get_data().shape[0]):
+                target_resample_srate = int(len(num_epochs) / (tmax - tmin))
+                pupil_epochs_all = pupil_epochs_all.resample(target_resample_srate)
+
         return pupil_epochs_all, event_ids, ps_group
 
-    def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None, n_jobs=1, reject='auto'):
+    def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None, n_jobs=1, resample_rate=128, reject='auto', force_square=False, ocular_artifact_mode='proxy'):
+        """
+        @param: force_square: whether to call resample again on the data to force the number of epochs to match the
+        number of time points. Enabling this can help algorithms that requires square matrix as their input. Default
+        is disabled. Note setting this to True will override the resample_rate parameter to how many epochs the data have.
+        If reject is set to 'auto', the performance will be significantly slower because the data will not resampled until
+        after the rejection. The resample will be performed after the rejection, when the number of clean (non-rejected)
+        epochs is known.
+        """
         validate_get_epoch_args(event_names, event_filters)
         ps_dict = self.get_data_events(participant, session)
         eeg_epochs_all = None  # clear epochs
         event_ids = None
         ps_group = []
+
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
             try:
-                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax)
+                if force_square:
+                    resample_rate = None
+                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=resample_rate)
             except ValueError:
                 print(f"No EEG epochs found participant {p}, session {s}, skipping")
                 continue
@@ -149,5 +174,11 @@ class RenaDataFrame:
         else:
             eeg_epochs_clean = eeg_epochs_all
             log = None
+        if force_square:
+            # get the number of events overall, so we know what the number of time points should be to make the data matrix square
+            if eeg_epochs_clean.get_data().shape[2] != (num_epochs := eeg_epochs_clean.get_data().shape[0]):
+                target_exg_resample_srate = int(len(num_epochs) / (tmax - tmin))
+                eeg_epochs_clean = eeg_epochs_clean.resample(target_exg_resample_srate)
+
         return eeg_epochs_clean, event_ids, log, ps_group
 

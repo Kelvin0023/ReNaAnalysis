@@ -344,8 +344,8 @@ def add_fix_detection_circle(img_modified, center, timestamp, fix_events, marker
     return img_modified
 
 
-def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, n_jobs=1):
-    pupil_epochs, pupil_event_ids, _ = rdf.get_pupil_epochs(event_names, event_filters, participant, session, n_jobs=n_jobs)
+def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', eyetracking_resample_srate=20, participant=None, session=None, tmin=-1., tmax=3., n_jobs=1):
+    pupil_epochs, pupil_event_ids, _ = rdf.get_pupil_epochs(event_names, event_filters, eyetracking_resample_srate, participant, session, tmin=tmin, tmax=tmax, n_jobs=n_jobs)
     visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, title=title)
 
 

@@ -125,15 +125,18 @@ def _epochs_to_samples(epochs_pupil, epochs_eeg, event_ids, picks=None, perserve
     return x_eeg, x_pupil, y
 
 
-def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, n_jobs=1, reject='auto', plots='sanity-check', colors=None, title=''):
+def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, eeg_resample_srate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
+    @param: force_square: whether to call resample again on the data to force the number of epochs to match the
+    number of time points. Enabling this can help algorithms that requires square matrix as their input. Default
+    is disabled. Note when force_square is enabled, the resample rate (both eeg and pupil) will be ignored.
     @param: plots: can be 'sanity_check', 'full', or none
     """
     if data_type == 'both':
-        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs, reject=reject)
-        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_jobs=n_jobs)
+        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, resample_rate=eeg_resample_srate, n_jobs=n_jobs, reject=reject, force_square=force_square)
+        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, tmin=tmin_pupil, tmax=tmax_pupil, resample_rate=eyetracking_resample_srate, participant=participant, session=session, n_jobs=n_jobs, force_square=force_square)
         if reject == 'auto':  # if using auto rejection
             epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
             ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
@@ -161,9 +164,9 @@ def epochs_to_class_samples(rdf, event_names, event_filters, rebalance=False, pa
         return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
 
     if data_type == 'eeg':
-        epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs)
+        epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs, reject=reject, force_square=force_square)
     elif data_type == 'pupil':
-        epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, participant=participant, session=session, n_jobs=n_jobs)
+        epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, eyetracking_resample_srate, tmin=tmin_pupil, tmax=tmax_pupil, participant=participant, session=session, n_jobs=n_jobs, force_square=force_square)
     else:
         raise NotImplementedError(f'data type {data_type} is not implemented')
 

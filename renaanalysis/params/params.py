@@ -106,7 +106,7 @@ varjoEyetracking_chs = [
 # eventmarker_preset = json.load(pkg_resources.resource_stream(__name__, 'ReNaEventMarker.json'))
 # headtracker_preset = json.load(pkg_resources.resource_stream(__name__, 'UnityHeadTracking.json'))
 
-tmin_pupil = -1
+tmin_pupil = -1.
 tmax_pupil = 3.
 tmin_pupil_viz = -0.1
 tmax_pupil_viz = 3.

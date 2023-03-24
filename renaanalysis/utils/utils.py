@@ -9,10 +9,10 @@ from mne import Epochs
 from scipy.interpolate import interp1d
 
 from renaanalysis.eye.eyetracking import Saccade, GazeRayIntersect
-from renaanalysis.params.params import conditions, item_marker_names, eyetracking_resample_srate, \
-    tmax_pupil, tmin_pupil_viz, tmax_pupil_viz, tmin_pupil, eeg_picks, tmin_eeg_viz, tmax_eeg_viz, eeg_channel_names, \
+from renaanalysis.params.params import conditions, item_marker_names, \
+    tmin_pupil_viz, tmax_pupil_viz, eeg_picks, tmin_eeg_viz, tmax_eeg_viz, eeg_channel_names, \
     ecg_ch_name, eeg_montage, eventmarker_chs, \
-    proxy_eog_ch_names
+    proxy_eog_ch_names, random_seed
 from renaanalysis.utils.Event import Event, get_closest_event_attribute_before, get_indices_from_transfer_timestamps, \
     add_event_meta_info, \
     get_block_startend_times, get_last_block_end_time
@@ -335,7 +335,7 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events, long_gaze_
     return rtn
 
 
-def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_ids, srate=200, verbose='WARNING', n_jobs=1):  # use a fixed sampling rate for the sampling rate to match between recordings
+def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_ids, tmin_pupil=-1., tmax_pupil=3., resample_rate=None, srate=200, verbose='WARNING', n_jobs=1):  # use a fixed sampling rate for the sampling rate to match between recordings
     mne.set_log_level(verbose=verbose)
 
     info = mne.create_info(
@@ -343,16 +343,19 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
         sfreq=srate,
         ch_types=data_channel_types)
     raw = mne.io.RawArray(data_.transpose(), info)
-    raw = raw.resample(eyetracking_resample_srate, n_jobs=n_jobs)
 
     found_events = mne.find_events(raw, stim_channel='stim', shortest_event=1)
     # pupil epochs
-    epochs_pupil = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin_pupil,
+    epochs_pupil = Epochs(raw, events=found_events, event_id=event_ids,
+                          tmin=tmin_pupil,
                           tmax=tmax_pupil,
                           baseline=(-0.5, 0.0),
                           preload=True,
                           verbose=False,
                           picks=['pupil_left', 'pupil_right'])
+    if resample_rate is not None:
+        epochs_pupil = epochs_pupil.resample(resample_rate, n_jobs=n_jobs)
+
     if len(epochs_pupil) < len(found_events):
         warnings.warn(f"generate_pupil_event_epochs: generated fewer than found_event number of epochs, possibly due to incomplete last epoch. Found {len(found_events)} events. But have {len(epochs_pupil)} epochs.")
     return epochs_pupil, epochs_pupil.events[:, 2]
@@ -367,7 +370,7 @@ def rescale_merge_exg(data_array_EEG, data_array_ECG, data_array_EOG):
     data_array = np.concatenate([data_array_EEG, data_array_ECG, data_array_EOG])
     return data_array
 
-def generate_eeg_event_epochs(raw, event_ids, tmin, tmax):
+def generate_eeg_event_epochs(raw, event_ids, tmin, tmax, resample_rate=None):
     found_events = mne.find_events(raw, stim_channel='stim', shortest_event=1)
 
     # event_durations = []
@@ -377,7 +380,8 @@ def generate_eeg_event_epochs(raw, event_ids, tmin, tmax):
     # event_durations = np.array(event_durations)
 
     epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin, tmax=tmax, baseline=(-0.1, 0.0),preload=True,verbose=False,picks='eeg')
-
+    if resample_rate is not None:
+        epochs = epochs.resample(resample_rate)
     return epochs, epochs.events[:, 2]
 
 
@@ -482,7 +486,7 @@ def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
-def preprocess_session_eeg(data, timestamps, ica_path, exg_resample_rate=128, srate=2048, lowcut_eeg=1, lowcut_ecg='0.67', lowcut_eog=0.3, highcut_eeg=50., highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=20):
+def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut_eeg=1, lowcut_ecg='0.67', lowcut_eog=0.3, highcut_eeg=50., highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=20):
     """
 
     :param data:
@@ -521,11 +525,11 @@ def preprocess_session_eeg(data, timestamps, ica_path, exg_resample_rate=128, sr
     raw = raw.filter(l_freq=lowcut_eog, h_freq=highcut_eog, n_jobs=n_jobs, picks='eog')  # bandpass filter for eye
 
     raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_jobs)
-    raw = raw.resample(exg_resample_rate, n_jobs=n_jobs)
+    # raw = raw.resample(exg_resample_rate, n_jobs=n_jobs)
 
     if is_running_ica:
         if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
-            ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
+            ica = mne.preprocessing.ICA(n_components=20, random_state=random_seed, max_iter=800)
             ica.fit(raw, picks='eeg')
             ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name='ECG00', method='correlation', threshold='auto')
             # ica.plot_scores(ecg_scores)

@@ -153,13 +153,19 @@ def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, 
     if type(data_array) is np.ndarray:
         rtn = np.concatenate([data_array, np.expand_dims(event_array, axis=1)], axis=1)
     elif type(data_array) is RawArray:
-        print()
         stim_index = data_array.ch_names.index('stim')
         rtn = data_array.copy()
         rtn._data[stim_index, :] = event_array
     else:
         raise Exception(f'Unsupported data type {type(data_array)}')
     return rtn, event_ids, deviant
+
+def get_filtered_events(events, event_filters):
+    all_filtered_events = list()
+    for i, e_filter in enumerate(event_filters):
+        filtered_events = [e for e in events if e_filter(e)]
+        all_filtered_events.append(filtered_events)
+    return all_filtered_events
 
 def get_indices_from_transfer_timestamps(target_timestamps, source_timestamps):
     """
