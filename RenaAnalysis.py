@@ -29,7 +29,7 @@ from renaanalysis.utils.utils import get_item_events, visualize_pupil_epochs
 # def eeg_event_discriminant_analysis(rdf: RenaDataFrame, event_names, event_filters, participant=None, session=None):
 #     eeg_epochs, eeg_event_ids = rdf.get_eeg_epochs(event_names, event_filters, participant, session)
 
-def r_square_test(rdf: RenaDataFrame, event_names, event_filters, exg_resample_rate, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None, title="", fig_size=(25.6, 14.4)):
+def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None, title="", fig_size=(25.6, 14.4)):
     plt.rcParams["figure.figsize"] = fig_size
     colors = {'Distractor': 'blue', 'Target': 'red'}
     plt.rcParams.update({'font.size': 22})
@@ -47,7 +47,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, exg_resample_r
             r_square_grid[channel_i, time_i] = model.score(x_train, y)
 
     xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
-    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * exg_resample_rate
+    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * rdf.exg_resample_rate
     plt.xticks(xticks_locations, xtick_labels)
     plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
     plt.imshow(r_square_grid, aspect='auto', cmap='Blues')
@@ -57,7 +57,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, exg_resample_r
     plt.show()
 
     xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
-    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * exg_resample_rate
+    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * rdf.exg_resample_rate
     plt.xticks(xticks_locations, xtick_labels)
     plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
     plt.imshow(d_prime_grid, aspect='auto', cmap='coolwarm', vmin=-0.5, vmax=0.5)

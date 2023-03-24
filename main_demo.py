@@ -19,12 +19,10 @@ import time
 from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation, GazeRayIntersect
 from renaanalysis.params.params import *
 from renaanalysis.utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
-import matplotlib.pyplot as plt
 import numpy as np
 from renaanalysis.utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event, viz_pupil_epochs, \
     viz_eeg_epochs
 import matplotlib.pyplot as plt
-
 
 
 # analysis parameters ######################################################################################
@@ -47,7 +45,7 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 if is_regenerate_rdf:
-    rdf = get_rdf(n_jobs=20)
+    rdf = get_rdf(exg_resample_rate=exg_resample_srate, n_jobs=20)
     if not os.path.exists(export_data_root):
         os.mkdir(export_data_root)
     pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
