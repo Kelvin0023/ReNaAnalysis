@@ -94,7 +94,7 @@ def visualize_block_gaze_event(rdf, participant, session, block_id=None, only_lo
     generate_video = rdf.participant_session_videos[participant, session] if generate_video else None
     visualize_gaze_events(events, block_id, only_long_gaze=only_long_gaze, generate_video=generate_video, video_fix_alg=video_fix_alg)
 
-def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=None, video_fix_alg='I-VT'):
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_head_y=.5, IVT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=None, video_fix_alg='I-VT'):
     f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -117,8 +117,9 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
             gaze_ray_intersects = draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp and x.is_first_long_gaze, gaze_intersect_y)
         else:
             gaze_ray_intersects = draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
-        fix_ivt = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
-        fix_ivt_head = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
+        # fix_ivt = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
+        fix_idt_head = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
+        fix_ivt_head = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IVT_fix_head_y)
         fix_patch_sim = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'Patch-Sim' and block_start_timestamp < x.timestamp < block_end_timestamp, pathSim_fix_y)
 
         ax.set_xlim(block_start_timestamp, block_end_timestamp)
@@ -130,7 +131,7 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
 
     if generate_video is not None and block_id is not None:
         generate_block_video(image_folder=generate_video, block_id=block_id, block_start_time=block_start_timestamp,
-                             block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects, fix_ivt=fix_ivt, fix_ivt_head=fix_ivt_head, fix_patch_sim=fix_patch_sim, video_fix_alg=video_fix_alg)
+                             block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects, fix_ivt=fix_idt_head, fix_ivt_head=fix_ivt_head, fix_patch_sim=fix_patch_sim, video_fix_alg=video_fix_alg)
 
 
 def add_bounding_box(a, x, y, width, height, color):
