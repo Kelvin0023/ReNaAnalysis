@@ -16,7 +16,8 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedShuffleSplit
-from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
+from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, \
+    gaze_event_detection_I_DT
 from renaanalysis.learning.train import prepare_sample_label
 from renaanalysis.params.params import eeg_picks, eeg_epoch_ticks, pupil_epoch_ticks, tmin_pupil, eyetracking_srate, \
     tmax_pupil_viz, tmin_pupil_viz, base_root, note, data_directory
@@ -148,8 +149,8 @@ def get_rdf(exg_resample_rate=128, is_loading_saved_analysis=False, is_running_i
                                          data['Unity.ReNa.ItemMarkers'][0], data['Unity.ReNa.ItemMarkers'][1])
 
                 # add gaze behaviors from I-DT
-                events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events)
                 events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events, headtracking_data_timestamps=data['Unity.HeadTracker'])
+                events += gaze_event_detection_I_DT(data['Unity.VarjoEyeTrackingComplete'], events, headtracking_data_timestamps=data['Unity.HeadTracker'])  # TODO no need to resample the headtracking data again
                 # add gaze behaviors from patch sim
                 events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
