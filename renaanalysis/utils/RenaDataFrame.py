@@ -110,7 +110,7 @@ class RenaDataFrame:
 
             pupil_data_with_events, event_ids, deviant = add_events_to_data(pupil_data, data[varjoEyetracking_stream_name][1], events, event_names, event_filters)
             try:
-                epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids, resample_rate=resample_rate, tmin_pupil=tmin, tmax_pupil=tmax, n_jobs=n_jobs)
+                epochs_pupil, _ = generate_pupil_event_epochs(pupil_data_with_events, ['pupil_left', 'pupil_right', 'stim'], ['misc', 'misc', 'stim'], event_ids, resample_rate=None, tmin_pupil=tmin, tmax_pupil=tmax, n_jobs=n_jobs)
             except ValueError:
                 print(f"No pupil epochs found participant {p}, session {s}, skipping")
                 continue
@@ -123,7 +123,7 @@ class RenaDataFrame:
             pupil_epochs_all = epochs_pupil if pupil_epochs_all is None else mne.concatenate_epochs([epochs_pupil, pupil_epochs_all])
             ps_group += [i] * len(epochs_pupil)
             # print(f"ps_group length is {len(ps_group)}")
-
+        pupil_epochs_all = pupil_epochs_all.resample(resample_rate)  # resample all the epochs together at the end
         return pupil_epochs_all, event_ids, ps_group
 
     def get_eeg_epochs(self, event_names, event_filters, tmin, tmax, participant=None, session=None, n_jobs=1, resample_rate=128, reject='auto'):
@@ -144,7 +144,7 @@ class RenaDataFrame:
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
             try:
-                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=resample_rate)
+                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=None)
             except ValueError:
                 print(f"No EEG epochs found participant {p}, session {s}, skipping")
                 continue
@@ -155,6 +155,7 @@ class RenaDataFrame:
                 print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
                 eeg_epochs_all = epochs if eeg_epochs_all is None else mne.concatenate_epochs([epochs, eeg_epochs_all])
             ps_group += [i] * len(epochs)
+        eeg_epochs_all = eeg_epochs_all.resample(resample_rate)  # resample all the epochs together at the end
         if reject == 'auto':
             print("Auto rejecting epochs")
             ar = AutoReject(n_jobs=n_jobs, verbose=False)

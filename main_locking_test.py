@@ -42,5 +42,5 @@ locking_name_filters = {'I-VT-Head': [lambda x: type(x)==Fixation and x.is_first
                                  lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]
                         }#nyamu <3
 
-results = eval_lockings(rdf, event_names, locking_name_filters, participant='1', session=2, model='EEGPupil', regenerate_epochs=True, reduce_dim=True)
+results = eval_lockings(rdf, event_names, locking_name_filters, participant='1', session=2, model_name='EEGPupil', regenerate_epochs=True, reduce_dim=True)
 pickle.dump(results, open('locking_performance', 'wb'))
