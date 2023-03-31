@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 lockings = ['VS-FLGI', 'VS-I-VT', 'VS-I-VT-Head', 'VS-Patch-Sim']
 metrics = ['accuracy', 'target sensitivity', 'target specificity']
-file_name = "D:/PycharmProjects/RenaLabApp/rena/02_22_2023_14_38_01_block_report"
+file_name = "D:/PycharmProjects/RenaLabApp/rena/03_30_2023_14_52_37_block_report"
 x_bar_offset = 0.2
 
 plt.rcParams.update({'font.size': 30})
