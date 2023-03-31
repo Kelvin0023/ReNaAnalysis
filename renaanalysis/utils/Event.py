@@ -115,7 +115,10 @@ def get_overlapping_events(start_time, end_time, events, event_filter: callable=
 
     after_start_event_mask = np.logical_and(onset_times >= start_time, onset_times <= end_time)
     before_start_event_mask = np.logical_and(offset_times <= end_time, offset_times >= start_time)
-    return filter_events[np.logical_or(after_start_event_mask, before_start_event_mask)]
+    overlapping_events = filter_events[np.logical_or(after_start_event_mask, before_start_event_mask)]
+    overlapping_events = list(overlapping_events)
+    overlapping_events.sort(key=lambda e: e.onset_time)
+    return overlapping_events
 
 def get_overlapping_events_single_target(target_time, events, event_filter: callable=None):
     """
