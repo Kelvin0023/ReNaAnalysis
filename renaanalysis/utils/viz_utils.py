@@ -125,6 +125,8 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_h
         ax.set_xlim(block_start_timestamp, block_end_timestamp)
         ax.set_title("Block ID {}, condition {}".format(block_id, get_block_start_event(block_id, events).block_condition))
 
+    ax.set_yticks([gaze_intersect_y, IDT_fix_head_y, IVT_fix_head_y, pathSim_fix_y])
+    ax.set_yticklabels(['Gaze Ray Intersect', 'I-DT-Head', 'I-VT-Head', 'Patch-Sim'])
     ax.legend()
     ax.set_xlabel('Time (sec)')
     plt.show()

@@ -164,6 +164,8 @@ def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False,
         rebalance = False
     if data_type == 'both':
         epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, resample_rate=eeg_resample_srate, n_jobs=n_jobs, reject=reject)
+        if epochs_eeg is None:
+            return None, None, None, event_ids
         epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, tmin=tmin_pupil, tmax=tmax_pupil, resample_rate=eyetracking_resample_srate, participant=participant, session=session, n_jobs=n_jobs)
         if reject == 'auto':  # if using auto rejection
             epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
@@ -172,8 +174,6 @@ def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False,
             assert np.all(ps_group_pupil == ps_group_eeg)
         except AssertionError:
             raise ValueError(f"pupil and eeg groups does not match: {ps_group_pupil}, {ps_group_eeg}")
-        if epochs_eeg is None:
-            return None, None, None, event_ids
 
         if force_square:
             epochs_eeg = force_square_epochs(epochs_eeg, tmin_eeg, tmax_eeg)

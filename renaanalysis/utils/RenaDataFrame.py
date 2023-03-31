@@ -143,6 +143,9 @@ class RenaDataFrame:
 
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
             eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
+            if len(event_ids) == 0:
+                print(f"No EEG epochs found participant {p}, session {s}, skipping")
+                continue
             try:
                 epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=None)
             except ValueError:
@@ -155,6 +158,9 @@ class RenaDataFrame:
                 print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
                 eeg_epochs_all = epochs if eeg_epochs_all is None else mne.concatenate_epochs([epochs, eeg_epochs_all])
             ps_group += [i] * len(epochs)
+        if len(eeg_epochs_all) == 0:
+            print(f"No EEG epochs found participant {participant}, session {session}, returning None")
+            return [None] * 4
         eeg_epochs_all = eeg_epochs_all.resample(resample_rate)  # resample all the epochs together at the end
         if reject == 'auto':
             print("Auto rejecting epochs")
