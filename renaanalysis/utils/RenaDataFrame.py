@@ -158,7 +158,7 @@ class RenaDataFrame:
                 print(f'Found {len(epochs)} EEG epochs for participant {p} session {s}')
                 eeg_epochs_all = epochs if eeg_epochs_all is None else mne.concatenate_epochs([epochs, eeg_epochs_all])
             ps_group += [i] * len(epochs)
-        if len(eeg_epochs_all) == 0:
+        if eeg_epochs_all is None or len(eeg_epochs_all) == 0:
             print(f"No EEG epochs found participant {participant}, session {session}, returning None")
             return [None] * 4
         eeg_epochs_all = eeg_epochs_all.resample(resample_rate)  # resample all the epochs together at the end
