@@ -553,7 +553,7 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, lowcut_eeg=1,
                     warnings.warn('HIGHLY UNLIKELY TO HAPPEN: No channel found to be significantly correlated with blink, skipping auto blink artifact removal')
 
                 eyemovement_indices = []
-                for z_score_threshold in np.linspace(2.5, 1., 5):
+                for z_score_threshold in np.linspace(2.5, 1.5, 5):
                     eyemovement_indices, eyemovement_scores = ica.find_bads_eog(raw, ch_name=proxy_eog_ch_names, threshold=z_score_threshold)
                     if len(eyemovement_indices) > 0:
                         [print(f'Found Eye Movement component at ICA index {x} with score: [left {eyemovement_scores[0][x]}] [right {eyemovement_scores[1][x]}], adding to ICA exclude') for x in eyemovement_indices]
