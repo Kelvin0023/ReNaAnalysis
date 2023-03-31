@@ -21,9 +21,9 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-# rdf = get_rdf(ocular_artifact_mode='proxy')
-rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
-# pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
+rdf = get_rdf(ocular_artifact_mode='proxy')
+# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # lockings test  ####################################################################################################
@@ -103,13 +103,13 @@ plt.rcParams["figure.figsize"] = (24, 12)
 
 models = ['HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil', 'EEGPupilCNN', 'EEGCNN']
 constrained_conditions = ['RSVP', 'Carousel']
-conditions = ['RSVP', 'Carousel', 'VS']
+conditions_names = ['RSVP', 'Carousel', 'VS']
 constrained_lockings = ['Item-Onset', 'I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
 lockings = ['I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
 
 width = 0.175
 
-for c in conditions:
+for c in conditions_names:
     this_lockings = lockings if c not in constrained_conditions else constrained_lockings
     ind = np.arange(len(this_lockings))
 
