@@ -30,8 +30,9 @@ class RenaDataFrame:
         for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items():
             if 'BioSemi'in data.keys():
                 print(f"Preprocessing EEG for participant {p}, session {s}")
-                eeg_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, srate=self.exg_srate, bad_channels=bad_channels, is_running_ica=is_running_ica, is_regenerate_ica=is_regenerate_ica, ocular_artifact_mode=ocular_artifact_mode, n_jobs=n_jobs)
+                eeg_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, srate=self.exg_srate, resample_rate=exg_resample_rate, bad_channels=bad_channels, is_running_ica=is_running_ica, is_regenerate_ica=is_regenerate_ica, ocular_artifact_mode=ocular_artifact_mode, n_jobs=n_jobs)
                 data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'timestamps': downsampled_timestamps}
+                self.exg_resample_rate = exg_resample_rate
             if 'Unity.VarjoEyeTrackingComplete' in data.keys():
                 print(f"Preprocessing pupil for participant {p}, session {s}")
                 left = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('left_pupil_size')].copy()

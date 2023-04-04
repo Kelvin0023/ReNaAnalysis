@@ -205,7 +205,7 @@ def fixation_detection_i_dt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
     gaze_angles_degree_glitched_nan = np.copy(gaze_angles_degree)
     gaze_angles_degree_glitched_nan[velocities > glitch_threshold] = np.nan
     while (gaze_point_window_end_index < len(gaze_timestamps)):
-        print(f"Running i-dt fixation detection, window start is at {gaze_point_window_start_index}, total length is {len(gaze_timestamps)}", end='\r')
+        # print(f"Running i-dt fixation detection, window start is at {gaze_point_window_start_index}, total length is {len(gaze_timestamps)}", end='\r')
         # for timestamp, yaw, pitch, gaze_angle, velocity in zip(gaze_timestamps, gaze_yaw_degree, gaze_pitch_degree, gaze_angles_degree, velocities):
         # Check if this is the first gaze point in the sequence
         # if last_gaze_point is None:
