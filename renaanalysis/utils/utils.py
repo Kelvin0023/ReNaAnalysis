@@ -311,9 +311,10 @@ def get_gaze_ray_events(item_markers, item_marker_timestamps, events, long_gaze_
                 gaze_ray_onset_times = b_item_timestamps[gaze_ray_diff == 1]
                 gaze_ray_offset_times = b_item_timestamps[gaze_ray_diff == -1]
 
-                if len(gaze_ray_onset_times) > len(gaze_ray_offset_times) and gaze_ray_onset_times[-1] > gaze_ray_offset_times[-1]:  # if the last gaze ray started without offset, then put the offset at the end of the block
-                    print("Gaze ray onset without offset")
-                    gaze_ray_offset_times = np.concatenate([gaze_ray_offset_times, [b_item_timestamps[-1]]])
+                if len(gaze_ray_onset_times) > len(gaze_ray_offset_times):  # if the last gaze ray started without offset, then put the offset at the end of the block
+                    if (len(gaze_ray_onset_times) == 1 and len(gaze_ray_offset_times) == 0) or gaze_ray_onset_times[-1] > gaze_ray_offset_times[-1]:
+                        print("Gaze ray onset without offset")
+                        gaze_ray_offset_times = np.concatenate([gaze_ray_offset_times, [b_item_timestamps[-1]]])
 
                 gaze_ray_onset_item_ids = i_b_iid[gaze_ray_diff == 1]
                 item_dtns = np.unique(i_b_dtn[i_b_dtn!=0])

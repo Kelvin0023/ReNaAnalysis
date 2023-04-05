@@ -1,25 +1,26 @@
 import warnings
-from functools import reduce
-from operator import concat
 
 import mne
 import numpy as np
 from autoreject import AutoReject
 
-from renaanalysis.params.params import varjoEyetracking_chs, varjoEyetracking_stream_name
-from renaanalysis.utils.Event import add_events_to_data, get_filtered_events
+from renaanalysis.eeg.eeg_utils import simulate_eeg
+from renaanalysis.params.params import varjoEyetracking_chs, varjoEyetracking_stream_name, eeg_channel_names, \
+    ecg_ch_name, proxy_eog_ch_names, eeg_montage
+from renaanalysis.utils.Event import add_events_to_data
 from renaanalysis.utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
     validate_get_epoch_args, \
     interpolate_zeros
 
 
 class RenaDataFrame:
-    def __init__(self, eeg_srate=2048):
+    def __init__(self, eeg_srate=2048, eyetracking_stream_name='Unity.VarjoEyeTrackingComplete'):
         self.exg_srate = eeg_srate
         self.exg_resample_rate = eeg_srate
 
         self.participant_session_videos = {}
         self.participant_session_dict = {}
+        self.eyetracking_stream_name = eyetracking_stream_name
 
 
     def add_participant_session(self, data, events, participant, session_index, bad_channels, ica_path, video_dir):
@@ -33,17 +34,17 @@ class RenaDataFrame:
                 eeg_raw, downsampled_timestamps = preprocess_session_eeg(data['BioSemi'], data['BioSemi'][1], ica_path, srate=self.exg_srate, resample_rate=exg_resample_rate, bad_channels=bad_channels, is_running_ica=is_running_ica, is_regenerate_ica=is_regenerate_ica, ocular_artifact_mode=ocular_artifact_mode, n_jobs=n_jobs)
                 data['BioSemi'] = {'array_original': data['BioSemi'], 'timestamps_original': data['BioSemi'][1], 'raw': eeg_raw, 'timestamps': downsampled_timestamps}
                 self.exg_resample_rate = exg_resample_rate
-            if 'Unity.VarjoEyeTrackingComplete' in data.keys():
+            if self.eyetracking_stream_name in data.keys():
                 print(f"Preprocessing pupil for participant {p}, session {s}")
-                left = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('left_pupil_size')].copy()
+                left = data[self.eyetracking_stream_name][0][varjoEyetracking_chs.index('left_pupil_size')].copy()
                 assert np.sum(left == np.nan) == 0
                 left = interpolate_zeros(left)
-                data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('left_pupil_size')] = left
+                data[self.eyetracking_stream_name][0][varjoEyetracking_chs.index('left_pupil_size')] = left
 
-                right = data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('right_pupil_size')].copy()
+                right = data[self.eyetracking_stream_name][0][varjoEyetracking_chs.index('right_pupil_size')].copy()
                 assert np.sum(right == np.nan) == 0
                 right = interpolate_zeros(right)
-                data['Unity.VarjoEyeTrackingComplete'][0][varjoEyetracking_chs.index('right_pupil_size')] = right
+                data[self.eyetracking_stream_name][0][varjoEyetracking_chs.index('right_pupil_size')] = right
         self.exg_resample_rate = exg_resample_rate
 
     def get_data_events(self, participant=None, session=None) -> dict:
@@ -88,6 +89,7 @@ class RenaDataFrame:
         else:
             raise TypeError("Unsupported session type, must be int, list or None")
         return keys
+
     def get_pupil_epochs(self, event_names, event_filters, tmin, tmax, resample_rate=20, *, participant=None, session=None, n_jobs=1):
         """
         event_filters:
@@ -174,3 +176,27 @@ class RenaDataFrame:
 
         return eeg_epochs_clean, event_ids, log, ps_group
 
+    def simulate_exg(self, participant=None, session=None, srate=128):
+        """
+        Simulate EEG data for each participant and session in the dataset.
+        @param srate: sampling rate of the simulated EEG data
+        @return: None
+        """
+        ps_dict = self.get_data_events(participant, session)
+
+        for (p, s), (data, events) in ps_dict.items():
+            # must have pupil data to simulate EEG
+
+            if self.eyetracking_stream_name not in data.keys():
+                raise ValueError(f"Participant {p} session {s} does not have eyetracking data, cannot simulate EEG")
+            eyetracking_timestamps = data[self.eyetracking_stream_name][1]
+            timestamps, exg_array = simulate_eeg(np.min(eyetracking_timestamps), np.max(eyetracking_timestamps), srate=srate, num_channels=len(eeg_channel_names) + 1 + len(proxy_eog_ch_names))
+
+            data_channels = ['timestamps'] + eeg_channel_names + [ecg_ch_name] + proxy_eog_ch_names + ['stim']
+            data_channel_types = ['misc'] + ['eeg'] * len(eeg_channel_names) + ['ecg'] + ['eog'] * 2 + ['stim']
+
+            info = mne.create_info(data_channels, sfreq=srate, ch_types=data_channel_types)  # with 3 additional info markers and design matrix
+            raw = mne.io.RawArray(np.concatenate([timestamps[None, :], exg_array, np.zeros([1, len(timestamps)])], axis=0), info)
+            raw.set_montage(eeg_montage)
+
+            data['BioSemi'] = {'array_original': exg_array, 'timestamps_original': timestamps, 'raw': raw, 'timestamps': timestamps}
