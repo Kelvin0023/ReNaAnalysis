@@ -55,6 +55,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             if model_name == 'EEGPupilCNN':
                 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
+            # else if model_name == 'HT':
             else:
                 if model_name == 'EEGCNN':
                     model = EEGCNN(in_shape=x[0].shape, num_classes=2, in_channels=20 if reduce_dim else 64)
