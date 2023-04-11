@@ -21,9 +21,9 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf(ocular_artifact_mode='proxy')
-# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
-pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
+# rdf = get_rdf(exg_resample_rate=200, ocular_artifact_mode='proxy')
+rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # lockings test  ####################################################################################################

@@ -15,6 +15,7 @@ from torchsummary import summary
 from tqdm import tqdm
 
 from renaanalysis.learning.HDCA import hdca
+from renaanalysis.learning.HT import HierarchicalTransformer
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.params.params import lr, epochs, batch_size, model_save_dir, patience, l2_weight, random_seed, \
     export_data_root, num_top_compoenents
@@ -22,7 +23,8 @@ from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebala
     mean_min_sublists, epochs_to_class_samples
 
 
-def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
+def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, reduce_dim=False,
+                  ht_window_duration=0.1, tmax_eeg=0.9):
     # verify number of event types
     assert rdf.exg_resample_rate == exg_resample_rate
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
@@ -31,7 +33,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
         test_name = f'Locking-{locking_name}_Model-{model_name}_P-{participant}_S-{session}'
         if regenerate_epochs:
             # x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
-            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full')
+            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', tmax_eeg=tmax_eeg, exg_resample_rate=exg_resample_rate)
             pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
             pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
         else:
@@ -55,12 +57,15 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             if model_name == 'EEGPupilCNN':
                 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
-            # else if model_name == 'HT':
+            elif model_name == 'HT':
+                num_channels, num_timesteps = x_eeg.shape[1:]
+                HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, window_duration=ht_window_duration, num_classes=2, depth=3, num_heads=1, mlp_dim=128)
             else:
                 if model_name == 'EEGCNN':
                     model = EEGCNN(in_shape=x[0].shape, num_classes=2, in_channels=20 if reduce_dim else 64)
                 elif model_name == 'EEGInception':
                     model = EEGInceptionNet(in_shape=x[0].shape, num_classes=2)
+                else: raise Exception(f"Unknown model name {model_name}")
                 model, training_histories, criterion, label_encoder = train_model(x[0], y, model, test_name=test_name, verbose=1)
             folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
             folds_val_auc = mean_max_sublists(training_histories['auc_val'])
