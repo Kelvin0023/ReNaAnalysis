@@ -121,9 +121,9 @@ class RenaDataFrame:
         event_ids = None
         ps_group = []
         for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
-            eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters)
+            eeg_data_with_events, event_ids, deviant = add_events_to_data(data['BioSemi']['raw'], data['BioSemi']['timestamps'], events, event_names, event_filters) #**
             try:
-                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax)
+                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax)#*
             except ValueError:
                 print(f"Not EEG epochs found participant {p}, session {s}, skipping")
                 continue
@@ -135,8 +135,8 @@ class RenaDataFrame:
                 eeg_epochs_all = epochs if eeg_epochs_all is None else mne.concatenate_epochs([epochs, eeg_epochs_all])
             ps_group += [i] * len(epochs)
         print("Auto rejecting epochs")
-        ar = AutoReject(n_jobs=20, verbose=False)
-        eeg_epochs_clean, log = ar.fit_transform(eeg_epochs_all, return_log=True)
+        ar = AutoReject(n_jobs=20, verbose=False, random_state=42)
+        eeg_epochs_clean, log = ar.fit_transform(eeg_epochs_all, return_log=True)#********************
         ps_group = np.array(ps_group)[np.logical_not(log.bad_epochs)]
 
         return eeg_epochs_clean, event_ids, log, ps_group

@@ -2,6 +2,7 @@
 
 # analysis parameters ######################################################################################
 import os
+import time
 
 # analysis parameters ######################################################################################
 import matplotlib.pyplot as plt
@@ -136,33 +137,68 @@ def solve_crossbin_weights(projection_train, projection_test, y_train, y_test, n
     return cross_window_weights, roc_auc, fpr, tpr
 
 
-def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
+def compute_window_projections(x_train_windowed, x_test_windowed, y_train, i, e):
     num_train_trials, num_channels, num_windows, num_timepoints_per_window = x_train_windowed.shape
     num_test_trials = len(x_test_windowed)
+    latency_lda = 0
+    latency_post = 0
+    _is_save_data = 0
 
     weights_channelWindow = np.empty((num_windows, num_channels * num_timepoints_per_window))
     projectionTrain_window_trial = np.empty((num_train_trials, num_windows))
     projectionTest_window_trial = np.empty((num_test_trials, num_windows))
+
     # TODO this can go faster with multiprocess pool
-    for k in range(num_windows):  # iterate over different windows
+    for k in range(num_windows):  # iterate over different
         this_x_train = x_train_windowed[:, :, k, :].reshape((num_train_trials, -1))
         this_x_test = x_test_windowed[:, :, k, :].reshape((num_test_trials, -1))
+        if _is_save_data:
+            if e == 0:
+                if not os.path.exists("./eeg_data/fold_"+str(i)):
+                    os.mkdir("./eeg_data/fold_"+str(i))
+                np.savetxt("./eeg_data/fold_"+str(i)+"/x_train_"+str(k)+".txt", this_x_train, delimiter=",", fmt='%.08f')
+                np.savetxt("./eeg_data/fold_"+str(i)+"/x_test_" + str(k) + ".txt", this_x_test, delimiter=",", fmt='%.08f')
+                np.savetxt("./eeg_data/fold_"+str(i)+"/y_train_" + str(k) + ".txt", y_train, delimiter=",", fmt='%.08f')
+            else:
+                if not os.path.exists("./pupil_data/fold_"+str(i)):
+                    os.mkdir("./pupil_data/fold_"+str(i))
+                np.savetxt("./pupil_data/fold_"+str(i)+"/x_train_"+str(k)+".txt", this_x_train, delimiter=",", fmt='%.08f')
+                np.savetxt("./pupil_data/fold_"+str(i)+"/x_test_" + str(k) + ".txt", this_x_test, delimiter=",", fmt='%.08f')
+                np.savetxt("./pupil_data/fold_"+str(i)+"/y_train_" + str(k) + ".txt", y_train, delimiter=",", fmt='%.08f')
+        #start_lda = time.time()
         lda = LinearDiscriminantAnalysis(solver='svd')
         projectionTrain_window_trial[:, k] = lda.fit_transform(this_x_train, y_train).squeeze(axis=1)
         projectionTest_window_trial[:, k] = lda.transform(this_x_test).squeeze(axis=1)
+        #end_lda = time.time()
+        #latency_lda += end_lda - start_lda
+
+        #start_post = time.time()
 
         _weights = np.squeeze(lda.coef_, axis=0)
         weights_channelWindow[k] = _weights
+        #end_post = time.time()
+        #latency_post += end_post - start_post
         # for j in range(num_train_trials):
         #     projectionTrain_window_trial[j, k] = np.dot(_weights, this_x_train[j]) + lda.intercept_
         # for j in range(num_test_trials):
         #     projectionTest_window_trial[j, k] = np.dot(_weights, this_x_test[j])
+    #print(f'lda={latency_lda}')
+    #print(f'post={latency_post}')
     return weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial
 
 
 def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
-
+    latency_window_eeg = 0
+    latency_window_pupil = 0
+    latency_weight_eeg = 0
+    latency_weight_pupil = 0
+    latency_weight_combined = 0
+    latency_z_norm_pupil = 0
+    latency_z_norm_eeg = 0
+    #latency = 0
     # split data into 100ms bins
+    start_pre = time.time()
+    _is_save_result = 0
     split_size_eeg = int(split_window_eeg * exg_resample_srate)
     split_size_pupil = int(split_window_pupil * eyetracking_resample_srate)
     # multi-fold cross-validation
@@ -187,24 +223,26 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
     tpr_folds_eeg = []
     fpr_folds_pupil = []
     tpr_folds_pupil = []
+    end_pre = time.time()
+    print(f'latency_pre = {end_pre - start_pre}')
 
     x_eeg_transformed = compute_pca_ica(x[0], num_top_compoenents)
-
     for i, (train, test) in enumerate(cross_val_folds.split(x[0],
                                                             y)):  # cross-validation; group arguement is not necessary unless using grouped folds
         if verbose: print(f"Working on {i + 1} fold of {num_folds}")
-
+        #1
+        #start = time.time()
         x_eeg_transformed_train, x_eeg_transformed_test, y_train, y_test = x_eeg_transformed[train], x_eeg_transformed[
             test], y[train], y[test]
         x_pupil_train, x_pupil_test, _, _ = x[1][train], x[1][test], y[train], y[test]
-
+        #2
         x_eeg_transformed_train, y_train_eeg = rebalance_classes(x_eeg_transformed_train, y_train)  # rebalance by class
         x_pupil_train, y_train_pupil = rebalance_classes(x_pupil_train, y_train)  # rebalance by class
         assert np.all(y_train_eeg == y_train_pupil)
         y_train = y_train_pupil
 
         x_eeg_test = x[0][test]
-
+        #3
         x_eeg_transformed_train_windowed = sliding_window_view(x_eeg_transformed_train, window_shape=split_size_eeg,
                                                                axis=2)[:, :, 0::split_size_eeg,
                                            :]  # shape = #trials, #channels, #windows, #time points per window
@@ -213,13 +251,24 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
                                           :]  # shape = #trials, #channels, #windows, #time points per window
         x_eeg_test_windowed = sliding_window_view(x_eeg_test, window_shape=split_size_eeg, axis=2)[:, :,
                               0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
-
+        #4
         num_train_trials, num_channels_eeg, num_windows_eeg, num_timepoints_per_window_eeg = x_eeg_transformed_train_windowed.shape
         num_test_trials = len(x_eeg_transformed_test)
         # compute Fisher's LD for each temporal window
         if verbose >= 2: print("Computing windowed LDA per channel, and project per window and trial")
+        # start_window_eeg = time.time()
         weights_channelWindow_eeg, projection_train_window_trial_eeg, projection_test_window_trial_eeg = compute_window_projections(
-            x_eeg_transformed_train_windowed, x_eeg_transformed_test_windowed, y_train)
+            x_eeg_transformed_train_windowed, x_eeg_transformed_test_windowed, y_train, i, 0)
+        if _is_save_result:
+            if not os.path.exists("./result_eeg/fold_" + str(i)):
+                os.mkdir("./result_eeg/fold_" + str(i))
+            np.savetxt("./result_eeg/fold_" + str(i) + "/weight.txt", weights_channelWindow_eeg, delimiter=",", fmt='%.08f')
+            np.savetxt("./result_eeg/fold_" + str(i) + "/projected_train.txt", projection_train_window_trial_eeg, delimiter=",", fmt='%.08f')
+            np.savetxt("./result_eeg/fold_" + str(i) + "/projected_test.txt", projection_test_window_trial_eeg, delimiter=",", fmt='%.08f')
+        # end_window_eeg = time.time()
+        # latency_window_eeg += end_window_eeg - start_window_eeg
+        # print(f'latency_window_eeg={latency_window_eeg}')
+        #5
         if verbose >= 2: print('Computing forward model from window projections for test set')
         activation = compute_forward(x_eeg_test_windowed, y_test, projection_test_window_trial_eeg)
         # train classifier, use gradient descent to find the cross-window weights
@@ -234,50 +283,79 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
         x_pupil_train_windowed = sliding_window_view(x_pupil_train, window_shape=split_size_pupil, axis=2)[:, :,0::split_size_pupil,:]  # shape = #trials, #channels, #windows, #time points per window
         x_pupil_test_windowed = sliding_window_view(x_pupil_test, window_shape=split_size_pupil, axis=2)[:, :,0::split_size_pupil,:]  # shape = #trials, #channels, #windows, #time points per window
         _, num_channels_pupil, num_windows_pupil, num_timepoints_per_window_pupil = x_pupil_train_windowed.shape
+        #end
+        # start_window_pupil = time.time()
         weights_channelWindow_pupil, projection_train_window_trial_pupil, projection_test_window_trial_pupil = compute_window_projections(
-            x_pupil_train_windowed, x_pupil_test_windowed, y_train)
+            x_pupil_train_windowed, x_pupil_test_windowed, y_train, i, 1)
+        if _is_save_result:
+            if not os.path.exists("./result_pupil/fold_" + str(i)):
+                os.mkdir("./result_pupil/fold_" + str(i))
+            np.savetxt("./result_pupil/fold_" + str(i) + "/weight.txt", weights_channelWindow_pupil, delimiter=",", fmt='%.08f')
+            np.savetxt("./result_pupil/fold_" + str(i) + "/projected_train.txt", projection_train_window_trial_pupil, delimiter=",", fmt='%.08f')
+            np.savetxt("./result_pupil/fold_" + str(i) + "/projected_test.txt", projection_test_window_trial_pupil, delimiter=",", fmt='%.08f')
+        # end_window_pupil = time.time()
+        # latency_window_pupil += end_window_pupil - start_window_pupil
+        # print(f'latency_window_pupil={latency_window_pupil}')
+        # start_z_norm_pupil = time.time()
         projection_train_window_trial_pupil, projection_test_window_trial_pupil = z_norm_projection(
             projection_train_window_trial_pupil, projection_test_window_trial_pupil)
-
+        # end_z_norm_pupil = time.time()
+        # latency_z_norm_pupil += end_z_norm_pupil - start_z_norm_pupil
+        # print(f'latency_znorm_pupil={latency_z_norm_pupil}')
         # z-norm the projections
+        # start_z_norm_eeg = time.time()
         projection_train_window_trial_eeg, projection_test_window_trial_eeg = z_norm_projection(
             projection_train_window_trial_eeg, projection_test_window_trial_eeg)
+        # end_z_norm_eeg = time.time()
+        # latency_z_norm_eeg += end_z_norm_eeg - start_z_norm_eeg
+        # print(f'latency_znorm_eeg={latency_z_norm_eeg}')
 
         if verbose >= 2: print('Solving cross bin weights')
+        # start_weight_eeg = time.time()
         cw_weights_eeg, roc_auc_eeg, fpr_eeg, tpr_eeg = solve_crossbin_weights(projection_train_window_trial_eeg,
                                                                                projection_test_window_trial_eeg,
                                                                                y_train, y_test, num_windows_eeg)
-
+        # end_weight_eeg = time.time()
+        # latency_weight_eeg += end_weight_eeg - start_weight_eeg
+        # print(f'latency_weight_eeg={latency_weight_eeg}')
+        # start_weight_pupil = time.time()
         cw_weights_pupil, roc_auc_pupil, fpr_pupil, tpr_pupil = solve_crossbin_weights(
             projection_train_window_trial_pupil, projection_test_window_trial_pupil, y_train, y_test,
             num_windows_pupil)
-
+        # end_weight_pupil = time.time()
+        # latency_weight_pupil += end_weight_pupil - start_weight_pupil
+        # print(f'latency_weight_pupil={latency_weight_pupil}')
         projection_combined_train = np.concatenate(
             [projection_train_window_trial_eeg, projection_train_window_trial_pupil], axis=1)
         projection_combined_test = np.concatenate(
             [projection_test_window_trial_eeg, projection_test_window_trial_pupil], axis=1)
-
+        # start_weight_combined = time.time()
         cw_weights_combined, roc_auc_combined, fpr_combined, tpr_combined = solve_crossbin_weights(
             projection_combined_train, projection_combined_test, y_train, y_test,
             num_windows_pupil)
-
-        cw_weights_pupil_folds[i] = cw_weights_pupil
-        roc_auc_folds_pupil[i] = roc_auc_pupil
-        fpr_folds_pupil.append(fpr_pupil)
-        tpr_folds_pupil.append(tpr_pupil)
-
-        cw_weights_eeg_folds[i] = cw_weights_eeg
-
-        activations_folds[i] = activation
-
-        roc_auc_folds_eeg[i] = roc_auc_eeg
-        fpr_folds_eeg.append(fpr_eeg)
-        tpr_folds_eeg.append(tpr_eeg)
+        # end_weight_combined = time.time()
+        # latency_weight_combined += end_weight_combined - start_weight_combined
+        # print(f'latency_weight_combined={latency_weight_combined}')
+        # cw_weights_pupil_folds[i] = cw_weights_pupil
+        # #1
+        # roc_auc_folds_pupil[i] = roc_auc_pupil
+        # fpr_folds_pupil.append(fpr_pupil)
+        # tpr_folds_pupil.append(tpr_pupil)
+        # cw_weights_eeg_folds[i] = cw_weights_eeg
+        #
+        # activations_folds[i] = activation
+        # #2
+        # roc_auc_folds_eeg[i] = roc_auc_eeg
+        # fpr_folds_eeg.append(fpr_eeg)
+        # tpr_folds_eeg.append(tpr_eeg)
         # print(f'Fold {i}, auc is {roc_auc_folds[i]}')
+        #end = time.time()
+        #latency += end - start
+        #print(f'latency = {latency}')
 
     plot_forward(np.mean(activations_folds, axis=0), event_names, split_window_eeg, num_windows_eeg,
                  notes=f"{notes} Average over {num_folds}-fold's test set")
-
+        #3
     if verbose:
         print(f"Mean EEG cross ROC-AUC is {np.mean(roc_auc_folds_eeg)}")
         print(f"Mean Pupil cross ROC-AUC is {np.mean(roc_auc_folds_pupil)}")
@@ -330,5 +408,4 @@ def hdca(x, y, event_names, is_plots=False, notes="", verbose=0):
         plt.legend()
         plt.tight_layout()
         plt.show()
-
     return roc_auc_combined, roc_auc_eeg, roc_auc_pupil
