@@ -15,6 +15,7 @@ from torchsummary import summary
 from tqdm import tqdm
 
 from renaanalysis.learning.HDCA import hdca
+from renaanalysis.learning.HT import HierarchicalTransformer
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.params.params import lr, epochs, batch_size, model_save_dir, patience, l2_weight, random_seed, \
     export_data_root, num_top_compoenents
@@ -24,14 +25,13 @@ from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebala
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
     # verify number of event types
-    assert rdf.exg_resample_rate == exg_resample_rate
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
     for locking_name, locking_filter in locking_name_filters.items():
         test_name = f'Locking-{locking_name}_Model-{model_name}_P-{participant}_S-{session}'
         if regenerate_epochs:
             # x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
-            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full')
+            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', eeg_resample_rate=exg_resample_rate)
             pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
             pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
         else:
@@ -55,6 +55,10 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             if model_name == 'EEGPupilCNN':
                 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
+            elif model_name == 'HT':
+                num_channels, num_timesteps = x_eeg.shape[1:]
+                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, depth=3, num_heads=1, mlp_dim=128)
+                model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1)  # use un-dimension reduced EEG data
             else:
                 if model_name == 'EEGCNN':
                     model = EEGCNN(in_shape=x[0].shape, num_classes=2, in_channels=20 if reduce_dim else 64)
@@ -67,40 +71,40 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             locking_performance[locking_name, model_name] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss, 'folds trian loss': folds_train_loss}
     return locking_performance
 
-def eval_lockings_models(rdf, event_names, locking_name_filters, participant, session, models=('EEGCNN', 'EEGInception', 'EEGPupil'), regenerate_epochs=True, reduce_dim=False):
-    # verify number of event types
-    assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
-    performance = {}
-    for locking_name, locking_filter in locking_name_filters.items():
-        test_name = f'L {locking_name}, P {participant}, S {session}, Visaul Search'
-        if regenerate_epochs:
-            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session)
-            pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'wb'))
-            pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'wb'))
-        else:
-            x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'rb'))
-            y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'rb'))
-        if reduce_dim:
-            x[0], pca, ica = compute_pca_ica(x[0], num_top_compoenents)  # reduce dimension of eeg data at index 0
+# def eval_lockings_models(rdf, event_names, locking_name_filters, participant, session, models=('EEGCNN', 'EEGInception', 'EEGPupil'), regenerate_epochs=True, reduce_dim=False):
+#     # verify number of event types
+#     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
+#     performance = {}
+#     for locking_name, locking_filter in locking_name_filters.items():
+#         test_name = f'L {locking_name}, P {participant}, S {session}'
+#         if regenerate_epochs:
+#             x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session)
+#             pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'wb'))
+#             pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'wb'))
+#         else:
+#             x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'rb'))
+#             y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}_PupilEEG.p'), 'rb'))
+#         if reduce_dim:
+#             x[0], pca, ica = compute_pca_ica(x[0], num_top_compoenents)  # reduce dimension of eeg data at index 0
+#
+#         # data is ready for this locking from above, now iterate over the models
+#         for m in models:
+#             if m == 'EEGPupil':
+#                 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
+#                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
+#             else:
+#                 if m == 'EEGCNN':
+#                     model = EEGCNN(in_shape=x.shape, num_classes=2, in_channels=20 if reduce_dim else 64)
+#                 elif m == 'EEGInception':
+#                     model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
+#                 model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=test_name, verbose=0)
+#             best_train_acc, best_val_acc, best_train_loss, best_val_loss = mean_sublists(training_histories['acc_train']), mean_sublists(training_histories['acc_val']), mean_sublists(training_histories['loss_val']), mean_sublists(training_histories['loss_val'])
+#             best_val_auc = mean_sublists(training_histories['auc_val'])
+#             print(f'{test_name}: average val AUC {best_val_auc}, average val accuracy: {best_val_acc}, average train accuracy: {best_train_acc}, average val loss: {best_val_loss}, average train loss: {best_train_loss}')
+#             performance[m, locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
+#     return performance
 
-        # data is ready for this locking from above, now iterate over the models
-        for m in models:
-            if m == 'EEGPupil':
-                model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
-                model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name, verbose=0)
-            else:
-                if m == 'EEGCNN':
-                    model = EEGCNN(in_shape=x.shape, num_classes=2, in_channels=20 if reduce_dim else 64)
-                elif m == 'EEGInception':
-                    model = EEGInceptionNet(in_shape=x.shape, num_classes=2)
-                model, training_histories, criterion, label_encoder = train_model(x, y, model, test_name=test_name, verbose=0)
-            best_train_acc, best_val_acc, best_train_loss, best_val_loss = mean_sublists(training_histories['acc_train']), mean_sublists(training_histories['acc_val']), mean_sublists(training_histories['loss_val']), mean_sublists(training_histories['loss_val'])
-            best_val_auc = mean_sublists(training_histories['auc_val'])
-            print(f'{test_name}: average val AUC {best_val_auc}, average val accuracy: {best_val_acc}, average train accuracy: {best_train_acc}, average val loss: {best_val_loss}, average train loss: {best_train_loss}')
-            performance[m, locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
-    return performance
-
-def train_model(X, Y, model, num_folds=10, test_name="CNN", n_folds=10, verbose=1):
+def train_model(X, Y, model, test_name="CNN", n_folds=10, verbose=1):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     model = model.to(device)
@@ -131,15 +135,15 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", n_folds=10, verbose=
         y_train = torch.Tensor(y_train)
         y_test = torch.Tensor(y_test)
 
-        train_dataset = TensorDataset(x_train, y_train)  # create your datset
+        train_dataset = TensorDataset(x_train, y_train)
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
 
-        val_dataset = TensorDataset(x_test, y_test)  # create your datset
+        val_dataset = TensorDataset(x_test, y_test)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
-        if verbose >= 1:
-            print("Model Summary: ")
-            summary(model, input_size=x_train.shape[1:])
+        # if verbose >= 1:
+        #     print("Model Summary: ")
+        #     summary(model, input_size=x_train.shape[1:])
 
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
@@ -193,8 +197,7 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", n_folds=10, verbose=
             model.eval()
             with torch.no_grad():
                 if verbose >= 1:
-                    pbar = tqdm(total=math.ceil(len(val_dataloader.dataset) / val_dataloader.batch_size),
-                            desc='Validating {}'.format(test_name))
+                    pbar = tqdm(total=math.ceil(len(val_dataloader.dataset) / val_dataloader.batch_size),desc='Validating {}'.format(test_name))
                     pbar.update(mini_batch_i := 0)
                 batch_losses = []
                 # batch_aucs =[]
@@ -234,9 +237,7 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", n_folds=10, verbose=
             if val_losses[-1] < best_loss:
                 torch.save(model.state_dict(), os.path.join(model_save_dir, test_name))
                 if verbose >= 1:
-                    print(
-                        'Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1],
-                                                                                                model_save_dir))
+                    print('Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1], model_save_dir))
                 best_loss = val_losses[-1]
                 patience_counter = 0
             else:
@@ -250,8 +251,7 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", n_folds=10, verbose=
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
-    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds,
-                          'acc_val': val_accs_folds, 'auc_val': val_aucs_folds}
+    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds}
     # plt.plot(training_histories['acc_train'])
     # plt.plot(training_histories['acc_val'])
     # plt.title(f"Accuracy, {test_name}")
@@ -263,7 +263,7 @@ def train_model(X, Y, model, num_folds=10, test_name="CNN", n_folds=10, verbose=
     # plt.title(f"Loss, {test_name}")
     # plt.tight_layout()
     # plt.show()
-    if verbose: print(f"Average AUC for {num_folds} folds is {np.mean([np.max(x) for x in val_aucs_folds])}")
+    if verbose: print(f"Average AUC for {n_folds} folds is {np.mean([np.max(x) for x in val_aucs_folds])}")
     return model, training_histories_folds, criterion, label_encoder
 
 def eval_model(model, x, y, criterion, label_encoder):

@@ -14,16 +14,21 @@ from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.train import eval_lockings
 from renaanalysis.params.params import *
 
-torch.manual_seed(random_seed)
-np.random.seed(random_seed)
+
+# user parameters
+exg_resample_rate = 200
+
 
 # start of the main block ######################################################
 
+torch.manual_seed(random_seed)
+np.random.seed(random_seed)
+
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf(ocular_artifact_mode='proxy')
-# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
-pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
+# rdf = get_rdf(exg_resample_rate=exg_resample_rate, ocular_artifact_mode='proxy')
+rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 # lockings test  ####################################################################################################
@@ -66,15 +71,16 @@ locking_name_filters_constrained = {
                         'Carousel-I-DT-Head': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-DT-Head' and x.dtn == dtnn_types["Distractor"],
                                         lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-DT-Head' and x.dtn == dtnn_types["Target"]],
                         'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
-                                                lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]} #nyamu <3
+                                                lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]
+                                    } #nyamu <3
 
-models = ['HDCA', 'EEGPupilCNN', 'EEGCNN']
+models = ['EEGPupilCNN', 'HT', 'HDCA', 'EEGCNN']
 
 results = dict()
 
 is_regenerate_epochs = True
 for m in models:
-    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
+    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True, exg_resample_rate=exg_resample_rate)
     is_regenerate_epochs = False  # dont regenerate epochs after the first time
     results = {**m_results, **results}
 

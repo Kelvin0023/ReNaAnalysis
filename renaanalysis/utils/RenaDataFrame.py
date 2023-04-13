@@ -150,7 +150,7 @@ class RenaDataFrame:
                 print(f"No EEG epochs found participant {p}, session {s}, skipping")
                 continue
             try:
-                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=None)
+                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=None)  # use None because resampling at every loop can result in the epochs having different time vectors, making it impossible to concatenate
             except ValueError:
                 print(f"No EEG epochs found participant {p}, session {s}, skipping")
                 continue
@@ -164,7 +164,8 @@ class RenaDataFrame:
         if eeg_epochs_all is None or len(eeg_epochs_all) == 0:
             print(f"No EEG epochs found participant {participant}, session {session}, returning None")
             return [None] * 4
-        eeg_epochs_all = eeg_epochs_all.resample(resample_rate)  # resample all the epochs together at the end
+        if eeg_epochs_all.info['sfreq'] != resample_rate:
+            eeg_epochs_all = eeg_epochs_all.resample(resample_rate)  # resample all the epochs together at the end
         if reject == 'auto':
             print("Auto rejecting epochs")
             ar = AutoReject(n_jobs=n_jobs, verbose=False)

@@ -107,7 +107,7 @@ class EEGCNN(nn.Module):
         #     cnn_flattened_size = self.conv(torch.rand(in_shape)).shape[1]
 
         self.fcs = nn.Sequential(
-            nn.Linear(160, 128),
+            nn.Linear(176, 128),
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
@@ -125,7 +125,7 @@ class EEGCNN(nn.Module):
         return x
 
 class EEGPupilCNN(nn.Module):
-    def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, eeg_in_channels=64, pupil_in_channel=2, num_filters=16, fc_feature_size=304):
+    def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, eeg_in_channels=64, pupil_in_channel=2, num_filters=16, fc_feature_size=432):
         super().__init__()
         self.conv_eeg = nn.Sequential(
             nn.Conv1d(eeg_in_channels, num_filters, 5),
