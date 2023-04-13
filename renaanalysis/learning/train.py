@@ -147,7 +147,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, verbose=1):
 
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
-        # scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+        scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
         train_losses = []
         train_accs = []
@@ -203,7 +203,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, verbose=1):
             train_losses.append(np.mean(batch_losses))
             train_accs.append(num_correct_preds / train_size)
             if verbose >= 1: pbar.close()
-            # scheduler.step()
+            scheduler.step()
 
             model.eval()
             with torch.no_grad():
