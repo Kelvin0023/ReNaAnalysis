@@ -31,9 +31,9 @@ grid_search_params = {
 }
 locking_name = 'RSVP-Item-Onset'
 locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                                            lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]],
+                  lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]]
 
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 
 # start of the main block ######################################################
 
