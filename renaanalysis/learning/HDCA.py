@@ -161,37 +161,32 @@ def compute_window_projections(x_train_windowed, x_test_windowed, y_train):
     return weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial
 
 
-def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", exg_srate=128, verbose=0):
+def hdca(x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, x_type=None, is_plots=False, notes="", exg_srate=128, verbose=0):
     """
 
-    :param x: array or list of arrays, if array, must provide if this array is EEG or pupil, if list, it is assumed that
+    :param x_eeg: EEG data, shape (num_trials, num_channels, num_timepoints) data must have been z-normalized by trials
+    :param x_eeg_pca_ica: EEG data after PCA and ICA, shape (num_trials, num_channels, num_timepoints) data must have been z-normalized by trials, before PCA and ICA,
+    :param x_pupil: pupil data, shape (num_trials, num_channels, num_timepoints) data must have been z-normalized by trials
     the array with more channels is EEG. If the two arraies have the same number of channels, an error will be raised
-    :param y:
+    :param y: labels, shape (num_trials, )
     :param event_names:
     :param is_plots:
     :param notes:
     :param verbose:
-    :return:
+    :return: validation result in the form of roc of the combined eeg and pupil model, roc of the eeg model, roc of the pupil model
     """
 
     split_size_eeg = int(split_window_eeg * exg_srate)  # split data into 100ms bins
     split_size_pupil = int(split_window_pupil * eyetracking_resample_srate)
     # multi-fold cross-validation
     cross_val_folds = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
-    _, num_eeg_channels, num_windows_eeg, num_timepoints_per_window_eeg = sliding_window_view(x[0],
-                                                                                              window_shape=split_size_eeg,
-                                                                                              axis=2)[:, :,
-                                                                          0::split_size_eeg, :].shape
-    _, num_pupil_channels, num_windows_pupil, num_timepoints_per_window_pupil = sliding_window_view(x[1],
-                                                                                                    window_shape=split_size_pupil,
-                                                                                                    axis=2)[:, :,
-                                                                                0::split_size_pupil, :].shape
+    _, num_eeg_channels, num_windows_eeg, num_timepoints_per_window_eeg = sliding_window_view(x_eeg, window_shape=split_size_eeg,axis=2)[:, :, 0::split_size_eeg, :].shape
+    _, num_pupil_channels, num_windows_pupil, num_timepoints_per_window_pupil = sliding_window_view(x_pupil, window_shape=split_size_pupil,axis=2)[:, :,0::split_size_pupil, :].shape
 
     cw_weights_eeg_folds = np.empty((num_folds, num_windows_eeg))
     cw_weights_pupil_folds = np.empty((num_folds, num_windows_pupil))
 
-    activations_folds = np.empty(
-        (num_folds, len(event_names), num_eeg_channels, num_windows_eeg, num_timepoints_per_window_eeg))
+    activations_folds = np.empty((num_folds, len(event_names), num_eeg_channels, num_windows_eeg, num_timepoints_per_window_eeg))
     roc_auc_folds_eeg = np.empty(num_folds)
     roc_auc_folds_pupil = np.empty(num_folds)
     fpr_folds_eeg = []
@@ -199,22 +194,21 @@ def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", exg_srate=128
     fpr_folds_pupil = []
     tpr_folds_pupil = []
 
-    x_eeg_transformed, pca, ica = compute_pca_ica(x[0], num_top_compoenents)
+    # x_eeg_transformed, pca, ica = compute_pca_ica(x[0], num_top_compoenents)
+    x_eeg_transformed = x_eeg_pca_ica
 
-    for i, (train, test) in enumerate(cross_val_folds.split(x[0],
-                                                            y)):  # cross-validation; group arguement is not necessary unless using grouped folds
+    for i, (train, test) in enumerate(cross_val_folds.split(x_eeg, y)):  # cross-validation; group arguement is not necessary unless using grouped folds
         if verbose: print(f"Working on {i + 1} fold of {num_folds}")
 
-        x_eeg_transformed_train, x_eeg_transformed_test, y_train, y_test = x_eeg_transformed[train], x_eeg_transformed[
-            test], y[train], y[test]
-        x_pupil_train, x_pupil_test, _, _ = x[1][train], x[1][test], y[train], y[test]
+        x_eeg_transformed_train, x_eeg_transformed_test, y_train, y_test = x_eeg_transformed[train], x_eeg_transformed[test], y[train], y[test]
+        x_pupil_train, x_pupil_test, _, _ = x_pupil[train], x_pupil[test], y[train], y[test]
 
         x_eeg_transformed_train, y_train_eeg = rebalance_classes(x_eeg_transformed_train, y_train)  # rebalance by class
         x_pupil_train, y_train_pupil = rebalance_classes(x_pupil_train, y_train)  # rebalance by class
         assert np.all(y_train_eeg == y_train_pupil)
         y_train = y_train_pupil
 
-        x_eeg_test = x[0][test]
+        x_eeg_test = x_eeg[test]
 
         x_eeg_transformed_train_windowed = sliding_window_view(x_eeg_transformed_train, window_shape=split_size_eeg, axis=2)[:, :, 0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
         x_eeg_transformed_test_windowed = sliding_window_view(x_eeg_transformed_test, window_shape=split_size_eeg, axis=2)[:, :, 0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
@@ -231,11 +225,11 @@ def hdca(x, y, event_names, x_type=None, is_plots=False, notes="", exg_srate=128
         # train classifier, use gradient descent to find the cross-window weights
 
         # z norm
-        pupil_mean = np.mean(np.concatenate([x_pupil_train, x_pupil_test], axis=0), axis=(0, 2), keepdims=True)
-        pupil_std = np.std(np.concatenate([x_pupil_train, x_pupil_test], axis=0), axis=(0, 2), keepdims=True)
-
-        x_pupil_train = (x_pupil_train - pupil_mean) / pupil_std
-        x_pupil_test = (x_pupil_test - pupil_mean) / pupil_std
+        # pupil_mean = np.mean(np.concatenate([x_pupil_train, x_pupil_test], axis=0), axis=(0, 2), keepdims=True)
+        # pupil_std = np.std(np.concatenate([x_pupil_train, x_pupil_test], axis=0), axis=(0, 2), keepdims=True)
+        #
+        # x_pupil_train = (x_pupil_train - pupil_mean) / pupil_std
+        # x_pupil_test = (x_pupil_test - pupil_mean) / pupil_std
 
         x_pupil_train_windowed = sliding_window_view(x_pupil_train, window_shape=split_size_pupil, axis=2)[:, :,0::split_size_pupil,:]  # shape = #trials, #channels, #windows, #time points per window
         x_pupil_test_windowed = sliding_window_view(x_pupil_test, window_shape=split_size_pupil, axis=2)[:, :,0::split_size_pupil,:]  # shape = #trials, #channels, #windows, #time points per window

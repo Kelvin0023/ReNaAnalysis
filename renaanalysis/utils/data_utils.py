@@ -274,3 +274,17 @@ def binary_classification_metric(y_true, y_pred):
     # Specificity or true negative rate
     TNR = TN / (TN + FP)
     return acc, TPR, TNR
+
+def z_norm_by_trial(data):
+    """
+    Z-normalize data by trial, the input data is in the shape of (num_samples, num_channels, num_timesteps)
+    @param data: data is in the shape of (num_samples, num_channels, num_timesteps)
+    """
+    norm_data = np.copy(data)
+    for i in range(data.shape[0]):
+        sample = data[i]
+        mean = np.mean(sample, axis=(0, 1))
+        std = np.std(sample, axis=(0, 1))
+        sample_norm = (sample - mean) / std
+        norm_data[i] = sample_norm
+    return norm_data

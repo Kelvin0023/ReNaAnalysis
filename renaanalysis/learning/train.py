@@ -17,13 +17,13 @@ from tqdm import tqdm
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.HT import HierarchicalTransformer
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
-from renaanalysis.params.params import lr, epochs, batch_size, model_save_dir, patience, l2_weight, random_seed, \
+from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, l2_weight, random_seed, \
     export_data_root, num_top_compoenents
 from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, \
-    mean_min_sublists, epochs_to_class_samples
+    mean_min_sublists, epochs_to_class_samples, z_norm_by_trial
+import matplotlib.pyplot as plt
 
-
-def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True, reduce_dim=False):
+def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True):
     # verify number of event types
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
@@ -40,31 +40,30 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
                 y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
             except FileNotFoundError:
                 raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model_name == 'EEGPupil' else "")
-        x_eeg = np.copy(x[0])
-        if reduce_dim:
-            x[0], pca, ica = compute_pca_ica(x[0], num_top_compoenents)
+        x_eeg = z_norm_by_trial(x[0])
+        x_pupil = z_norm_by_trial(x[1])
+        x_eeg_pca_ica, _, _ = compute_pca_ica(x[0], num_top_compoenents)
 
         if model_name == 'HDCA':
-            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, exg_srate=exg_resample_rate, notes=test_name + '\n', verbose=0)  # give the original eeg data, no need to apply HDCA again
+            roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca(x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, is_plots=True, exg_srate=exg_resample_rate, notes=test_name + '\n', verbose=0)  # give the original eeg data, no need to apply HDCA again
             locking_performance[locking_name, 'HDCA EEG'] = {'folds val auc': roc_auc_eeg}
             locking_performance[locking_name, 'HDCA Pupil'] = {'folds val auc': roc_auc_pupil}
             locking_performance[locking_name, 'HDCA EEG-Pupil'] = {'folds val auc': roc_auc_combined}
             print(f'{test_name}: folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}')
-
         else:
-            if model_name == 'EEGPupilCNN':
-                model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2,  eeg_in_channels=20 if reduce_dim else 64)
-                model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
-            elif model_name == 'HT':
+            if model_name == 'EEGPupilCNN': # this model uses PCA-ICA reduced EEG data plus pupil data
+                model = EEGPupilCNN(eeg_in_shape=x_eeg_pca_ica.shape, pupil_in_shape=x_pupil.shape, num_classes=2)
+                model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica, x_pupil], y, model, test_name=test_name)
+            elif model_name == 'HT':  # this model uses un-dimension reduced EEG data
                 num_channels, num_timesteps = x_eeg.shape[1:]
                 model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, depth=3, num_heads=3, mlp_dim=1024)
-                model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1)  # use un-dimension reduced EEG data
-            else:
+                model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=1e-4)  # use un-dimension reduced EEG data
+            else:  # these models use PCA-ICA reduced EEG data
                 if model_name == 'EEGCNN':
-                    model = EEGCNN(in_shape=x[0].shape, num_classes=2, in_channels=20 if reduce_dim else 64)
+                    model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
                 elif model_name == 'EEGInception':
-                    model = EEGInceptionNet(in_shape=x[0].shape, num_classes=2)
-                model, training_histories, criterion, label_encoder = train_model(x[0], y, model, test_name=test_name, verbose=1)
+                    model = EEGInceptionNet(in_shape=x_eeg_pca_ica.shape, num_classes=2)
+                model, training_histories, criterion, label_encoder = train_model(x_eeg_pca_ica, y, model, test_name=test_name, verbose=1)
             folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
             folds_val_auc = mean_max_sublists(training_histories['auc_val'])
             print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
@@ -104,7 +103,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
 #             performance[m, locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
 #     return performance
 
-def train_model(X, Y, model, test_name="CNN", n_folds=10, verbose=1):
+def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     model = model.to(device)
@@ -296,7 +295,7 @@ def eval_model(model, x, y, criterion, label_encoder):
     return loss, accuracy
 
 
-def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, verbose=1):
+def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, lr=1e-3, verbose=1):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")

@@ -80,13 +80,13 @@ results = dict()
 
 is_regenerate_epochs = False
 for m in models:
-    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True, exg_resample_rate=exg_resample_rate)
+    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate)
     is_regenerate_epochs = False  # dont regenerate epochs after the first time
     results = {**m_results, **results}
 
 is_regenerate_epochs = True
 for m in models:
-    m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True)
+    m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model_name=m, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate)
     is_regenerate_epochs = False  # dont regenerate epochs after the first time
     results = {**m_results, **results}
 
