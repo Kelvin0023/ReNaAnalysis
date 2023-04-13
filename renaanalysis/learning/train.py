@@ -154,26 +154,30 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
     val_losses_folds = []
     val_accs_folds = []
     val_aucs_folds = []
-    criterion = nn.CrossEntropyLoss()
-
+    CE_loss = nn.CrossEntropyLoss()
+    BCE_loss = nn.BCELoss(reduction='mean')
     for f_index, (train, test) in enumerate(skf.split(X, Y)):
         x_train, x_test, y_train, y_test = X[train], X[test], Y[train], Y[test]
 
         x_train, y_train = rebalance_classes(x_train, y_train)  # rebalance by class
-        y_train = label_encoder.transform(np.array(y_train).reshape(-1, 1)).toarray()
-        y_test = label_encoder.transform(np.array(y_test).reshape(-1, 1)).toarray()
+
+        y_train_encoded = label_encoder.transform(np.array(y_train).reshape(-1, 1)).toarray()
+        y_test_encoded = label_encoder.transform(np.array(y_test).reshape(-1, 1)).toarray()
 
         # x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=train_ratio, random_state=random_seed)
         train_size, val_size = len(x_train), len(x_test)
         x_train = torch.Tensor(x_train)  # transform to torch tensor
         x_test = torch.Tensor(x_test)
+
         y_train = torch.Tensor(y_train)
         y_test = torch.Tensor(y_test)
+        y_train_encoded = torch.Tensor(y_train_encoded)
+        y_test_encoded = torch.Tensor(y_test_encoded)
 
-        train_dataset = TensorDataset(x_train, y_train)
+        train_dataset = TensorDataset(x_train, y_train_encoded)
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
 
-        val_dataset = TensorDataset(x_test, y_test)
+        val_dataset = TensorDataset(x_test, y_test_encoded)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
         # if verbose >= 1:
@@ -210,12 +214,19 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
                 if verbose >= 1: pbar.update(1)
 
                 y_pred = model(x.to(device))
-                y_pred = F.softmax(y_pred, dim=1)
+
+                if y_pred.shape[1] == 1:
+                    y_pred = F.sigmoid(y_pred)
+                    y_tensor = torch.Tensor(label_encoder.inverse_transform(y)).to(device)
+                    classification_loss = BCE_loss(y_pred, y_tensor)
+                else:
+                    y_pred = F.softmax(y_pred, dim=1)
+                    y_tensor = y.to(device)
+                    classification_loss = CE_loss(y_pred, y_tensor)
                 # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
-                y_tensor = y.to(device)
 
                 l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()]) if l2_weight > 0 else 0.
-                loss = criterion(y_tensor, y_pred) + l2_penalty
+                loss = classification_loss + l2_penalty
                 # loss = criterion(y_tensor, y_pred)
                 with autograd.detect_anomaly():
                     # get_dot = register_hooks(loss, name=f"epoch-{epoch}_minibatch-{mini_batch_i}")
@@ -248,24 +259,35 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
                 batch_losses = []
                 # batch_aucs =[]
                 num_correct_preds = 0
-                y_val = np.empty((0, 2))
-                y_val_pred = np.empty((0, 2))
+                y_val = None
+                y_val_pred = None
                 for x, y in val_dataloader:
                     mini_batch_i += 1
                     if verbose >= 1: pbar.update(1)
                     y_pred = model(x.to(device))
-                    y_pred = F.softmax(y_pred, dim=1)
                     # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
-                    y_tensor = y.to(device)
-                    loss = criterion(y_tensor, y_pred)
+                    if y_pred.shape[1] == 1:
+                        y_pred = F.sigmoid(y_pred)
+                        y_tensor = torch.Tensor(label_encoder.inverse_transform(y)).to(device)
+                        loss = BCE_loss(y_pred, y_tensor)
+                    else:
+                        y_pred = F.softmax(y_pred, dim=1)
+                        y_tensor = y.to(device)
+                        loss = CE_loss(y_pred, y_tensor)
                     # fpr, tpr, thresholds = metrics.roc_curve(y, y_pred.detach().cpu().numpy())
                     # roc_auc = metrics.roc_auc_score(y, y_pred.detach().cpu().numpy())
-                    y_val = np.concatenate([y_val, y.detach().cpu().numpy()])
-                    y_val_pred = np.concatenate([y_val_pred, y_pred.detach().cpu().numpy()])
+                    y_val = np.concatenate([y_val, y.detach().cpu().numpy()]) if y_val is not None else y.detach().cpu().numpy()
+                    y_val_pred = np.concatenate([y_val_pred, y_pred.detach().cpu().numpy()]) if y_val_pred is not None else y_pred.detach().cpu().numpy()
 
                     # batch_aucs.append(roc_auc)
                     batch_losses.append(loss.item())
-                    num_correct_preds += torch.sum(torch.argmax(y_tensor, dim=1) == torch.argmax(y_pred, dim=1)).item()
+                    if y_pred.shape[1] == 1:
+                        predicted_labels = (y_pred > .5).int()
+                        true_label = y_tensor
+                    else:
+                        predicted_labels = torch.argmax(y_pred, dim=1)
+                        true_label = torch.argmax(y_tensor, dim=1)
+                    num_correct_preds += torch.sum(true_label == predicted_labels).item()
                     if verbose >= 1: pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
 
                 val_aucs.append(metrics.roc_auc_score(y_val, y_val_pred))
@@ -310,7 +332,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
     # plt.tight_layout()
     # plt.show()
     if verbose: print(f"Average AUC for {n_folds} folds is {np.mean([np.max(x) for x in val_aucs_folds])}")
-    return model, training_histories_folds, criterion, label_encoder
+    return model, training_histories_folds, CE_loss, label_encoder
 
 def eval_model(model, x, y, criterion, label_encoder):
     use_cuda = torch.cuda.is_available()
@@ -419,7 +441,7 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, lr
                 y_tensor = y.to(device)
 
                 l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()]) if l2_weight > 0 else 0
-                loss = criterion(y_tensor, y_pred) + l2_penalty
+                loss = criterion(y_pred, y_tensor) + l2_penalty
                 # loss = criterion(y_tensor, y_pred)
                 loss.backward()
                 optimizer.step()
@@ -452,7 +474,7 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, lr
                     y_pred = F.softmax(y_pred, dim=1)
                     # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                     y_tensor = y.to(device)
-                    loss = criterion(y_tensor, y_pred)
+                    loss = criterion(y_pred, y_tensor)
                     # roc_auc = metrics.roc_auc_score(y, y_pred.detach().cpu().numpy())
                     # batch_aucs.append(roc_auc)
 

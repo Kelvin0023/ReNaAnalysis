@@ -137,15 +137,18 @@ class Transformer(nn.Module):
 
 class HierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth, num_heads, feedforward_mlp_dim, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=256, attn_dropout=0., emb_dropout=0.):
+                 patch_embed_dim=128, dim_head=256, attn_dropout=0., emb_dropout=0., output='multi'):
         """
 
         # a token is a time slice of data on a single channel
 
         @param num_timesteps: int: number of timesteps in each sample
         @param num_channels: int: number of channels of the input data
-
+        @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
+        note that 'single' only works when the number of classes is 2.
         """
+        if output == 'single':
+            assert num_classes == 2, 'output can only be single when num_classes is 2'
         super().__init__()
         self.depth = depth
         self.num_heads = num_heads
@@ -180,10 +183,14 @@ class HierarchicalTransformer(nn.Module):
         self.pool = pool
         self.to_latent = nn.Identity()
 
-        self.mlp_head = nn.Sequential(
-            nn.LayerNorm(patch_embed_dim),
-            nn.Linear(patch_embed_dim, num_classes)
-        )
+        if output == 'single':
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, 1))
+        else:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, num_classes))
 
     def forward(self, x_eeg):
         x = self.to_patch_embedding(x_eeg)

@@ -74,7 +74,8 @@ locking_name_filters_constrained = {
                                                 lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]
                                     } #nyamu <3
 
-models = ['EEGPupilCNN', 'HT', 'HDCA', 'EEGCNN']
+models = ['HT', 'EEGPupilCNN', 'HDCA', 'EEGCNN']
+# models = ['EEGPupilCNN', 'HT', 'HDCA', 'EEGCNN']
 
 results = dict()
 
