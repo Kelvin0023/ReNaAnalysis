@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 import torch
 from sklearn import preprocessing, metrics
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit, ParameterGrid
 from torch import nn, autograd
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
@@ -17,7 +17,7 @@ from tqdm import tqdm
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.HT import HierarchicalTransformer
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
-from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, l2_weight, random_seed, \
+from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
     export_data_root, num_top_compoenents
 from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, \
     mean_min_sublists, epochs_to_class_samples, z_norm_by_trial
@@ -56,7 +56,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica, x_pupil], y, model, test_name=test_name)
             elif model_name == 'HT':  # this model uses un-dimension reduced EEG data
                 num_channels, num_timesteps = x_eeg.shape[1:]
-                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, depth=3, num_heads=3, mlp_dim=1024)
+                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, depth=3, num_heads=3, feedforward_mlp_dim=1024)
                 model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=1e-4)  # use un-dimension reduced EEG data
             else:  # these models use PCA-ICA reduced EEG data
                 if model_name == 'EEGCNN':
@@ -70,6 +70,42 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             locking_performance[locking_name, model_name] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss, 'folds trian loss': folds_train_loss}
     return locking_performance
 
+def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_filter, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True):
+    # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
+    locking_performance = {}
+    test_name = f'Locking-{locking_name}_Model-HT_P-{participant}_S-{session}'
+    if regenerate_epochs:
+        x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', eeg_resample_rate=exg_resample_rate)
+        pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
+        pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
+    else:
+        try:
+            x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+            y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+        except FileNotFoundError:
+            raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}")
+    x_eeg = z_norm_by_trial(x[0])
+    x_pupil = z_norm_by_trial(x[1])
+    x_eeg_pca_ica, _, _ = compute_pca_ica(x[0], num_top_compoenents)
+    num_channels, num_timesteps = x_eeg.shape[1:]
+
+    param_grid = ParameterGrid(grid_search_params)
+    training_histories = {}
+    models = {}
+    for params in param_grid:
+        print(f"Grid search params: {params}. Searching {len(training_histories) + 1} of {len(param_grid)}")
+        model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
+                                        depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
+                                        pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
+                                        dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], )
+        model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'])  # use un-dimension reduced EEG data
+        folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
+        folds_val_auc = mean_max_sublists(training_histories['auc_val'])
+        print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
+        locking_performance[params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss}
+        training_histories[params] = training_histories
+        models[params] = model
+    return locking_performance, training_histories, models
 # def eval_lockings_models(rdf, event_names, locking_name_filters, participant, session, models=('EEGCNN', 'EEGInception', 'EEGPupil'), regenerate_epochs=True, reduce_dim=False):
 #     # verify number of event types
 #     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
@@ -103,7 +139,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
 #             performance[m, locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
 #     return performance
 
-def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1):
+def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-5):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     model = model.to(device)
@@ -178,7 +214,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1):
                 # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                 y_tensor = y.to(device)
 
-                l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+                l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()]) if l2_weight > 0 else 0.
                 loss = criterion(y_tensor, y_pred) + l2_penalty
                 # loss = criterion(y_tensor, y_pred)
                 with autograd.detect_anomaly():
@@ -295,7 +331,7 @@ def eval_model(model, x, y, criterion, label_encoder):
     return loss, accuracy
 
 
-def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, lr=1e-3, verbose=1):
+def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, lr=1e-3, l2_weight=1e-5, verbose=1):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -382,7 +418,7 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, lr
                 # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                 y_tensor = y.to(device)
 
-                l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+                l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()]) if l2_weight > 0 else 0
                 loss = criterion(y_tensor, y_pred) + l2_penalty
                 # loss = criterion(y_tensor, y_pred)
                 loss.backward()
@@ -475,7 +511,7 @@ def train_model_pupil_eeg(X, Y, model, test_name="CNN-EEG-Pupil", n_folds=10, lr
 
 
 
-def train_model_pupil_eeg_no_folds(X, Y, model, num_epochs=5000, test_name="CNN-EEG-Pupil", verbose=1):
+def train_model_pupil_eeg_no_folds(X, Y, model, num_epochs=5000, test_name="CNN-EEG-Pupil", lr=1e-3, l2_weight=1e-5, verbose=1):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     model.to(device)
@@ -529,7 +565,7 @@ def train_model_pupil_eeg_no_folds(X, Y, model, num_epochs=5000, test_name="CNN-
             # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
             y_tensor = y.to(device)
 
-            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()]) if l2_weight > 0 else 0
             loss = criterion(y_tensor, y_pred) + l2_penalty
             # loss = criterion(y_tensor, y_pred)
             loss.backward()

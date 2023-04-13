@@ -71,13 +71,13 @@ class Attention(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
+    def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
                 PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
-                PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout))
+                PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
 
     def forward(self, x):
@@ -136,8 +136,8 @@ class Transformer(nn.Module):
 #         return self.mlp_head(x)
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth, num_heads, mlp_dim, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=256, dropout=0., emb_dropout=0.):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth, num_heads, feedforward_mlp_dim, window_duration=0.1, pool='cls',
+                 patch_embed_dim=128, dim_head=256, attn_dropout=0., emb_dropout=0.):
         """
 
         # a token is a time slice of data on a single channel
@@ -175,7 +175,7 @@ class HierarchicalTransformer(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.transformer = Transformer(patch_embed_dim, depth, num_heads, dim_head, mlp_dim, dropout)
+        self.transformer = Transformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
 
         self.pool = pool
         self.to_latent = nn.Identity()
