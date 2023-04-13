@@ -26,7 +26,7 @@ grid_search_params = {
     "dim_head": [64, 128, 256],
     "attn_dropout": [0.0, 0.1, 0.2],
     "emb_dropout": [0.0, 0.1, 0.2],
-    "lr": [0.0001, 0.001, 0.01],
+    "lr": [1e-4, 1e-3, 1e-2],
     "l2_weight": [1e-6, 1e-5, 1e-4],
 }
 locking_name = 'RSVP-Item-Onset'

@@ -55,9 +55,9 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
                 model = EEGPupilCNN(eeg_in_shape=x_eeg_pca_ica.shape, pupil_in_shape=x_pupil.shape, num_classes=2)
                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica, x_pupil], y, model, test_name=test_name)
             elif model_name == 'HT':  # this model uses un-dimension reduced EEG data
-                num_channels, num_timesteps = x_eeg.shape[1:]
+                num_channels, num_timesteps = x_eeg_pca_ica.shape[1:]
                 model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, depth=3, num_heads=3, feedforward_mlp_dim=1024)
-                model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=1e-4)  # use un-dimension reduced EEG data
+                model, training_histories, criterion, label_encoder = train_model(x_eeg_pca_ica, y, model, test_name=test_name, verbose=1, lr=1e-4)  # use un-dimension reduced EEG data
             else:  # these models use PCA-ICA reduced EEG data
                 if model_name == 'EEGCNN':
                     model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
