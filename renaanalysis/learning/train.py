@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from sklearn import preprocessing, metrics
 from sklearn.model_selection import StratifiedShuffleSplit
-from torch import nn
+from torch import nn, autograd
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
@@ -57,7 +57,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)
             elif model_name == 'HT':
                 num_channels, num_timesteps = x_eeg.shape[1:]
-                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, depth=3, num_heads=1, mlp_dim=128)
+                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, depth=3, num_heads=3, mlp_dim=1024)
                 model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1)  # use un-dimension reduced EEG data
             else:
                 if model_name == 'EEGCNN':
@@ -147,7 +147,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, verbose=1):
 
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
-        scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+        # scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
         train_losses = []
         train_accs = []
@@ -166,6 +166,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, verbose=1):
                             desc='Training {}'.format(test_name))
                 pbar.update(mini_batch_i)
 
+            grad_norms = []
             model.train()  # set the model in training model (dropout and batchnormal behaves differently in train vs. eval)
             for x, y in train_dataloader:
                 optimizer.zero_grad()
@@ -181,7 +182,17 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, verbose=1):
                 l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
                 loss = criterion(y_tensor, y_pred) + l2_penalty
                 # loss = criterion(y_tensor, y_pred)
-                loss.backward()
+                with autograd.detect_anomaly():
+                    # get_dot = register_hooks(loss, name=f"epoch-{epoch}_minibatch-{mini_batch_i}")
+                    try:
+                        loss.backward()
+                    except Exception as e:
+                        print(f"Bad gradient encountered: {e}")
+                    finally:
+                        pass
+                grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if param.grad is not None])
+                # print('grad norm: ', np.mean(grad_norms[-1]))
+                nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
                 optimizer.step()
 
                 # measure accuracy
@@ -192,7 +203,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, verbose=1):
             train_losses.append(np.mean(batch_losses))
             train_accs.append(num_correct_preds / train_size)
             if verbose >= 1: pbar.close()
-            scheduler.step()
+            # scheduler.step()
 
             model.eval()
             with torch.no_grad():

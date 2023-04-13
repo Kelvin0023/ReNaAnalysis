@@ -107,7 +107,7 @@ class EEGCNN(nn.Module):
         #     cnn_flattened_size = self.conv(torch.rand(in_shape)).shape[1]
 
         self.fcs = nn.Sequential(
-            nn.Linear(176, 128),
+            nn.Linear(304, 128),
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),

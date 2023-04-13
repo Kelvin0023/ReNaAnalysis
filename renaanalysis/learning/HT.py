@@ -137,7 +137,7 @@ class Transformer(nn.Module):
 
 class HierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth, num_heads, mlp_dim, window_duration=0.1, pool='cls',
-                 path_embed_dim=32, dim_head=64, dropout=0., emb_dropout=0.):
+                 patch_embed_dim=128, dim_head=256, dropout=0., emb_dropout=0.):
         """
 
         # a token is a time slice of data on a single channel
@@ -152,36 +152,43 @@ class HierarchicalTransformer(nn.Module):
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
-        self.path_embed_dim = path_embed_dim
-        self.patch_size = int(window_duration * sampling_rate)
-        self.num_windows = num_timesteps // self.patch_size
+        self.path_embed_dim = patch_embed_dim
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
+        # self.to_patch_embedding = nn.Sequential(
+        #     Rearrange('b c (nw ps) -> b (c nw) (ps)', nw=self.num_windows, ps=self.patch_length),
+        #     nn.Linear(self.patch_length, patch_embed_dim),
+        # )
         self.to_patch_embedding = nn.Sequential(
-            Rearrange('b c (nw ps) -> b (c nw) (ps)', nw=self.num_windows, ps=self.patch_size),
-            nn.Linear(self.patch_size, path_embed_dim),
+            Rearrange('b eegc t -> b 1 eegc t', eegc=self.num_channels, t=self.num_timesteps),
+            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
+            # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
         )
         # x = torch.randn(10, self.num_channels, self.num_timesteps)
 
-        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, path_embed_dim))
-        self.cls_token = nn.Parameter(torch.randn(1, 1, path_embed_dim))
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.transformer = Transformer(path_embed_dim, depth, num_heads, dim_head, mlp_dim, dropout)
+        self.transformer = Transformer(patch_embed_dim, depth, num_heads, dim_head, mlp_dim, dropout)
 
         self.pool = pool
         self.to_latent = nn.Identity()
 
         self.mlp_head = nn.Sequential(
-            nn.LayerNorm(path_embed_dim),
-            nn.Linear(path_embed_dim, num_classes)
+            nn.LayerNorm(patch_embed_dim),
+            nn.Linear(patch_embed_dim, num_classes)
         )
 
     def forward(self, x_eeg):
         x = self.to_patch_embedding(x_eeg)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
         b, n, _ = x.shape
 
         cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)

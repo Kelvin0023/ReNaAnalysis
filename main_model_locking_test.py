@@ -74,11 +74,11 @@ locking_name_filters_constrained = {
                                                 lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]
                                     } #nyamu <3
 
-models = ['EEGPupilCNN', 'HT', 'HDCA', 'EEGCNN']
+models = ['HT', 'EEGPupilCNN', 'HDCA', 'EEGCNN']
 
 results = dict()
 
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 for m in models:
     m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, reduce_dim=True, exg_resample_rate=exg_resample_rate)
     is_regenerate_epochs = False  # dont regenerate epochs after the first time
