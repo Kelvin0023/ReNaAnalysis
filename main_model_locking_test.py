@@ -79,7 +79,7 @@ models = ['HT', 'EEGPupilCNN', 'HDCA', 'EEGCNN']
 
 results = dict()
 
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 for m in models:
     m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate)
     is_regenerate_epochs = False  # dont regenerate epochs after the first time
