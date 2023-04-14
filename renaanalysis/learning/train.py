@@ -102,9 +102,11 @@ def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_f
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
         folds_val_auc = mean_max_sublists(training_histories['auc_val'])
         print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
-        locking_performance[params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss}
-        training_histories[params] = training_histories
-        models[params] = model
+
+        hashable_params = tuple(params.items())
+        locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss}
+        training_histories[hashable_params] = training_histories
+        models[hashable_params] = model
     return locking_performance, training_histories, models
 # def eval_lockings_models(rdf, event_names, locking_name_filters, participant, session, models=('EEGCNN', 'EEGInception', 'EEGPupil'), regenerate_epochs=True, reduce_dim=False):
 #     # verify number of event types
@@ -228,14 +230,14 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
                 l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()]) if l2_weight > 0 else 0.
                 loss = classification_loss + l2_penalty
                 # loss = criterion(y_tensor, y_pred)
-                with autograd.detect_anomaly():
-                    # get_dot = register_hooks(loss, name=f"epoch-{epoch}_minibatch-{mini_batch_i}")
-                    try:
-                        loss.backward()
-                    except Exception as e:
-                        print(f"Bad gradient encountered: {e}")
-                    finally:
-                        pass
+                # with autograd.detect_anomaly():
+                #     # get_dot = register_hooks(loss, name=f"epoch-{epoch}_minibatch-{mini_batch_i}")
+                #     try:
+                loss.backward()
+                    # except Exception as e:
+                    #     print(f"Bad gradient encountered: {e}")
+                    # finally:
+                    #     pass
                 grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if param.grad is not None])
                 # print('grad norm: ', np.mean(grad_norms[-1]))
                 nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)

@@ -33,7 +33,7 @@ locking_name = 'RSVP-Item-Onset'
 locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                   lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]]
 
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 
 # start of the main block ######################################################
 
