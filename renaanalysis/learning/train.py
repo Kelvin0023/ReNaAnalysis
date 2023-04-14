@@ -139,7 +139,7 @@ def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_f
 #             performance[m, locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
 #     return performance
 
-def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-5, lr_scheduler='exponential'):
+def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-5, lr_scheduler_type='exponential'):
     """
 
     @param X:

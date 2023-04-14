@@ -28,7 +28,7 @@ grid_search_params = {
     "emb_dropout": [0.0, 0.1, 0.2],
     "lr": [1e-4, 1e-3, 1e-2],
     "l2_weight": [1e-6, 1e-5, 1e-4],
-    "lr_scheduler": ['cosine', 'exponential'],
+    "lr_scheduler_type": ['cosine', 'exponential'],
 }
 locking_name = 'RSVP-Item-Onset'
 locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
