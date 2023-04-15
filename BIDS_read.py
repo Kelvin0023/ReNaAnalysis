@@ -8,6 +8,7 @@ import mne
 import math
 import matplotlib.pyplot as plt
 import scipy
+import pickle
 
 from mne.datasets import sample
 from mne_bids import (BIDSPath, read_raw_bids, print_dir_tree, make_report,
@@ -105,57 +106,77 @@ dataset = 'ds004022'
 bids_root = 'E:/Data'
 datatype = 'eeg'
 task = 'P300'
+extension = ".set"
+session = 'hc'
+suffix = 'eeg'
 num_subs = 13
 num_runs = 3
+subject_id_width = 3
 subjects = {}
 f = open(os.path.join(bids_root, f'task-{task}_events.json'))
 events_info = json.load(f)
-event_values = events_info['value']['Levels']
+event_label_dict = events_info['value']['Levels']
 l = 0
-for key in event_values:
-    event_values[key] = l
+for key in event_label_dict:
+    event_label_dict[key] = l
     l += 1
-for i in range(num_subs):
-    subject = '{:0>{}}'.format(i + 1, 3)
-    runs = {}
-    subjects['sub-' + subject] = runs
-# Download one subject's data from each dataset
-# bids_root = op.join(op.dirname(sample.data_path()), dataset)
-    extension = ".set"
-    session = 'hc'
-    bids_path = BIDSPath(root=bids_root, datatype=datatype)
-    # bids_paths = find_matching_paths(bids_root, datatypes=datatype,
-    #                                  sessions=sessions, extensions=extensions)
 
-    suffix = 'eeg'
-    for j in range(num_runs):
-        bids_path = bids_path.update(subject=subject, task=task, suffix=suffix, run=str(j + 1), extension= extension)
-        raw = read_raw_bids(bids_path=bids_path, verbose=True)
+def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_width, datatype, task, suffix, extension
+                                     , event_label_dict, epoch_tmin, epoch_tmax, baseline_tuple):
+    """
+        Load epoched data from 3rd party datasets from provided
 
-        tsv_path = f'E:/Data/sub-{subject}/eeg'
+        Args:
+            num_subs : number of subjects.
+            num_runs : number of runs.
+            bids_root : the root path of the dataset.
+            subject_id_width : width of the subject representation, if the subject representation is '001', then subject_id_width = 3.
+            datatype : datatype of the data. Can be 'eeg', 'meg' ...
+            task : task name of the data.
+            suffix : suffix of the data.
+            extension : extension name of the data.
+            event_label_dict : a dictionary with event label as key and a number id as value.
+            epoch_tmin : the start time of the epoch with respect to the event marker, in seconds.
+            epoch_tmax : the end time of the epoch with respect to the event marker, in seconds.
+            baseline_tuple : a tuple of the baseline start time and end time. For example, (-0.1, 0)
 
-        event_file = open(os.path.join(tsv_path, f'sub-{subject}_task-{task}_run-{j+1}_events.tsv'))
-        events = pd.read_csv(event_file, sep='\t')
-        # sample_rate = 256
-        # data = []
-        event = np.zeros((events.shape[0], 3))
-        my_event_dict = {}
-        for k in range(events.shape[0]):
-            # event_start = int(events['sample'][i] - 0.1 * sample_rate)
-            # event_end = int(events['sample'][i] + 0.8 * sample_rate)
-            # data.append(raw_data[:, event_start:event_end])
+        Returns:
+            A dictionary containing all the subjects, which then contains each run of epoched data
 
-            event[k, 0] = events['sample'][k]
-            event[k, 2] = event_values[events['value'][k]]
-            if events['value'][k] not in my_event_dict:
-                my_event_dict[events['value'][k]] = int(event[k, 2])
-        # data = np.array(data)
-        # type = np.array(type)
-        # value = np.array(value)
-        # event = np.array(event)
-        event = event.astype(int)
-        data = mne.Epochs(raw, event, event_id=my_event_dict, tmin=-0.1, tmax=0.8, baseline=(-0.1, 0), preload=True)
-        runs['run-' + str(j + 1)] = data
+        Raises:
+            None
 
-visualize_eeg_epochs(subjects['sub-001']['run-1'], event_plot, colors, ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz',])
-print(bids_path)
+        """
+    for i in range(num_subs):
+        subject = '{:0>{}}'.format(i + 1, subject_id_width)
+        runs = {}
+        subjects['sub-' + subject] = runs
+        bids_path = BIDSPath(root=bids_root, datatype=datatype)
+        for j in range(num_runs):
+            bids_path = bids_path.update(subject=subject, task=task, suffix=suffix, run=str(j + 1), extension=extension)
+            raw = read_raw_bids(bids_path=bids_path, verbose=True)
+            tsv_path = os.path.join(bids_root, f'sub-{subject}/{suffix}')
+            epoch_info_tsv = open(os.path.join(tsv_path, f'sub-{subject}_task-{task}_run-{j + 1}_events.tsv'))
+            epochs_info = pd.read_csv(epoch_info_tsv, sep='\t')
+
+            eventID_mat = np.zeros((epochs_info.shape[0], 3))
+            event_dict_this_run = {}
+            for k in range(epochs_info.shape[0]):
+                eventID_mat[k, 0] = epochs_info['sample'][k]
+                eventID_mat[k, 2] = event_label_dict[epochs_info['value'][k]]
+                if epochs_info['value'][k] not in event_dict_this_run:
+                    event_dict_this_run[epochs_info['value'][k]] = int(eventID_mat[k, 2])
+            eventID_mat = eventID_mat.astype(int)
+            data = mne.Epochs(raw, eventID_mat, event_id=event_dict_this_run, tmin=epoch_tmin, tmax=epoch_tmax, baseline=baseline_tuple,
+                              preload=True)
+            runs['run-' + str(j + 1)] = data
+    return subjects
+
+epoch_tmin = -0.1
+epoch_tmax = 0.8
+baseline_tuple = (-0.1, 0)
+load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_width, datatype, task, suffix, extension
+                                     , event_label_dict, epoch_tmin, epoch_tmax, baseline_tuple)
+
+visualize_eeg_epochs(subjects['sub-001']['run-1'], event_plot, colors, ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz'])
+pickle.dump(subjects, open(os.path.join('./3rd_party_data/audio_oddball', f'subjects.p'), 'wb'))
