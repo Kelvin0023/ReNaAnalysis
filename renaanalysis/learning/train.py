@@ -15,7 +15,7 @@ from torchsummary import summary
 from tqdm import tqdm
 
 from renaanalysis.learning.HDCA import hdca
-from renaanalysis.learning.HT import HierarchicalTransformer
+from renaanalysis.learning.HT import HierarchicalTransformer, viz_ht
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
     export_data_root, num_top_compoenents
@@ -23,7 +23,7 @@ from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebala
     mean_min_sublists, epochs_to_class_samples, z_norm_by_trial
 import matplotlib.pyplot as plt
 
-def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True):
+def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True, n_folds=10):
     # verify number of event types
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
@@ -53,17 +53,20 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
         else:
             if model_name == 'EEGPupilCNN': # this model uses PCA-ICA reduced EEG data plus pupil data
                 model = EEGPupilCNN(eeg_in_shape=x_eeg_pca_ica.shape, pupil_in_shape=x_pupil.shape, num_classes=2)
-                model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica, x_pupil], y, model, test_name=test_name)
+                model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica, x_pupil], y, model, test_name=test_name, n_folds=n_folds)
             elif model_name == 'HT':  # this model uses un-dimension reduced EEG data
                 num_channels, num_timesteps = x_eeg.shape[1:]
-                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, depth=3, num_heads=3, feedforward_mlp_dim=1024)
-                model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=1e-4)  # use un-dimension reduced EEG data
+                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2)
+                model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=1e-4, n_folds=n_folds)  # use un-dimension reduced EEG data
+                viz_ht(model, x_eeg, y, label_encoder)
             else:  # these models use PCA-ICA reduced EEG data
                 if model_name == 'EEGCNN':
                     model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
                 elif model_name == 'EEGInception':
                     model = EEGInceptionNet(in_shape=x_eeg_pca_ica.shape, num_classes=2)
-                model, training_histories, criterion, label_encoder = train_model(x_eeg_pca_ica, y, model, test_name=test_name, verbose=1)
+                else:
+                    raise Exception(f"Unknown model name {model_name}")
+                model, training_histories, criterion, label_encoder = train_model(x_eeg_pca_ica, y, model, test_name=test_name, verbose=1, n_folds=n_folds)
             folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
             folds_val_auc = mean_max_sublists(training_histories['auc_val'])
             print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
@@ -231,7 +234,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
                 y_pred = model(x.to(device))
 
                 if y_pred.shape[1] == 1:
-                    y_pred = F.sigmoid(y_pred)
+                    y_pred = torch.sigmoid(y_pred)
                     y_tensor = torch.Tensor(label_encoder.inverse_transform(y)).to(device)
                     classification_loss = BCE_loss(y_pred, y_tensor)
                 else:
@@ -282,7 +285,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
                     y_pred = model(x.to(device))
                     # y_tensor = F.one_hot(y, num_classes=2).to(torch.float32).to(device)
                     if y_pred.shape[1] == 1:
-                        y_pred = F.sigmoid(y_pred)
+                        y_pred = torch.sigmoid(y_pred)
                         y_tensor = torch.Tensor(label_encoder.inverse_transform(y)).to(device)
                         loss = BCE_loss(y_pred, y_tensor)
                     else:

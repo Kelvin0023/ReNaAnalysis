@@ -1,3 +1,6 @@
+import os
+import pickle
+
 import torch
 from torch import nn
 
@@ -136,8 +139,8 @@ class Transformer(nn.Module):
 #         return self.mlp_head(x)
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth, num_heads, feedforward_mlp_dim, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=256, attn_dropout=0., emb_dropout=0., output='multi'):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=3, num_heads=8, feedforward_mlp_dim=1024, window_duration=0.1, pool='cls',
+                 patch_embed_dim=256, dim_head=256, attn_dropout=0.2, emb_dropout=0.2, output='multi'):
         """
 
         # a token is a time slice of data on a single channel
@@ -237,3 +240,13 @@ class HierarchicalTransformer(nn.Module):
 
     # def get_grid_size(self):
     #     return self.grid_size
+
+def viz_ht(model: HierarchicalTransformer, x_eeg, y, label_encoder):
+    pass
+    model.eval()
+
+    torch.save(model.state_dict(), os.path.join('HT/RSVP-itemonset-locked', 'model.pt'))
+    pickle.dump(x_eeg, open(os.path.join('HT/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb'))
+    pickle.dump(y, open(os.path.join('HT/RSVP-itemonset-locked', 'y.pkl'), 'wb'))
+    pickle.dump(label_encoder, open(os.path.join('HT/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb'))
+
