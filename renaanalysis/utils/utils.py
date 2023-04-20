@@ -605,3 +605,5 @@ def validate_get_epoch_args(event_names, event_filters):
         raise ValueError('Number of event names must match the number of event filters')
 
 
+def remove_value(lst, val):
+    return list(filter(lambda x: x != val, lst))
