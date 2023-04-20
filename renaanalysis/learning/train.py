@@ -144,7 +144,7 @@ def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_f
 #             performance[m, locking_name] = {'average val auc': best_val_auc, 'average val acc': best_val_acc, 'average train acc': best_train_acc, 'average val loss': best_val_loss, 'average trian loss': best_train_loss}
 #     return performance
 
-def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-5, lr_scheduler_type='exponential'):
+def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential'):
     """
 
     @param X:
@@ -212,7 +212,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
         val_accs = []
         val_aucs = []
         best_loss = np.inf
-        patience_counter = []
+        patience_counter = 0
 
         for epoch in range(epochs):
             mini_batch_i = 0
@@ -313,9 +313,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
                 val_accs.append(num_correct_preds / val_size)
                 if verbose >= 1: pbar.close()
             if verbose >= 1:
-                print(
-                "Fold {}, Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = "
-                "{:.8f}, val loss={:.8f}".format(f_index, epoch, train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1]))
+                print("Fold {}, Epoch {}: train accuracy = {:.8f}, train loss={:.8f}; val accuracy = {:.8f}, val loss={:.8f}, patience left {}".format(f_index, epoch, train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1], patience - patience_counter))
             # Save training histories after every epoch
             training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
                                   'acc_val': val_accs}

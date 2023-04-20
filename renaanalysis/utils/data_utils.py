@@ -79,7 +79,7 @@ def z_norm_projection(x_train, x_test):
 def rebalance_classes(x, y):
     epoch_shape = x.shape[1:]
     x = np.reshape(x, newshape=(len(x), -1))
-    sm = SMOTE(random_state=42)
+    sm = SMOTE(random_state=random_seed)
     x, y = sm.fit_resample(x, y)
     x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
     return x, y

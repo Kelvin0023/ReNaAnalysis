@@ -1,9 +1,10 @@
 import torch
 import numpy as np
 
+from renaanalysis.learning.HT import Attention
 
 
-def rollout(depth, grid_size, attentions, discard_ratio, head_fusion):
+def rollout(depth, attentions, discard_ratio, head_fusion, token_shape):
     result = torch.eye(attentions[0].size(-1))
     with torch.no_grad():
         for i, attention in enumerate(attentions):
@@ -16,8 +17,7 @@ def rollout(depth, grid_size, attentions, discard_ratio, head_fusion):
             else:
                 raise "Attention head fusion type Not supported"
 
-            # Drop the lowest attentions, but
-            # don't drop the class token
+            # Drop the lowest attentions, but don't drop the class token
             flat = attention_heads_fused.view(attention_heads_fused.size(0), -1)
             _, indices = flat.topk(int(flat.size(-1) * discard_ratio), -1, False)
             indices = indices[indices != 0]
@@ -32,26 +32,27 @@ def rollout(depth, grid_size, attentions, discard_ratio, head_fusion):
                 break
 
     # Look at the total attention between the class token,
-    # and the image patches
+    # and the tokens
     mask = result[0, 0, 1:]
     # In case of 224x224 image, this brings us from 196 to 14
-    mask = mask.reshape(grid_size).numpy()
+    mask = mask.reshape(token_shape).numpy()
     mask = mask / np.max(mask)
     return mask
 
 
 class VITAttentionRollout:
-    def __init__(self, model, device, attention_layer_name='attn_drop', head_fusion="mean",
-                 discard_ratio=0.9):
+    def __init__(self, model, device, attention_layer_class, token_shape, head_fusion="mean", discard_ratio=0.9):
         self.model = model
         self.device = device
         self.head_fusion = head_fusion
         self.discard_ratio = discard_ratio
+        self.token_shape = token_shape
 
         self.attention_layer_count = 0
         for name, module in self.model.named_modules():
-            module.register_forward_hook(self.get_attention)
-            self.attention_layer_count += 1
+            if isinstance(module, attention_layer_class):  # HT's attention layer
+                module.register_forward_hook(self.get_attention)
+                self.attention_layer_count += 1
         if self.attention_layer_count == 0:
             raise ValueError("No attention layer in the given model")
         if self.attention_layer_count != self.model.depth:
@@ -60,7 +61,7 @@ class VITAttentionRollout:
 
     def get_attention(self, module, input, output):
         attention_output = output
-        self.attentions.append(attention_output.cpu())
+        self.attentions.append(attention_output[1].cpu())
 
     def __call__(self, depth, input_tensor, fix_sequence=None):
         if depth > self.attention_layer_count:
@@ -69,4 +70,4 @@ class VITAttentionRollout:
 
         output = self.model(input_tensor.to(self.device))
 
-        return rollout(depth, self.model.get_grid_size(), self.attentions, self.discard_ratio, self.head_fusion)
+        return rollout(depth, self.attentions, self.discard_ratio, self.head_fusion, token_shape=self.token_shape)
