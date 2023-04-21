@@ -26,7 +26,7 @@ colors = {
     "oddball_with_reponse": "green"
 }
 picks = 'eeg'
-models = ['HT', 'HDCA', 'EEGCNN']
+models = ['HT', 'EEGCNN']
 n_folds = 10
 
 reload_saved_samples = True
