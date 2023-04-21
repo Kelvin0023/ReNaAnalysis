@@ -288,3 +288,23 @@ def z_norm_by_trial(data):
         sample_norm = (sample - mean) / std
         norm_data[i] = sample_norm
     return norm_data
+
+
+import numpy as np
+
+
+def mean_ignore_zero(arr, axis=0):
+    """
+    Calculates the mean of an array along the specified axis, ignoring all zero values.
+
+    Args:
+    - arr: numpy array
+    - axis: int (default: 0)
+
+    Returns:
+    - mean: numpy array containing the mean of non-zero values along the specified axis
+    """
+    # Calculate the mean of non-zero values along the specified axis
+    mean = np.true_divide(arr.sum(axis=axis), (arr != 0).sum(axis=axis))
+
+    return mean
