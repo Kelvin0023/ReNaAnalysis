@@ -331,3 +331,114 @@ def hdca(x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, x_type=None, is_plots=Fa
         plt.show()
 
     return roc_auc_combined, roc_auc_eeg, roc_auc_pupil
+
+def hdca_eeg(x_eeg, x_eeg_pca_ica, y, event_names, x_type=None, is_plots=False, notes="", exg_srate=128, verbose=0):
+    """
+
+    :param x_eeg: EEG data, shape (num_trials, num_channels, num_timepoints) data must have been z-normalized by trials
+    :param x_eeg_pca_ica: EEG data after PCA and ICA, shape (num_trials, num_channels, num_timepoints) data must have been z-normalized by trials, before PCA and ICA,
+    :param x_pupil: pupil data, shape (num_trials, num_channels, num_timepoints) data must have been z-normalized by trials
+    the array with more channels is EEG. If the two arraies have the same number of channels, an error will be raised
+    :param y: labels, shape (num_trials, )
+    :param event_names:
+    :param is_plots:
+    :param notes:
+    :param verbose:
+    :return: validation result in the form of roc of the combined eeg , roc of the eeg model,
+    """
+
+    split_size_eeg = int(split_window_eeg * exg_srate)  # split data into 100ms bins
+    # multi-fold cross-validation
+    cross_val_folds = StratifiedShuffleSplit(n_splits=10, random_state=random_seed)
+    _, num_eeg_channels, num_windows_eeg, num_timepoints_per_window_eeg = sliding_window_view(x_eeg, window_shape=split_size_eeg,axis=2)[:, :, 0::split_size_eeg, :].shape
+
+    cw_weights_eeg_folds = np.empty((num_folds, num_windows_eeg))
+
+    activations_folds = np.empty((num_folds, len(event_names), num_eeg_channels, num_windows_eeg, num_timepoints_per_window_eeg))
+    roc_auc_folds_eeg = np.empty(num_folds)
+    fpr_folds_eeg = []
+    tpr_folds_eeg = []
+
+    # x_eeg_transformed, pca, ica = compute_pca_ica(x[0], num_top_compoenents)
+    x_eeg_transformed = x_eeg_pca_ica
+
+    for i, (train, test) in enumerate(cross_val_folds.split(x_eeg, y)):  # cross-validation; group arguement is not necessary unless using grouped folds
+        if verbose: print(f"Working on {i + 1} fold of {num_folds}")
+
+        x_eeg_transformed_train, x_eeg_transformed_test, y_train, y_test = x_eeg_transformed[train], x_eeg_transformed[test], y[train], y[test]
+
+        x_eeg_transformed_train, y_train_eeg = rebalance_classes(x_eeg_transformed_train, y_train)  # rebalance by class
+
+        x_eeg_test = x_eeg[test]
+
+        x_eeg_transformed_train_windowed = sliding_window_view(x_eeg_transformed_train, window_shape=split_size_eeg, axis=2)[:, :, 0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
+        x_eeg_transformed_test_windowed = sliding_window_view(x_eeg_transformed_test, window_shape=split_size_eeg, axis=2)[:, :, 0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
+        x_eeg_test_windowed = sliding_window_view(x_eeg_test, window_shape=split_size_eeg, axis=2)[:, :, 0::split_size_eeg, :]  # shape = #trials, #channels, #windows, #time points per window
+
+        num_train_trials, num_channels_eeg, num_windows_eeg, num_timepoints_per_window_eeg = x_eeg_transformed_train_windowed.shape
+        num_test_trials = len(x_eeg_transformed_test)
+        # compute Fisher's LD for each temporal window
+        if verbose >= 2: print("Computing windowed LDA per channel, and project per window and trial")
+        weights_channelWindow_eeg, projection_train_window_trial_eeg, projection_test_window_trial_eeg = compute_window_projections(
+            x_eeg_transformed_train_windowed, x_eeg_transformed_test_windowed, y_train)
+        if verbose >= 2: print('Computing forward model from window projections for test set')
+        activation = compute_forward(x_eeg_test_windowed, y_test, projection_test_window_trial_eeg)
+        # train classifier, use gradient descent to find the cross-window weights
+
+        # z-norm the projections
+        projection_train_window_trial_eeg, projection_test_window_trial_eeg = z_norm_projection(projection_train_window_trial_eeg, projection_test_window_trial_eeg)
+
+        if verbose >= 2: print('Solving cross bin weights')
+        cw_weights_eeg, roc_auc_eeg, fpr_eeg, tpr_eeg = solve_crossbin_weights(projection_train_window_trial_eeg,
+                                                                               projection_test_window_trial_eeg,
+                                                                               y_train, y_test, num_windows_eeg)
+
+        cw_weights_eeg_folds[i] = cw_weights_eeg
+
+        activations_folds[i] = activation
+
+        roc_auc_folds_eeg[i] = roc_auc_eeg
+        fpr_folds_eeg.append(fpr_eeg)
+        tpr_folds_eeg.append(tpr_eeg)
+        # print(f'Fold {i}, auc is {roc_auc_folds[i]}')
+
+    plot_forward(np.mean(activations_folds, axis=0), event_names, split_window_eeg, num_windows_eeg, exg_srate=exg_srate,
+                 notes=f"{notes} Average over {num_folds}-fold's test set")
+
+    if verbose:
+        print(f"Mean EEG cross ROC-AUC is {np.mean(roc_auc_folds_eeg)}")
+
+    if is_plots:
+        best_fold_i = np.argmax(roc_auc_folds_eeg)
+        display = metrics.RocCurveDisplay(fpr=fpr_folds_eeg[best_fold_i], tpr=tpr_folds_eeg[best_fold_i],
+                                          roc_auc=roc_auc_folds_eeg[best_fold_i], estimator_name='example estimator')
+        fig = plt.figure(figsize=(10, 10), constrained_layout=True)
+        display.plot(ax=plt.gca(), name='ROC')
+        plt.tight_layout()
+        plt.title(f"{notes} Pupil ROC of the best cross-val fold")
+        plt.show()
+
+        fig = plt.figure(figsize=(15, 10), constrained_layout=True)
+        plt.boxplot(cw_weights_eeg_folds)
+        # plt.plot(cross_window_weights)
+        x_labels = [f"{int((i - 1) * split_window_eeg * 1e3)}ms" for i in range(num_windows_eeg)]
+        x_ticks = np.arange(0.5, num_windows_eeg + 0.5, 1)
+        plt.plot(list(range(1, num_windows_eeg + 1)), np.mean(cw_weights_eeg_folds, axis=0), label="folds average")
+
+        plt.xticks(ticks=x_ticks, labels=x_labels)
+        plt.xlabel("100 ms windowed bins")
+        plt.ylabel("Cross-bin weights")
+        plt.title(f'{notes} Cross-bin weights, {num_folds}-fold cross validation')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+        plt.xticks(ticks=x_ticks, labels=x_labels)
+        plt.xlabel("500 ms windowed bins")
+        plt.ylabel("Cross-bin weights")
+        plt.title(f'{notes} Cross-bin weights, {num_folds}-fold cross validation')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    return roc_auc_eeg

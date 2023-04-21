@@ -22,7 +22,7 @@ from renaanalysis.learning.train import prepare_sample_label
 from renaanalysis.params.params import eeg_picks, eeg_epoch_ticks, pupil_epoch_ticks, tmin_pupil, eyetracking_srate, \
     tmax_pupil_viz, tmin_pupil_viz, base_root, note, data_directory
 from renaanalysis.utils.RenaDataFrame import RenaDataFrame
-from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes, epochs_to_class_samples
+from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes, epochs_to_class_samples_rdf
 from renaanalysis.utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
 from renaanalysis.utils.utils import get_item_events, visualize_pupil_epochs
 
@@ -94,7 +94,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1,
     #     plt.show()
 
     # pupilometries
-    x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='pupil', participant=participant, session=session)
+    x, y, epochs, event_ids = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='pupil', participant=participant, session=session)
     x = np.mean(x, axis=1)
     r_square_grid = np.zeros(x.shape[1])
     for time_i in range(len(r_square_grid)):

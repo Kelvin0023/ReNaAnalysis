@@ -14,13 +14,13 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 
-from renaanalysis.learning.HDCA import hdca
+from renaanalysis.learning.HDCA import hdca, hdca_eeg
 from renaanalysis.learning.HT import HierarchicalTransformer, viz_ht
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
     export_data_root, num_top_compoenents
 from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebalance_classes, mean_max_sublists, \
-    mean_min_sublists, epochs_to_class_samples, z_norm_by_trial
+    mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
 import matplotlib.pyplot as plt
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True, n_folds=10):
@@ -31,7 +31,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
         test_name = f'Locking-{locking_name}_Model-{model_name}_P-{participant}_S-{session}'
         if regenerate_epochs:
             # x, y, _ = prepare_sample_label(rdf, event_names, locking_filter, participant=participant, session=session)  # pick all EEG channels
-            x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', eeg_resample_rate=exg_resample_rate)
+            x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', eeg_resample_rate=exg_resample_rate)
             pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
             pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
         else:
@@ -73,12 +73,43 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             locking_performance[locking_name, model_name] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss, 'folds trian loss': folds_train_loss}
     return locking_performance
 
+def eval_models(x, y, event_names, model_name, n_folds=10, exg_resample_rate=128):
+    model_performance = {}
+
+    x_eeg = z_norm_by_trial(x)
+    x_eeg_pca_ica, _, _ = compute_pca_ica(x, num_top_compoenents)
+
+    if model_name == 'HDCA':
+        roc_auc_eeg = hdca_eeg(x_eeg, x_eeg_pca_ica, y, event_names, is_plots=True, exg_srate=exg_resample_rate, notes=model_name + '\n', verbose=0)  # give the original eeg data, no need to apply HDCA again
+        model_performance['HDCA EEG'] = {'folds val auc': roc_auc_eeg}
+        print(f'{model_name}: folds EEG AUC {roc_auc_eeg}')
+    else:
+        if model_name == 'HT':  # this model uses un-dimension reduced EEG data
+            num_channels, num_timesteps = x_eeg.shape[1:]
+            model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2)
+            model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=model_name, verbose=1, lr=1e-4, n_folds=n_folds)  # use un-dimension reduced EEG data
+            # viz_ht(model, x_eeg, y, label_encoder)
+        else:  # these models use PCA-ICA reduced EEG data
+            if model_name == 'EEGCNN':
+                model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
+            elif model_name == 'EEGInception':
+                model = EEGInceptionNet(in_shape=x_eeg_pca_ica.shape, num_classes=2)
+            else:
+                raise Exception(f"Unknown model name {model_name}")
+            model, training_histories, criterion, label_encoder = train_model(x_eeg_pca_ica, y, model, test_name=model_name, verbose=1, n_folds=n_folds)
+        folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
+        folds_val_auc = mean_max_sublists(training_histories['auc_val'])
+        print(f'{model_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
+        model_performance[model_name] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss, 'folds trian loss': folds_train_loss}
+
+    return model_performance
+
 def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_filter, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True):
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
     locking_performance = {}
     test_name = f'Locking-{locking_name}_Model-HT_P-{participant}_S-{session}'
     if regenerate_epochs:
-        x, y, _, _ = epochs_to_class_samples(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', eeg_resample_rate=exg_resample_rate)
+        x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', eeg_resample_rate=exg_resample_rate)
         pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
         pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
     else:
@@ -651,5 +682,5 @@ def train_model_pupil_eeg_no_folds(X, Y, model, num_epochs=5000, test_name="CNN-
 
 def prepare_sample_label(rdf, event_names, event_filters, data_type='eeg', picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
     assert len(event_names) == len(event_filters) == 2
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type=data_type, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
+    x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type=data_type, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
     return x, y

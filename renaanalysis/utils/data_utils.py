@@ -149,7 +149,7 @@ def force_square_epochs(epochs, tmin, tmax):
         square_epochs = epochs.resample(target_resample_srate)
     return square_epochs
 
-def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, eeg_resample_rate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
+def epochs_to_class_samples_rdf(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, eeg_resample_rate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
@@ -235,6 +235,37 @@ def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False,
 
         # return x, y, epochs, event_ids, ps_group_eeg
         return x, y, epochs, event_ids
+
+def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rate=128, n_jobs=1, reject='auto', lots='sanity-check', colors=None, title=''):
+    """
+    script will always z norm along channels for the input
+    @param: data_type: can be eeg, pupil or mixed
+    @param: force_square: whether to call resample again on the data to force the number of epochs to match the
+    number of time points. Enabling this can help algorithms that requires square matrix as their input. Default
+    is disabled. Note when force_square is enabled, the resample rate (both eeg and pupil) will be ignored. rebalance
+    will also be disabled.
+    @param: plots: can be 'sanity_check', 'full', or none
+    """
+    if picks is not None:
+        epochs = epochs.copy().pick(picks)[event_names]
+    else:
+        epochs = epochs.copy()[event_names]
+
+    if epochs.info['sfreq'] != eeg_resample_rate:
+        epochs.resample(eeg_resample_rate, n_jobs=n_jobs)
+    if reject == 'auto':
+        print("Auto rejecting epochs")
+        ar = AutoReject(n_jobs=n_jobs, verbose=False)
+        epochs_clean, log = ar.fit_transform(epochs, return_log=True)
+    else:
+        epochs_clean = epochs
+    event_ids = {event_name: i for i, event_name in enumerate(event_names)}
+    x, y = _epoch_to_samples(epochs_clean, event_ids)
+
+    visualize_eeg_epochs(epochs_clean, event_ids, colors, title='EEG Epochs ' + title)
+
+    return x, y
+
 
 
 def sanity_check_eeg(x, y, picks):

@@ -9,7 +9,7 @@ from renaanalysis.eye.eyetracking import Fixation
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.models import EEGCNN, EEGPupilCNN
 from renaanalysis.learning.train import eval_model, train_model, train_model_pupil_eeg
-from renaanalysis.utils.data_utils import epochs_to_class_samples, compute_pca_ica, mean_max_sublists, mean_min_sublists
+from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf, compute_pca_ica, mean_max_sublists, mean_min_sublists
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################
@@ -100,7 +100,7 @@ event_filters = locking_filters[selected_locking]
 r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
 
 if is_regenerate_epochs:
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0, plots='full')
+    x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0, plots='full')
     pickle.dump(x, open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'wb'))
     pickle.dump(y, open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'wb'))
 else:
