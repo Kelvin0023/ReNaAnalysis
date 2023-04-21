@@ -10,9 +10,9 @@ from renaanalysis.utils.Bidict import Bidict
 
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-# base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 # base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-base_root = "D:/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "D:/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 
 data_directory = "Subjects"
 export_data_root = 'C:/Data'
@@ -174,7 +174,7 @@ train_ratio = 0.8
 model_save_dir = 'renaanalysis/learning/saved_models'
 l2_weight = 1e-5
 
-random_seed = 42
+random_seed = 13
 
 # HDCA parameters
 split_window_eeg=100e-3
