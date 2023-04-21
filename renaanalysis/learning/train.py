@@ -100,7 +100,7 @@ def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_f
         model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
                                         depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                         pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
-                                        dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], )
+                                        dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
         model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'])  # use un-dimension reduced EEG data
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
         folds_val_auc = mean_max_sublists(training_histories['auc_val'])
