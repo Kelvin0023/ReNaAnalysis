@@ -22,10 +22,13 @@ grid_search_params = {
     "num_heads": [4, 8, 12],
     "pool": ['cls', 'mean'],
     "feedforward_mlp_dim": [64, 128, 256],
-    "patch_embed_dim": [64, 128, 256],
+
+    # "patch_embed_dim": [64, 128, 256],
+    "patch_embed_dim": [128, 256, 512],
+
     "dim_head": [64, 128, 256],
-    "attn_dropout": [0.0, 0.1, 0.2],
-    "emb_dropout": [0.0, 0.1, 0.2],
+    "attn_dropout": [0.0, 0.2, 0.2],
+    "emb_dropout": [0.0, 0.2, 0.2],
     "lr": [1e-4, 1e-3, 1e-2],
     "l2_weight": [1e-6, 1e-5, 1e-4],
     "lr_scheduler_type": ['cosine', 'exponential'],
