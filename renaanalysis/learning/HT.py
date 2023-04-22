@@ -140,7 +140,7 @@ class Transformer(nn.Module):
 
 class HierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=128, window_duration=0.1, pool='cls',
-                 patch_embed_dim=512, dim_head=128, attn_dropout=0.5, emb_dropout=0.5, output='single'):
+                 patch_embed_dim=512, dim_head=128, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """

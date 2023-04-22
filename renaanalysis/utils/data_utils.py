@@ -31,7 +31,7 @@ class Fischer:
 def compute_pca_ica(X, n_components, pca=None, ica=None):
     """
     data will be normaly distributed after applying this dimensionality reduction
-    @param X:
+    @param X: input array
     @param n_components:
     @return:
     """

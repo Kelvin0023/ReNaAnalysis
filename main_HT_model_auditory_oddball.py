@@ -18,7 +18,7 @@ from renaanalysis.utils.dataset_utils import load_auditory_oddball_data
 
 # user parameters
 eeg_resample_rate = 200
-reject = None
+reject = 'auto'
 bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
 event_names = ["standard", "oddball_with_reponse"]
 colors = {
@@ -28,6 +28,8 @@ colors = {
 picks = 'eeg'
 models = ['HT', 'EEGCNN']
 n_folds = 10
+ht_lr=1e-5
+ht_l2=1e-5
 
 reload_saved_samples = True
 # start of the main block ######################################################
@@ -60,7 +62,7 @@ results = dict()
 
 is_regenerate_epochs = True
 for m in models:
-    m_results = eval_models(x, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds)
+    m_results = eval_models(x, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2)
     results = {**m_results, **results}
 
 # is_regenerate_epochs = True

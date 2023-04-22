@@ -73,7 +73,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             locking_performance[locking_name, model_name] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss, 'folds trian loss': folds_train_loss}
     return locking_performance
 
-def eval_models(x, y, event_names, model_name, n_folds=10, exg_resample_rate=128):
+def eval_models(x, y, event_names, model_name, n_folds=10, exg_resample_rate=128, ht_lr=1e-4, ht_l2=1e-6):
     model_performance = {}
 
     x_eeg = z_norm_by_trial(x)
@@ -87,7 +87,7 @@ def eval_models(x, y, event_names, model_name, n_folds=10, exg_resample_rate=128
         if model_name == 'HT':  # this model uses un-dimension reduced EEG data
             num_channels, num_timesteps = x_eeg.shape[1:]
             model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2)
-            model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=model_name, verbose=1, lr=1e-4, n_folds=n_folds)  # use un-dimension reduced EEG data
+            model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=model_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
             # viz_ht(model, x_eeg, y, label_encoder)
         else:  # these models use PCA-ICA reduced EEG data
             if model_name == 'EEGCNN':
