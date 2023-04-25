@@ -1,5 +1,7 @@
 import os
 import os.path as op
+import time
+
 import openneuro
 import json
 import numpy as np
@@ -13,10 +15,9 @@ import pickle
 from mne.datasets import sample
 from mne_bids import (BIDSPath, read_raw_bids, print_dir_tree, make_report,
                       find_matching_paths, get_entity_vals)
+from sklearn.preprocessing import LabelEncoder
 
-
-
-
+from renaanalysis.utils.data_utils import epochs_to_class_samples
 
 
 def visualize_eeg_epochs(epochs, event_groups, colors, eeg_picks, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
@@ -183,3 +184,27 @@ def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tm
     visualize_eeg_epochs(subjects['sub-001']['run-1'], event_plot, colors, ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz'])
     # pickle.dump(subjects, open(os.path.join('./3rd_party_data/audio_oddball', f'subjects.p'), 'wb'))
     return subjects
+
+def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors):
+    start_time = time.time()  # record the start time of the analysis
+    if not reload_saved_samples:
+        subjects = load_auditory_oddball_data(bids_root=bids_root)
+        all_epochs = []
+        for subject_key, run_values in subjects.items():
+            for run_key, run in run_values.items():
+                all_epochs.append(run)
+        all_epochs = mne.concatenate_epochs(all_epochs)
+        x, y = epochs_to_class_samples(all_epochs, event_names, picks=picks, reject=reject, n_jobs=16,
+                                       eeg_resample_rate=eeg_resample_rate, colors=colors)
+
+        pickle.dump(x, open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'wb'))
+        pickle.dump(y, open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'wb'))
+    else:
+        x = pickle.load(open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'rb'))
+        y = pickle.load(open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'rb'))
+
+    le = LabelEncoder()
+    Y_encoded = le.fit_transform(y)
+
+    print(f"Load data took {time.time() - start_time} seconds")
+    return x, Y_encoded, le

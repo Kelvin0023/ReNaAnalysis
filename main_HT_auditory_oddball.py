@@ -14,7 +14,7 @@ from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.train import eval_lockings, eval_models
 from renaanalysis.params.params import *
 from renaanalysis.utils.data_utils import epochs_to_class_samples
-from renaanalysis.utils.dataset_utils import load_auditory_oddball_data
+from renaanalysis.utils.dataset_utils import load_auditory_oddball_data, get_auditory_oddball_samples
 
 # user parameters
 eeg_resample_rate = 200
@@ -37,24 +37,8 @@ reload_saved_samples = True
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
 
-start_time = time.time()  # record the start time of the analysis
+x, y, label_encoder = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
 
-if not reload_saved_samples:
-    subjects = load_auditory_oddball_data(bids_root=bids_root)
-    all_epochs = []
-    for subject_key, run_values in subjects.items():
-        for run_key, run in run_values.items():
-            all_epochs.append(run)
-    all_epochs = mne.concatenate_epochs(all_epochs)
-    x, y = epochs_to_class_samples(all_epochs, event_names, picks=picks, reject=reject, n_jobs=16, eeg_resample_rate=eeg_resample_rate, colors=colors)
-
-    pickle.dump(x, open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'wb'))
-    pickle.dump(y, open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'wb'))
-else:
-    x = pickle.load(open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'rb'))
-    y = pickle.load(open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'rb'))
-
-print(f"Load data took {time.time() - start_time} seconds")
 
 # lockings test  ####################################################################################################
 
@@ -71,7 +55,7 @@ for m in models:
 #     is_regenerate_epochs = False  # dont regenerate epochs after the first time
 #     results = {**m_results, **results}
 #
-# pickle.dump(results, open('model_locking_performances', 'wb'))
+pickle.dump(results, open('model_locking_performances', 'wb'))
 
 
 # import pickle
