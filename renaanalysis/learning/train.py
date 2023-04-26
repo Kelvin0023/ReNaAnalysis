@@ -23,7 +23,7 @@ from renaanalysis.utils.data_utils import compute_pca_ica, mean_sublists, rebala
     mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
 import matplotlib.pyplot as plt
 
-def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True, n_folds=10):
+def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True, n_folds=10, HT_output_mode='multi'):
     # verify number of event types
     assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
     locking_performance = {}
@@ -56,7 +56,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
                 model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica, x_pupil], y, model, test_name=test_name, n_folds=n_folds)
             elif model_name == 'HT':  # this model uses un-dimension reduced EEG data
                 num_channels, num_timesteps = x_eeg.shape[1:]
-                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2)
+                model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=HT_output_mode)
                 model, training_histories, criterion, label_encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=1e-4, n_folds=n_folds)  # use un-dimension reduced EEG data
                 viz_ht(model, x_eeg, y, label_encoder)
             else:  # these models use PCA-ICA reduced EEG data

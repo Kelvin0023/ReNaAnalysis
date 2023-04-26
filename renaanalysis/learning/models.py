@@ -125,7 +125,7 @@ class EEGCNN(nn.Module):
         return x
 
 class EEGPupilCNN(nn.Module):
-    def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, pupil_in_channel=2, num_filters=16, fc_feature_size=304):
+    def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, pupil_in_channel=2, num_filters=16, fc_feature_size=432):
         super().__init__()
         self.conv_eeg = nn.Sequential(
             nn.Conv1d(eeg_in_shape[1], num_filters, 5),
