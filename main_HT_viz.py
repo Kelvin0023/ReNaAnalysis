@@ -26,7 +26,7 @@ head_fusion = 'mean'
 channel_fusion = 'sum'  # TODO when plotting the cross window actiavtion
 sample_fusion = 'sum'  # TODO
 
-load_saved_rollout = False
+load_saved_rollout = True
 
 
 info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))
@@ -50,7 +50,9 @@ with open(os.path.join('HT/RSVP-itemonset-locked', 'label_encoder.pkl'), 'rb') a
 num_channels, num_timesteps = X.shape[1:]  # X is x_eeg
 
 # Load the model state_dict
-model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2)
+model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output='single')
+window_size = model.patch_length
+
 model.load_state_dict(torch.load(os.path.join('HT/RSVP-itemonset-locked', 'model.pt')))
 model.to(device)
 rollout = VITAttentionRollout(model, device, attention_layer_class=Attention, token_shape=model.grid_dims, discard_ratio=0.9, head_fusion=head_fusion)
@@ -105,6 +107,24 @@ for f_index, (train, test) in enumerate(skf.split(X, Y)):
             pickle.dump(_x, f)
         with open(os.path.join(data_root, '_y.pkl'), 'wb') as f:
             pickle.dump(_y, f)
+
+    # plot the topomap
+    fig = plt.figure(figsize=(22, 10), constrained_layout=True)
+    subfigs = fig.subfigures(2, 1)
+    x_mean_max = np.max(np.mean(_x, axis=(0, -1)))
+    for class_index, e_name in enumerate(event_names):
+        axes = subfigs[class_index].subplots(1, model.num_windows, sharey=True)
+        for window_i in range(model.num_windows):
+            _x_class = _x[_y == class_index][:, :, (window_i) * window_size:(window_i + 1) * window_size]
+            _x_mean = np.mean(_x_class, axis=(0, -1))
+
+            plot_topomap(_x_mean, info, axes=axes[window_i - 1], show=False, res=512, vlim=(0, x_mean_max))
+            # plot_topomap(activation, info, axes=axes[window_i - 1], show=False, res=512, vlim=(np.min(this__roll), np.max(this_roll)))
+            axes[window_i - 1].set_title(
+                f"{int((window_i - 1) * split_window_eeg * 1e3)}-{int(window_i * split_window_eeg * 1e3)}ms")
+        subfigs[class_index].suptitle(e_name, )
+    fig.suptitle(f"EEG topomap: {f_index+1}-fold", fontsize='x-large')
+    plt.show()
 
     for roll_depth in range(model.depth):
         this_roll = np.stack(rolls[roll_depth], axis=0)
