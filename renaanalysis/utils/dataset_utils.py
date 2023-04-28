@@ -173,8 +173,6 @@ def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tm
         event_label_dict[key] = l
         l += 1
 
-
-
     if not include_last:
         epoch_tmax -= 1/srate
 
@@ -203,8 +201,8 @@ def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_sampl
         x = pickle.load(open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'rb'))
         y = pickle.load(open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'rb'))
 
-    le = LabelEncoder()
-    Y_encoded = le.fit_transform(y)
+    # le = LabelEncoder()
+    # Y_encoded = le.fit_transform(y)
 
     print(f"Load data took {time.time() - start_time} seconds")
-    return x, Y_encoded, le
+    return x, y

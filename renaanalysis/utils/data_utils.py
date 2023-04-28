@@ -149,7 +149,7 @@ def force_square_epochs(epochs, tmin, tmax):
         square_epochs = epochs.resample(target_resample_srate)
     return square_epochs
 
-def epochs_to_class_samples_rdf(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, eeg_resample_rate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
+def epochs_to_class_samples_rdf(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, exg_resample_rate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
@@ -160,10 +160,10 @@ def epochs_to_class_samples_rdf(rdf, event_names, event_filters, *, rebalance=Fa
     @param: plots: can be 'sanity_check', 'full', or none
     """
     if force_square:
-        eyetracking_resample_srate = eeg_resample_rate = None
+        eyetracking_resample_srate = exg_resample_rate = None
         rebalance = False
     if data_type == 'both':
-        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, resample_rate=eeg_resample_rate, n_jobs=n_jobs, reject=reject)
+        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, resample_rate=exg_resample_rate, n_jobs=n_jobs, reject=reject)
         if epochs_eeg is None:
             return None, None, None, event_ids
         epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, tmin=tmin_pupil, tmax=tmax_pupil, resample_rate=eyetracking_resample_srate, participant=participant, session=session, n_jobs=n_jobs)

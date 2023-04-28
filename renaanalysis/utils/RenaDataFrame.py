@@ -54,7 +54,7 @@ class RenaDataFrame:
         :param session:
         :return: a dictionary with key being (participant, session), value is (data: dict, events: list of Event)
         """
-        if participant is None and session is None:
+        if (participant is None and session is None ) or (participant == 'all' and session == 'all' ):
             rtn = dict([((p, s), (data, events)) for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items()])
             return rtn
 

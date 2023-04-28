@@ -8,7 +8,7 @@ from RenaAnalysis import get_rdf, r_square_test
 from renaanalysis.eye.eyetracking import Fixation
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.models import EEGCNN, EEGPupilCNN
-from renaanalysis.learning.train import eval_model, train_model, train_model_pupil_eeg
+from renaanalysis.learning.train import eval, train_model, train_model_pupil_eeg
 from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf, compute_pca_ica, mean_max_sublists, mean_min_sublists
 import matplotlib.pyplot as plt
 import numpy as np

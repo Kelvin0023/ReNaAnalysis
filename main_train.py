@@ -3,7 +3,7 @@ import pickle
 from RenaAnalysis import r_square_test
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet
-from renaanalysis.learning.train import train_model, eval_model
+from renaanalysis.learning.train import train_model, eval
 from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf
 from renaanalysis.params.params import conditions, dtnn_types
 
@@ -34,4 +34,4 @@ event_filters = [lambda x: type(x)==Fixation and x.block_condition == conditions
                  lambda x: type(x)==Fixation and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn==dtnn_types["Target"]]
 # r_square_test(rdf, event_names, event_filters, title="Visual Search epochs locked to detected fixation (I-VT-Head)")
 x_i_dt_head, y_i_dt_head, epochs, event_ids, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant=participant, session=session)
-loss, accuracy = eval_model(model, x_i_dt_head, y_i_dt_head, criterion, label_encoder)
+loss, accuracy = eval(model, x_i_dt_head, y_i_dt_head, criterion, label_encoder)

@@ -1,22 +1,13 @@
-# analysis parameters ######################################################################################
-import copy
-import os
 import pickle
-import time
 
-# analysis parameters ######################################################################################
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
 
-from RenaAnalysis import get_rdf
-from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
-from renaanalysis.learning.train import eval_lockings, eval_models
+from renaanalysis.learning.train import eval_model
 from renaanalysis.params.params import *
-from renaanalysis.utils.data_utils import epochs_to_class_samples
-from renaanalysis.utils.dataset_utils import load_auditory_oddball_data, get_auditory_oddball_samples
+from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
-# user parameters
+# analysis parameters ######################################################################################
 eeg_resample_rate = 200
 reject = 'auto'
 bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
@@ -37,7 +28,7 @@ reload_saved_samples = True
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
 
-x, y, label_encoder = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
+x, y = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
 
 
 # lockings test  ####################################################################################################
@@ -46,7 +37,7 @@ results = dict()
 
 is_regenerate_epochs = True
 for m in models:
-    m_results = eval_models(x, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2)
+    m_results = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2)
     results = {**m_results, **results}
 
 # is_regenerate_epochs = True
