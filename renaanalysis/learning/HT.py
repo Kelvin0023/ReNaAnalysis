@@ -157,6 +157,7 @@ class HierarchicalTransformer(nn.Module):
         super().__init__()
         self.depth = depth
         self.num_heads = num_heads
+        self.window_duration = window_duration
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps

@@ -16,7 +16,7 @@ from renaanalysis.learning.transformer_rollout import VITAttentionRollout
 
 def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
            data_root,
-           split_window_eeg, exg_resample_rate, eeg_channel_names, eeg_montage, num_timesteps=None, num_channels=None,
+           split_window_eeg, exg_resample_rate, eeg_montage, num_timesteps=None, num_channels=None,
            note='',
            head_fusion='max', discard_ratio=0.9,
            load_saved_rollout=False, batch_size=64):
@@ -29,6 +29,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
         model.load_state_dict(torch.load(model_path))
         model.to(device)
     window_size = model.patch_length
+    eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
     info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))
     info.set_montage(eeg_montage)
 

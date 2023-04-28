@@ -167,8 +167,8 @@ eeg_epoch_ticks = np.array([0, 0.3, 0.6, 0.8])
 pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 
 lr = 1e-3
-batch_size = 64
-epochs = 5000
+batch_size = 32
+epochs = 2
 patience = 75
 train_ratio = 0.8
 model_save_dir = 'renaanalysis/learning/saved_models'
@@ -177,7 +177,5 @@ l2_weight = 1e-5
 random_seed = 13
 
 # HDCA parameters
-split_window_eeg=100e-3
-split_window_pupil=500e-3
 num_folds = 10
 num_top_compoenents = 20

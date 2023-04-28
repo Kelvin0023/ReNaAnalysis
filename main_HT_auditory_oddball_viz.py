@@ -14,7 +14,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from renaanalysis.learning.HT import HierarchicalTransformer, Attention
 from renaanalysis.learning.transformer_rollout import VITAttentionRollout
-from renaanalysis.params.params import random_seed, batch_size, eeg_channel_names, eeg_montage, export_data_root
+from renaanalysis.params.params import random_seed, batch_size, eeg_montage, export_data_root
 from renaanalysis.utils.data_utils import rebalance_classes, mean_ignore_zero
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
@@ -42,6 +42,7 @@ reload_saved_samples = True
 load_saved_rollout = True
 
 
+eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
 info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))
 info.set_montage(eeg_montage)
 

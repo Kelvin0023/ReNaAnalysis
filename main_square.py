@@ -11,7 +11,7 @@ from RenaAnalysis import get_rdf, r_square_test
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.models import EEGPupilCNN
-from renaanalysis.learning.train import train_model_pupil_eeg
+from renaanalysis.archived.train import train_model_pupil_eeg
 from renaanalysis.params.params import *
 from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf, compute_pca_ica, mean_max_sublists, mean_min_sublists
 

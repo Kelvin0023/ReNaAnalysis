@@ -37,7 +37,7 @@ results = dict()
 
 is_regenerate_epochs = True
 for m in models:
-    m_results = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2)
+    m_results = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2, eeg_montage=eeg_montage)
     results = {**m_results, **results}
 
 # is_regenerate_epochs = True

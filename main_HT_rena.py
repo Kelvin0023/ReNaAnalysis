@@ -75,8 +75,8 @@ locking_name_filters_constrained = {
                                     } #nyamu <3
 
 # models = ['HT']
-n_folds = 3
-models = ['EEGCNN', 'EEGPupilCNN', 'HT', 'HDCA']
+n_folds = 1
+models = ['HDCA', 'HT', 'EEGCNN', 'EEGPupilCNN']
 
 results = dict()
 

@@ -73,8 +73,13 @@ def z_norm_projection(x_train, x_test):
     projection_mean = np.mean(np.concatenate((x_train, x_test), axis=0), axis=0, keepdims=True)
     projection_std = np.std(np.concatenate((x_train, x_test), axis=0), axis=0, keepdims=True)
 
-    return (x_train - projection_mean) / projection_std, (x_test - projection_mean) / projection_std
+    return (x_train - projection_mean) / projection_std, (x_test - projection_mean) / projection_std, projection_mean, projection_std
 
+def z_norm_hdca(x, _mean=None, _std=None):
+    if _mean is None or _std is None:
+        _mean = np.mean(x, axis=0, keepdims=True)
+        _std = np.std(x, axis=0, keepdims=True)
+    return (x - _mean) / _std
 
 def rebalance_classes(x, y):
     epoch_shape = x.shape[1:]
