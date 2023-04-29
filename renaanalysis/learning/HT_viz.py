@@ -106,7 +106,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
     for roll_depth in range(model.depth):
         this_roll = np.stack(rolls[roll_depth], axis=0)
 
-        fig = plt.figure(figsize=(15, 10), constrained_layout=True)
+        fig = plt.figure(figsize=(15, 10))
         # cross_window_activates = mean_ignore_zero(this_roll, axis=1)
         # cross_window_activates = np.true_divide(this_roll.sum(axis=1), (this_roll != 0).sum(axis=1))
         cross_window_activates = np.sum(this_roll, axis=1)  # finding max activates across channels
@@ -126,7 +126,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
         plt.tight_layout()
         plt.show()
 
-        fig = plt.figure(figsize=(22, 10), constrained_layout=True)
+        fig = plt.figure(figsize=(22, 10))
         subfigs = fig.subfigures(2, 1)
 
         # plot the topomap rollouts

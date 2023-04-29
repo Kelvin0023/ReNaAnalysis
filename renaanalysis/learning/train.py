@@ -50,7 +50,8 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             except FileNotFoundError:
                 raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model_name == 'EEGPupil' else "")
         model_performance = eval_model(x[0], x[1], y, event_names, model_name, eeg_montage, test_name=test_name, n_folds=n_folds, exg_resample_rate=exg_resample_rate, ht_lr=ht_lr, ht_l2=ht_l2, ht_output_mode=ht_output_mode)
-        locking_performance[locking_name] = model_performance
+        for _m_name, _performance in model_performance.items():  # HDCA expands into three models, thus having three performance results
+            locking_performance[locking_name, _m_name] = _performance
     return locking_performance
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage, test_name='', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi'):
@@ -104,9 +105,9 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
 
         y_pred, roc_auc_eeg_pupil, roc_auc_eeg, roc_auc_pupil = hdca_model.eval(x_eeg_test, x_eeg_pca_ica_test, x_pupil_test, y_test, notes=note)
         if x_pupil is not None:
-            performance[f"{note}_Pupil"] = {'test auc': roc_auc_pupil, 'folds val auc': roc_auc_pupil}
-            performance[f"{note}_EEG-Pupil"] = {'test auc': roc_auc_eeg_pupil, 'folds val auc': roc_auc_combined}
-        performance[f"{note}_EEG"] = {'test auc': roc_auc_eeg, 'folds val auc': roc_auc_combined}
+            performance[f"{model_name}_Pupil"] = {'test auc': roc_auc_pupil, 'folds val auc': roc_auc_pupil}
+            performance[f"{model_name}_EEG-Pupil"] = {'test auc': roc_auc_eeg_pupil, 'folds val auc': roc_auc_combined}
+        performance[f"{model_name}_EEG"] = {'test auc': roc_auc_eeg, 'folds val auc': roc_auc_combined}
         print(f'{note}: test auc combined {roc_auc_combined}, test auc combined {roc_auc_eeg}, test auc pupil {roc_auc_pupil}\n'
               f'folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}\n')
     else:
@@ -140,10 +141,10 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
 
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
         folds_val_auc = mean_max_sublists(training_histories['auc_val'])
-        performance[note] = {'test auc': test_auc, 'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss, 'folds trian loss': folds_train_loss}
+        performance[model_name] = {'test auc': test_auc, 'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss, 'folds trian loss': folds_train_loss}
         print(f'{test_name}: test AUC {test_auc}, test accuracy: {test_acc}, test loss: {test_loss}\n'
               f'folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}\n')
-        print("#" * 100)
+    print("#" * 100)
     return performance
 
 def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_filter, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True):

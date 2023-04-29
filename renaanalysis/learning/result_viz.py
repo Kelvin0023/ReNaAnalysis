@@ -3,12 +3,14 @@ from matplotlib import pyplot as plt
 
 
 def viz_performances(metric, results, model_names, conditions_names, lockings, constrained_lockings, constrained_conditions, width=0.175):
+    plt.rcParams["figure.figsize"] = (24, 12)
     for c in conditions_names:
         this_lockings = lockings if c not in constrained_conditions else constrained_lockings
         ind = np.arange(len(this_lockings))
 
+        m: str
         for m_index, m in enumerate(model_names):
-            aucs = [results[(f'{c}-{l}', m)]['folds val auc'] for l in this_lockings]  # get the auc for each locking
+            aucs = [results[(f"{c}-{l}", m)][metric] for l in this_lockings]  # get the auc for each locking
 
             plt.bar(ind + m_index * width, aucs, width, label=f'{m}')
             for j in range(len(aucs)):
