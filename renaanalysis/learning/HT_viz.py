@@ -56,6 +56,8 @@ def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
         # y_test = torch.Tensor(y_test)
 
         rollout = VITAttentionRollout(model, device, attention_layer_class=Attention, token_shape=model.grid_dims, discard_ratio=discard_ratio, head_fusion=head_fusion)
+        y = torch.Tensor(y).to(device)
+        x = torch.Tensor(x).to(device)
         val_dataset = TensorDataset(x, y)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
         val_size = len(val_dataset)

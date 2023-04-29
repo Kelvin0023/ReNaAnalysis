@@ -51,7 +51,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
                 raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model_name == 'EEGPupil' else "")
         model_performance = eval_model(x[0], x[1], y, event_names, model_name, eeg_montage, test_name=test_name, n_folds=n_folds, exg_resample_rate=exg_resample_rate, ht_lr=ht_lr, ht_l2=ht_l2, ht_output_mode=ht_output_mode)
         locking_performance[locking_name] = model_performance
-        return locking_performance
+    return locking_performance
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage, test_name='', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi'):
     x_eeg_znormed = z_norm_by_trial(x_eeg)
@@ -123,7 +123,8 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             model, training_histories, criterion, last_activation, _encoder = train_model(x_eeg_train, y_train, model, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
             test_auc, test_loss, test_acc = eval(model, x_eeg_test, y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
             rollout_data_root = f'HT_{note}'
-            os.mkdir(rollout_data_root)
+            if not os.path.exists(rollout_data_root):
+                os.mkdir(rollout_data_root)
             ht_viz(model, x_eeg_test, y_test, event_names, rollout_data_root, model.window_duration, exg_resample_rate,
                    eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9,
                    load_saved_rollout=False, batch_size=64)
@@ -346,6 +347,7 @@ def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbos
         dataset_class = TensorDataset
 
     Y = _encoder(Y)
+    Y = torch.Tensor(Y).to(device)
     test_dataset = dataset_class(X, Y)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
 

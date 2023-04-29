@@ -433,7 +433,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, v
         for ch in eeg_picks:
             for event_name, events in event_groups.items():
                 try:
-                    y = epochs.crop(tmin_eeg_viz, tmax_eeg_viz)[event_name].pick_channels([ch]).get_data().squeeze(1)
+                    y = epochs.crop(tmin_eeg_viz, np.min([tmax_eeg_viz, epochs.tmax]))[event_name].pick_channels([ch]).get_data().squeeze(1)
                 except KeyError:  # meaning this event does not exist in these epochs
                     continue
                 y_mean = np.mean(y, axis=0)
