@@ -78,7 +78,7 @@ tpr_folds_pupil = []
 fpr_folds = []
 tpr_folds = []
 
-x_eeg_transformed = compute_pca_ica(x[0], num_top_compoenents)  # apply ICA and PCA
+x_eeg_transformed = compute_pca_ica(x[0], num_top_components)  # apply ICA and PCA
 
 for i, (train, test) in enumerate(cross_val_folds.split(x[0], y)):  # cross-validation; group arguement is not necessary unless using grouped folds
     print(f"Working on {i+1} fold of {num_folds}")

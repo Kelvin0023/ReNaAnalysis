@@ -100,7 +100,7 @@ else:
 
 x_eeg = np.copy(x[0])
 if is_reduce_eeg_dim:
-    x[0], _, _ = compute_pca_ica(x[0], num_top_compoenents)
+    x[0], _, _ = compute_pca_ica(x[0], num_top_components)
 
 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2, eeg_in_channels=x[0].shape[1])
 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)

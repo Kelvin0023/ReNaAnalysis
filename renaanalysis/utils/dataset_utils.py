@@ -18,6 +18,7 @@ from mne_bids import (BIDSPath, read_raw_bids, print_dir_tree, make_report,
 from sklearn.preprocessing import LabelEncoder
 
 from renaanalysis.utils.data_utils import epochs_to_class_samples
+from renaanalysis.utils.utils import preprocess_standard_eeg
 
 
 def visualize_eeg_epochs(epochs, event_groups, colors, eeg_picks, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
@@ -130,7 +131,9 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
             bids_path = bids_path.update(subject=subject, task=task, suffix=suffix, run=str(j + 1), extension=extension)
             raw = read_raw_bids(bids_path=bids_path, verbose=True)
 
-
+            raw = preprocess_standard_eeg(raw, ica_path=os.path.join(os.path.dirname(bids_path), 'sub-' + subject + '_task-' + task + '_run-' + str(j + 1) + '_ica.fif'),
+                                          is_running_ica=False,
+                                          ocular_artifact_mode='proxy', blink_ica_threshold=np.linspace(10, 7, 5), eyemovement_ica_threshold=np.linspace(2.5, 2.0, 5))
 
             tsv_path = os.path.join(bids_root, f'sub-{subject}/{suffix}')
             epoch_info_tsv = open(os.path.join(tsv_path, f'sub-{subject}_task-{task}_run-{j + 1}_events.tsv'))

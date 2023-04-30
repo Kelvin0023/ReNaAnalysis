@@ -1,10 +1,11 @@
+import datetime
 import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from renaanalysis.learning.train import eval_model
+from renaanalysis.learning.train import eval_model, preprocess_model_data
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
@@ -35,9 +36,14 @@ x, y = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_sa
 
 results = dict()
 
-is_regenerate_epochs = True
+x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x, None)
+now = datetime.datetime.now()
+datetime_string = now.strftime("%Y-%m-%d_%H-%M-%S")
+
 for m in models:
-    m_results = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_l2=ht_l2, eeg_montage=eeg_montage)
+    m_results = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_l2=ht_l2, eeg_montage=eeg_montage,
+                           x_eeg_znormed=x_eeg_znormed, x_eeg_pca_ica=x_eeg_pca_ica, x_pupil_znormed=x_pupil_znormed,
+                           test_name=f"auditory_oddball_{m}_{datetime_string}")
     results = {**m_results, **results}
     pickle.dump(results, open('model_locking_performances_auditory_oddball', 'wb'))
 

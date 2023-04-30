@@ -22,7 +22,7 @@ from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.learning.MutiInputDataset import MultiInputDataset
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
-    export_data_root, num_top_compoenents
+    export_data_root, num_top_components
 from renaanalysis.utils.data_utils import compute_pca_ica, rebalance_classes, mean_max_sublists, \
     mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
 import matplotlib.pyplot as plt
@@ -54,10 +54,19 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
             locking_performance[locking_name, _m_name] = _performance
     return locking_performance
 
-def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage, test_name='', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi'):
+
+def preprocess_model_data(x_eeg, x_pupil, n_top_components=20):
     x_eeg_znormed = z_norm_by_trial(x_eeg)
     x_pupil_znormed = z_norm_by_trial(x_pupil) if x_pupil is not None else None
-    x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, num_top_compoenents)
+    x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, n_top_components)
+    return x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed
+
+
+def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
+               test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
+               x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20):
+    if x_eeg_znormed is None or x_eeg_pca_ica is None or x_pupil_znormed is None:
+        x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
 
     model_performance = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate)
     return model_performance
@@ -163,7 +172,7 @@ def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_f
             raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}")
     x_eeg = z_norm_by_trial(x[0])
     x_pupil = z_norm_by_trial(x[1])
-    x_eeg_pca_ica, _, _ = compute_pca_ica(x[0], num_top_compoenents)
+    x_eeg_pca_ica, _, _ = compute_pca_ica(x[0], num_top_components)
     num_channels, num_timesteps = x_eeg.shape[1:]
 
     param_grid = ParameterGrid(grid_search_params)

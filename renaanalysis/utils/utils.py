@@ -490,14 +490,17 @@ def preprocess_standard_eeg(raw, ica_path, montage=mne.channels.make_standard_mo
                             resample_rate = None,
                             lowcut_eeg=1, lowcut_ecg='0.67',
                             lowcut_eog=0.3, highcut_eeg=50.,
-                            highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=1):
+                            highcut_ecg=40., highcut_eog=35, bad_channels=None,
+                            is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True,
+                            ocular_artifact_mode='proxy', blink_ica_threshold=np.linspace(3., 2., 5), eyemovement_ica_threshold=np.linspace(2.5, 1.5, 5),
+                            n_jobs=1):
     ch_names = montage.ch_names
     eeg_data = raw.get_data(picks='eeg')
     srate = raw.info['sfreq']
     proxy_horizontal_eog_data = eeg_data[(ch_names.index('F7'), ch_names.index('F8')), :] - eeg_data[ch_names.index('Fpz'), :]
     exg_data = np.concatenate([eeg_data, proxy_horizontal_eog_data])
 
-    data_channels = ['timestamps'] + ch_names + proxy_eog_ch_names + ['stim']
+    data_channels = ch_names + proxy_eog_ch_names
     data_channel_types = ['eeg'] * len(eeg_data) + ['eog'] * 2
     info = mne.create_info(data_channels, sfreq=srate, ch_types=data_channel_types)  # with 3 additional info markers and design matrix
     raw = mne.io.RawArray(exg_data, info)
@@ -512,7 +515,8 @@ def preprocess_standard_eeg(raw, ica_path, montage=mne.channels.make_standard_mo
     raw = raw.filter(l_freq=lowcut_eeg, h_freq=highcut_eeg, n_jobs=n_jobs, picks='eeg')  # bandpass filter for brain
     # raw = raw.filter(l_freq=lowcut_ecg, h_freq=highcut_ecg, n_jobs=n_jobs, picks='ecg')  # bandpass filter for heart
     raw = raw.filter(l_freq=lowcut_eog, h_freq=highcut_eog, n_jobs=n_jobs, picks='eog')  # bandpass filter for eye
-    raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_jobs)
+    notch_freqs = [x for x in np.arange(60, 241, 60) if x < srate / 2.]
+    raw = raw.notch_filter(freqs=notch_freqs, filter_length='auto', n_jobs=n_jobs)
 
     if resample_rate is not None:
         raw = raw.resample(resample_rate, n_jobs=n_jobs)
@@ -535,7 +539,7 @@ def preprocess_standard_eeg(raw, ica_path, montage=mne.channels.make_standard_mo
                 print("Proxying blink with Fpz, and left right eye movements with F8-Fpz, F7-Fpz")
 
                 blink_indices = []
-                for z_score_threshold in np.linspace(3., 2., 5):
+                for z_score_threshold in blink_ica_threshold:
                     blink_indices, blink_scores = ica.find_bads_eog(raw, ch_name='Fpz', threshold=z_score_threshold)
                     if len(blink_indices) > 0:
                         [print(f'With z threshold {z_score_threshold}, found Blink component at ICA index {x} with score {blink_scores[x]}, adding to ICA exclude') for x in blink_indices]
@@ -545,7 +549,7 @@ def preprocess_standard_eeg(raw, ica_path, montage=mne.channels.make_standard_mo
                     warnings.warn('HIGHLY UNLIKELY TO HAPPEN: No channel found to be significantly correlated with blink, skipping auto blink artifact removal')
 
                 eyemovement_indices = []
-                for z_score_threshold in np.linspace(2.5, 1.5, 5):
+                for z_score_threshold in eyemovement_ica_threshold:
                     eyemovement_indices, eyemovement_scores = ica.find_bads_eog(raw, ch_name=proxy_eog_ch_names, threshold=z_score_threshold)
                     if len(eyemovement_indices) > 0:
                         [print(f'Found Eye Movement component at ICA index {x} with score: [left {eyemovement_scores[0][x]}] [right {eyemovement_scores[1][x]}], adding to ICA exclude') for x in eyemovement_indices]
@@ -567,7 +571,8 @@ def preprocess_standard_eeg(raw, ica_path, montage=mne.channels.make_standard_mo
                     ica_includes = [int(x) for x in ica_includes.split(' ')]
                     if len(ica_includes) > 0: ica.exclude += [int(x) for x in range(ica.n_components) if x not in ica_includes]
                     print('Excluding ' + str([int(x) for x in range(ica.n_components) if x not in ica_includes]))
-
+            else:
+                raise ValueError('Invalid ocular_artifact_mode: ' + ocular_artifact_mode)
             if ica_path is not None:
                 f = open(ica_path + '.txt', "w")
                 f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
@@ -583,7 +588,9 @@ def preprocess_standard_eeg(raw, ica_path, montage=mne.channels.make_standard_mo
         print(': ICA exlucde component {0}'.format(str(ica.exclude)))
         ica.apply(raw)
 
-        return raw
+    return raw
+
+
 def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, resample_rate=None, lowcut_eeg=1, lowcut_ecg='0.67', lowcut_eog=0.3, highcut_eeg=50., highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=20):
     """
 
@@ -622,7 +629,8 @@ def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, resample_rate
     raw = raw.filter(l_freq=lowcut_ecg, h_freq=highcut_ecg, n_jobs=n_jobs, picks='ecg')  # bandpass filter for heart
     raw = raw.filter(l_freq=lowcut_eog, h_freq=highcut_eog, n_jobs=n_jobs, picks='eog')  # bandpass filter for eye
 
-    raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_jobs)
+    notch_freqs = [x for x in np.arange(60, 241, 60) if x < srate / 2.]
+    raw = raw.notch_filter(freqs=notch_freqs, filter_length='auto', n_jobs=n_jobs)
     if resample_rate is not None:
         raw = raw.resample(resample_rate, n_jobs=n_jobs)
 

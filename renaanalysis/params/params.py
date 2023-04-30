@@ -178,4 +178,4 @@ random_seed = 13
 
 # HDCA parameters
 num_folds = 10
-num_top_compoenents = 20
+num_top_components = 20
