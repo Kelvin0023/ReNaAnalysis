@@ -129,6 +129,9 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
         for j in range(num_runs):
             bids_path = bids_path.update(subject=subject, task=task, suffix=suffix, run=str(j + 1), extension=extension)
             raw = read_raw_bids(bids_path=bids_path, verbose=True)
+
+
+
             tsv_path = os.path.join(bids_root, f'sub-{subject}/{suffix}')
             epoch_info_tsv = open(os.path.join(tsv_path, f'sub-{subject}_task-{task}_run-{j + 1}_events.tsv'))
             epochs_info = pd.read_csv(epoch_info_tsv, sep='\t')

@@ -1,6 +1,7 @@
 import pickle
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 
 from renaanalysis.learning.train import eval_model
@@ -17,9 +18,8 @@ colors = {
     "oddball_with_reponse": "green"
 }
 picks = 'eeg'
-models = ['HT', 'EEGCNN']
+models = ['HDCA', 'HT', 'EEGCNN', 'EEGPupilCNN']
 n_folds = 10
-ht_lr=1e-5
 ht_l2=1e-5
 
 reload_saved_samples = True
@@ -37,16 +37,9 @@ results = dict()
 
 is_regenerate_epochs = True
 for m in models:
-    m_results = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2, eeg_montage=eeg_montage)
+    m_results = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_l2=ht_l2, eeg_montage=eeg_montage)
     results = {**m_results, **results}
-
-# is_regenerate_epochs = True
-# for m in models:
-#     m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model_name=m, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate)
-#     is_regenerate_epochs = False  # dont regenerate epochs after the first time
-#     results = {**m_results, **results}
-#
-pickle.dump(results, open('model_locking_performances', 'wb'))
+    pickle.dump(results, open('model_locking_performances_auditory_oddball', 'wb'))
 
 
 # import pickle
@@ -64,27 +57,18 @@ pickle.dump(results, open('model_locking_performances', 'wb'))
 plt.rcParams["figure.figsize"] = (24, 12)
 
 models = ['HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil', 'EEGPupilCNN', 'EEGCNN']
-constrained_conditions = ['RSVP', 'Carousel']
-conditions_names = ['RSVP', 'Carousel', 'VS']
-constrained_lockings = ['Item-Onset', 'I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
-lockings = ['I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
 
 width = 0.175
+metric = 'test auc'
 
-for c in conditions_names:
-    this_lockings = lockings if c not in constrained_conditions else constrained_lockings
-    ind = np.arange(len(this_lockings))
+metric_values = [results[m][metric] for m_index, m in enumerate(models)]  # get the auc for each locking
+plt.bar(np.arange(len(metric_values)), metric_values, width, label=f'{metric}')
+for j in range(len(metric_values)):
+    plt.text(j +  width, metric_values[j] + 0.05, str(round(metric_values[j], 3)), horizontalalignment='center',verticalalignment='center')
 
-    for m_index, m in enumerate(models):
-        aucs = [results[(f'{c}-{l}', m)]['folds val auc'] for l in this_lockings]  # get the auc for each locking
-
-        plt.bar(ind + m_index * width, aucs, width, label=f'{m}')
-        for j in range(len(aucs)):
-            plt.text(ind[j] + m_index * width, aucs[j] + 0.05, str(round(aucs[j], 3)), horizontalalignment='center',verticalalignment='center')
-
-    plt.ylim(0.0, 1.1)
-    plt.ylabel('AUC')
-    plt.title(f'Condition {c}, Accuracy by model and lockings')
-    plt.xticks(ind + width / 2, this_lockings)
-    plt.legend(loc=4)
-    plt.show()
+plt.ylim(0.0, 1.1)
+plt.ylabel(f'{metric} (averaged across folds)')
+plt.title(f'Auditory oddball {metric}')
+plt.xticks(np.arange(len(metric_values)), models)
+plt.legend(loc=4)
+plt.show()

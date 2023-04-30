@@ -235,32 +235,34 @@ class HDCA():
         self.num_pupil_windows = None
 
     def fit(self, x_eeg, x_eeg_pca_ica, x_pupil, y, is_plots=False, notes="", n_fold=10, exg_srate=200, split_window_eeg=100e-3, split_window_pupil=500e-3, verbose=0):
+        self._use_pupil = x_pupil is not None
         label_encoder = LabelEncoder()
         label_encoder.fit(y)
         self._encoder = lambda y: label_encoder.transform(y)
-        y = self._encoder(y)
+        y = self._encoder(np.copy(y))
+
+        if self._use_pupil:
+            self.split_size_pupil = int(split_window_pupil * eyetracking_resample_srate)
+            self.split_window_pupil = split_window_pupil
+            _, self.num_pupil_channels, self.num_windows_pupil, num_timepoints_per_window_pupil = sliding_window_view(x_pupil, window_shape=self.split_size_pupil,axis=2)[:, :, 0::self.split_size_pupil, :].shape
+            cw_weights_pupil_folds = np.empty((num_folds, self.num_windows_pupil))
+            roc_auc_folds_pupil = np.empty(num_folds)
+            fpr_folds_pupil = []
+            tpr_folds_pupil = []
 
         self.split_window_eeg = split_window_eeg
-        self.split_window_pupil = split_window_pupil
         self.exg_srate = exg_srate
-
         self.split_size_eeg = int(split_window_eeg * exg_srate)  # split data into 100ms bins
-        self.split_size_pupil = int(split_window_pupil * eyetracking_resample_srate)
+
         # multi-fold cross-validation
         cross_val_folds = StratifiedShuffleSplit(n_splits=n_fold, random_state=random_seed)
         _, self.num_eeg_channels, self.num_windows_eeg, num_timepoints_per_window_eeg = sliding_window_view(x_eeg, window_shape=self.split_size_eeg, axis=2)[:, :, 0::self.split_size_eeg, :].shape
-        _, self.num_pupil_channels, self.num_windows_pupil, num_timepoints_per_window_pupil = sliding_window_view(x_pupil, window_shape=self.split_size_pupil,axis=2)[:, :, 0::self.split_size_pupil, :].shape
-
         cw_weights_eeg_folds = np.empty((num_folds, self.num_windows_eeg))
-        cw_weights_pupil_folds = np.empty((num_folds, self.num_windows_pupil))
-
         activations_folds = np.empty((num_folds, len(self.event_names), self.num_eeg_channels, self.num_windows_eeg, num_timepoints_per_window_eeg))
         roc_auc_folds_eeg = np.empty(num_folds)
-        roc_auc_folds_pupil = np.empty(num_folds)
         fpr_folds_eeg = []
         tpr_folds_eeg = []
-        fpr_folds_pupil = []
-        tpr_folds_pupil = []
+
 
         # x_eeg_transformed, pca, ica = compute_pca_ica(x[0], num_top_compoenents)
         x_eeg_transformed = x_eeg_pca_ica
@@ -269,13 +271,13 @@ class HDCA():
             if verbose: print(f"Working on {i + 1} fold of {num_folds}")
 
             x_eeg_transformed_train, x_eeg_transformed_test, y_train, y_test = x_eeg_transformed[train],  x_eeg_transformed[test], y[train], y[test]
-            x_pupil_train, x_pupil_test, _, _ = x_pupil[train], x_pupil[test], y[train], y[test]
-
             x_eeg_transformed_train, y_train_eeg = rebalance_classes(x_eeg_transformed_train,y_train)  # rebalance by class
-            x_pupil_train, y_train_pupil = rebalance_classes(x_pupil_train, y_train)  # rebalance by class
-            assert np.all(y_train_eeg == y_train_pupil)
-            y_train = y_train_pupil
+            if self._use_pupil:
+                x_pupil_train, x_pupil_test, _, _ = x_pupil[train], x_pupil[test], y[train], y[test]
+                x_pupil_train, y_train_pupil = rebalance_classes(x_pupil_train, y_train)  # rebalance by class
+                assert np.all(y_train_eeg == y_train_pupil)
 
+            y_train = y_train_eeg
             x_eeg_test = x_eeg[test]
 
             # x_eeg_transformed_train_windowed = sliding_window_view(x_eeg_transformed_train, window_shape=self.split_size_eeg,axis=2)[:, :, 0::self.split_size_eeg,:]  # shape = #trials, #channels, #windows, #time points per window
@@ -297,39 +299,44 @@ class HDCA():
 
             # x_pupil_train_windowed = sliding_window_view(x_pupil_train, window_shape=self.split_size_pupil, axis=2)[:, :,0::self.split_size_pupil,:]  # shape = #trials, #channels, #windows, #time points per window
             # x_pupil_test_windowed = sliding_window_view(x_pupil_test, window_shape=self.split_size_pupil, axis=2)[:, :,0::self.split_size_pupil,:]  # shape = #trials, #channels, #windows, #time points per window
-            x_pupil_train_windowed = self._split_by_window(x_pupil_train, self.split_size_pupil)  # shape = #trials, #channels, #windows, #time points per window
-            x_pupil_test_windowed = self._split_by_window(x_pupil_test, self.split_size_pupil)  # shape = #trials, #channels, #windows, #time points per window
+            if self._use_pupil:
+                x_pupil_train_windowed = self._split_by_window(x_pupil_train, self.split_size_pupil)  # shape = #trials, #channels, #windows, #time points per window
+                x_pupil_test_windowed = self._split_by_window(x_pupil_test, self.split_size_pupil)  # shape = #trials, #channels, #windows, #time points per window
+                _, self.num_channels_pupil, self.num_windows_pupil, self.num_timepoints_per_window_pupil = x_pupil_train_windowed.shape
+                lda_weights_pupil, projection_train_pupil, projection_test_pupil, window_pupil_ldas = _train_compute_window_projections(x_pupil_train_windowed, x_pupil_test_windowed, y_train)
+                # z-norm the projections
+                projection_train_pupil, projection_test_pupil, self.pupil_mean, self.pupil_std = z_norm_projection(projection_train_pupil, projection_test_pupil)
 
-            _, self.num_channels_pupil, self.num_windows_pupil, self.num_timepoints_per_window_pupil = x_pupil_train_windowed.shape
-            lda_weights_pupil, projection_train_pupil, projection_test_pupil, window_pupil_ldas = _train_compute_window_projections(x_pupil_train_windowed, x_pupil_test_windowed, y_train)
-
-            # z-norm the projections
-            projection_train_pupil, projection_test_pupil, self.pupil_mean, self.pupil_std = z_norm_projection(projection_train_pupil, projection_test_pupil)
             projection_train_eeg, projection_test_eeg, self.eeg_mean, self.eeg_std = z_norm_projection(projection_train_eeg, projection_test_eeg)
-
-            projection_combined_train = np.concatenate([projection_train_eeg, projection_train_pupil], axis=1)
-            projection_combined_test = np.concatenate([projection_test_eeg, projection_test_pupil], axis=1)
 
             if verbose >= 2: print('Solving cross bin weights')
             cw_weights_eeg, roc_auc_eeg, fpr_eeg, tpr_eeg, crossbin_model_eeg = solve_crossbin_weights(projection_train_eeg, projection_test_eeg,y_train, y_test, self.num_windows_eeg)
-            cw_weights_pupil, roc_auc_pupil, fpr_pupil, tpr_pupil, crossbin_model_pupil = solve_crossbin_weights(projection_train_pupil, projection_test_pupil, y_train, y_test, self.num_windows_pupil)
-            cw_weights_combined, roc_auc_combined, fpr_combined, tpr_combined, crossbin_model_combined = solve_crossbin_weights(projection_combined_train, projection_combined_test, y_train, y_test,self.num_windows_pupil)
+
+            if self._use_pupil:
+                cw_weights_pupil, roc_auc_pupil, fpr_pupil, tpr_pupil, crossbin_model_pupil = solve_crossbin_weights( projection_train_pupil, projection_test_pupil, y_train, y_test, self.num_windows_pupil)
+                projection_combined_train = np.concatenate([projection_train_eeg, projection_train_pupil], axis=1)
+                projection_combined_test = np.concatenate([projection_test_eeg, projection_test_pupil], axis=1)
+                cw_weights_combined, roc_auc_combined, fpr_combined, tpr_combined, crossbin_model_combined = solve_crossbin_weights(projection_combined_train, projection_combined_test, y_train, y_test,self.num_windows_pupil)
+            else:
+                roc_auc_pupil = None
+                roc_auc_combined = roc_auc_eeg
 
             if roc_auc_combined > best_auc:  # save the weights of the best model across folds
                 best_auc = roc_auc_combined
                 self.window_eeg_ldas = window_eeg_ldas
-                self.window_pupil_ldas = window_pupil_ldas
                 self.crossbin_model_eeg = crossbin_model_eeg
-                self.crossbin_model_pupil = crossbin_model_pupil
-                self.crossbin_model_combined = crossbin_model_combined
+                if self._use_pupil:
+                    self.window_pupil_ldas = window_pupil_ldas
+                    self.crossbin_model_pupil = crossbin_model_pupil
+                    self.crossbin_model_combined = crossbin_model_combined
 
-            cw_weights_pupil_folds[i] = cw_weights_pupil
-            roc_auc_folds_pupil[i] = roc_auc_pupil
-            fpr_folds_pupil.append(fpr_pupil)
-            tpr_folds_pupil.append(tpr_pupil)
+            if self._use_pupil:
+                cw_weights_pupil_folds[i] = cw_weights_pupil
+                roc_auc_folds_pupil[i] = roc_auc_pupil
+                fpr_folds_pupil.append(fpr_pupil)
+                tpr_folds_pupil.append(tpr_pupil)
 
             cw_weights_eeg_folds[i] = cw_weights_eeg
-
             activations_folds[i] = activation
 
             roc_auc_folds_eeg[i] = roc_auc_eeg
@@ -341,7 +348,8 @@ class HDCA():
 
         if verbose:
             print(f"Mean EEG cross ROC-AUC is {np.mean(roc_auc_folds_eeg)}")
-            print(f"Mean Pupil cross ROC-AUC is {np.mean(roc_auc_folds_pupil)}")
+            if self._use_pupil:
+                print(f"Mean Pupil cross ROC-AUC is {np.mean(roc_auc_folds_pupil)}")
 
         if is_plots:
             best_fold_i = np.argmax(roc_auc_folds_eeg)
@@ -351,18 +359,19 @@ class HDCA():
             fig = plt.figure(figsize=(10, 10))
             display.plot(ax=plt.gca(), name='ROC')
             plt.tight_layout()
-            plt.title(f"{notes} Pupil ROC of the best cross-val fold")
-            plt.show()
-
-            best_fold_i = np.argmax(roc_auc_folds_pupil)
-            display = metrics.RocCurveDisplay(fpr=fpr_folds_pupil[best_fold_i], tpr=tpr_folds_pupil[best_fold_i],
-                                              roc_auc=roc_auc_folds_pupil[best_fold_i],
-                                              estimator_name='example estimator')
-            fig = plt.figure(figsize=(10, 10))
-            display.plot(ax=plt.gca(), name='ROC')
-            plt.tight_layout()
             plt.title(f"{notes} EEG ROC of the best cross-val fold")
             plt.show()
+
+            if self._use_pupil:
+                best_fold_i = np.argmax(roc_auc_folds_pupil)
+                display = metrics.RocCurveDisplay(fpr=fpr_folds_pupil[best_fold_i], tpr=tpr_folds_pupil[best_fold_i],
+                                                  roc_auc=roc_auc_folds_pupil[best_fold_i],
+                                                  estimator_name='example estimator')
+                fig = plt.figure(figsize=(10, 10))
+                display.plot(ax=plt.gca(), name='ROC')
+                plt.tight_layout()
+                plt.title(f"{notes} Pupil ROC of the best cross-val fold")
+                plt.show()
 
             fig = plt.figure(figsize=(15, 10))
             plt.boxplot(cw_weights_eeg_folds)
@@ -379,43 +388,50 @@ class HDCA():
             plt.tight_layout()
             plt.show()
 
-            fig = plt.figure(figsize=(15, 10))
-            plt.boxplot(cw_weights_pupil_folds)
-            # plt.plot(cross_window_weights)
-            x_labels = [f"{int((i - 1) * split_window_pupil * 1e3)}ms" for i in range(self.num_windows_pupil)]
-            x_ticks = np.arange(0.5, self.num_windows_pupil + 0.5, 1)
-            plt.plot(list(range(1, self.num_windows_pupil + 1)), np.mean(cw_weights_pupil_folds, axis=0),
-                     label="folds average")
+            if self._use_pupil:
+                fig = plt.figure(figsize=(15, 10))
+                plt.boxplot(cw_weights_pupil_folds)
+                # plt.plot(cross_window_weights)
+                x_labels = [f"{int((i - 1) * split_window_pupil * 1e3)}ms" for i in range(self.num_windows_pupil)]
+                x_ticks = np.arange(0.5, self.num_windows_pupil + 0.5, 1)
+                plt.plot(list(range(1, self.num_windows_pupil + 1)), np.mean(cw_weights_pupil_folds, axis=0),
+                         label="folds average")
 
-            plt.xticks(ticks=x_ticks, labels=x_labels)
-            plt.xlabel("500 ms windowed bins")
-            plt.ylabel("Cross-bin weights")
-            plt.title(f'{notes} Cross-bin weights, {num_folds}-fold cross validation')
-            plt.legend()
-            plt.tight_layout()
-            plt.show()
+                plt.xticks(ticks=x_ticks, labels=x_labels)
+                plt.xlabel("500 ms windowed bins")
+                plt.ylabel("Cross-bin weights")
+                plt.title(f'{notes} Cross-bin weights, {num_folds}-fold cross validation')
+                plt.legend()
+                plt.tight_layout()
+                plt.show()
 
         return roc_auc_combined, roc_auc_eeg, roc_auc_pupil
 
     def eval(self, x_eeg, x_eeg_pca_ica, x_pupil, y, notes=""):
+        y = self._encoder(np.copy(y))
+
         x_eeg_transformed_windowed = self._split_by_window(x_eeg_pca_ica, self.split_size_eeg)  # shape = #trials, #channels, #windows, #time points per window
         x_eeg_windowed = self._split_by_window(x_eeg, self.split_size_eeg)  # shape = #trials, #channels, #windows, #time points per window
 
-        x_pupil_windowed = self._split_by_window(x_pupil, self.split_size_pupil)  # shape = #trials, #channels, #windows, #time points per window
+        if self._use_pupil:
+            x_pupil_windowed = self._split_by_window(x_pupil, self.split_size_pupil)  # shape = #trials, #channels, #windows, #time points per window
+            lda_projections_pupil = _compute_window_lda_projections(x_pupil_windowed, self.window_pupil_ldas)
+            projection_pupil = z_norm_hdca(lda_projections_pupil, self.pupil_mean, self.pupil_std)
 
         lda_projections_eeg = _compute_window_lda_projections(x_eeg_transformed_windowed, self.window_eeg_ldas)
-        lda_projections_pupil = _compute_window_lda_projections(x_pupil_windowed, self.window_pupil_ldas)
-
         activation = compute_forward(x_eeg_windowed, y, lda_projections_eeg)
 
         projection_eeg = z_norm_hdca(lda_projections_eeg, self.eeg_mean, self.eeg_std)
-        projection_pupil = z_norm_hdca(lda_projections_pupil, self.pupil_mean, self.pupil_std)
-        projection_combined = np.concatenate([projection_eeg, projection_pupil], axis=1)
 
-        _, roc_auc_eeg, fpr_eeg, tpr_eeg = eval_crossbin_model(projection_eeg, y, self.crossbin_model_eeg)
-        _, roc_auc_pupil, fpr_pupil, tpr_pupil = eval_crossbin_model(projection_pupil, y, self.crossbin_model_pupil)
-        y_pred, roc_auc_combined, fpr_combined, tpr_combined = eval_crossbin_model(projection_combined, y, self.crossbin_model_combined)
+        y_pred_eeg, roc_auc_eeg, fpr_eeg, tpr_eeg = eval_crossbin_model(projection_eeg, y, self.crossbin_model_eeg)
 
+        if self._use_pupil:
+            projection_combined = np.concatenate([projection_eeg, projection_pupil], axis=1)
+            _, roc_auc_pupil, fpr_pupil, tpr_pupil = eval_crossbin_model(projection_pupil, y, self.crossbin_model_pupil)
+            y_pred, roc_auc_combined, fpr_combined, tpr_combined = eval_crossbin_model(projection_combined, y, self.crossbin_model_combined)
+        else:
+            roc_auc_combined, roc_auc_pupil = None, None
+            y_pred = y_pred_eeg
         plot_forward(activation, self.event_names, self.split_window_eeg, self.num_windows_eeg,exg_srate=self.exg_srate, notes=f"{notes} Forward model activation")
         return y_pred, roc_auc_combined, roc_auc_eeg, roc_auc_pupil
 

@@ -482,12 +482,108 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', out_dir=None, v
 def flatten_list(l):
     return [item for sublist in l for item in sublist]
 
-
-
 def append_list_lines_to_file(l, path):
     with open(path, 'a') as filehandle:
         filehandle.writelines("%s\n" % x for x in l)
 
+def preprocess_standard_eeg(raw, ica_path, montage=mne.channels.make_standard_montage('biosemi64'),
+                            resample_rate = None,
+                            lowcut_eeg=1, lowcut_ecg='0.67',
+                            lowcut_eog=0.3, highcut_eeg=50.,
+                            highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=1):
+    ch_names = montage.ch_names
+    eeg_data = raw.get_data(picks='eeg')
+    srate = raw.info['sfreq']
+    proxy_horizontal_eog_data = eeg_data[(ch_names.index('F7'), ch_names.index('F8')), :] - eeg_data[ch_names.index('Fpz'), :]
+    exg_data = np.concatenate([eeg_data, proxy_horizontal_eog_data])
+
+    data_channels = ['timestamps'] + ch_names + proxy_eog_ch_names + ['stim']
+    data_channel_types = ['eeg'] * len(eeg_data) + ['eog'] * 2
+    info = mne.create_info(data_channels, sfreq=srate, ch_types=data_channel_types)  # with 3 additional info markers and design matrix
+    raw = mne.io.RawArray(exg_data, info)
+    raw.set_montage(montage)
+
+    raw, _ = mne.set_eeg_reference(raw, 'average', projection=False)
+
+    if bad_channels is not None: # TODO data pipeline does not give bad channels to this function right now
+        raw.info['bads'] = bad_channels
+        raw.interpolate_bads(method={'eeg': 'spline'}, verbose='INFO')
+
+    raw = raw.filter(l_freq=lowcut_eeg, h_freq=highcut_eeg, n_jobs=n_jobs, picks='eeg')  # bandpass filter for brain
+    # raw = raw.filter(l_freq=lowcut_ecg, h_freq=highcut_ecg, n_jobs=n_jobs, picks='ecg')  # bandpass filter for heart
+    raw = raw.filter(l_freq=lowcut_eog, h_freq=highcut_eog, n_jobs=n_jobs, picks='eog')  # bandpass filter for eye
+    raw = raw.notch_filter(freqs=np.arange(60, 241, 60), filter_length='auto', n_jobs=n_jobs)
+
+    if resample_rate is not None:
+        raw = raw.resample(resample_rate, n_jobs=n_jobs)
+    if is_running_ica:
+        if is_regenerate_ica or (not os.path.exists(ica_path + '.txt') or not os.path.exists(ica_path + '-ica.fif')):
+            ica = mne.preprocessing.ICA(n_components=20, random_state=random_seed, max_iter=800)
+            ica.fit(raw, picks='eeg')
+
+            # if 'ECG00' in raw.ch_names:
+            #     ecg_indices, ecg_scores = ica.find_bads_ecg(raw, ch_name='ECG00', method='correlation', threshold='auto')
+            #     # ica.plot_scores(ecg_scores)
+            #     if len(ecg_indices) > 0:
+            #         [print('Found ECG component at ICA index {0} with score {1}, adding to ICA exclude'.format(x, ecg_scores[x])) for x in ecg_indices]
+            #         ica.exclude += ecg_indices
+            #     else:
+            #         print('No channel found to be significantly correlated with ECG, skipping auto ECG artifact removal')
+            # else:
+            #     print('No ECG channel found, skipping auto ECG artifact removal')
+            if ocular_artifact_mode == 'proxy':
+                print("Proxying blink with Fpz, and left right eye movements with F8-Fpz, F7-Fpz")
+
+                blink_indices = []
+                for z_score_threshold in np.linspace(3., 2., 5):
+                    blink_indices, blink_scores = ica.find_bads_eog(raw, ch_name='Fpz', threshold=z_score_threshold)
+                    if len(blink_indices) > 0:
+                        [print(f'With z threshold {z_score_threshold}, found Blink component at ICA index {x} with score {blink_scores[x]}, adding to ICA exclude') for x in blink_indices]
+                        ica.exclude += blink_indices
+                        break
+                if len(blink_indices) == 0:
+                    warnings.warn('HIGHLY UNLIKELY TO HAPPEN: No channel found to be significantly correlated with blink, skipping auto blink artifact removal')
+
+                eyemovement_indices = []
+                for z_score_threshold in np.linspace(2.5, 1.5, 5):
+                    eyemovement_indices, eyemovement_scores = ica.find_bads_eog(raw, ch_name=proxy_eog_ch_names, threshold=z_score_threshold)
+                    if len(eyemovement_indices) > 0:
+                        [print(f'Found Eye Movement component at ICA index {x} with score: [left {eyemovement_scores[0][x]}] [right {eyemovement_scores[1][x]}], adding to ICA exclude') for x in eyemovement_indices]
+                        ica.exclude += eyemovement_indices
+                        break
+                if len(eyemovement_indices) == 0:
+                    warnings.warn('HIGHLY UNLIKELY TO HAPPEN: No channel found to be significantly correlated with Horizontal Eyemovement, skipping auto eyemovement artifact removal')
+
+                ica.plot_sources(raw)
+                ica.plot_components()
+            elif ocular_artifact_mode == 'manual':
+                ica.plot_sources(raw)
+                ica.plot_components()
+                if is_ica_selection_inclusive:
+                    ica_excludes = input("Enter manual ICA components to exclude (use space to deliminate): ")
+                    if len(ica_excludes) > 0: ica.exclude += [int(x) for x in ica_excludes.split(' ') if x.isdigit()]
+                else:
+                    ica_includes = input("Enter manual ICA components to INCLUDE (use space to deliminate): ")
+                    ica_includes = [int(x) for x in ica_includes.split(' ')]
+                    if len(ica_includes) > 0: ica.exclude += [int(x) for x in range(ica.n_components) if x not in ica_includes]
+                    print('Excluding ' + str([int(x) for x in range(ica.n_components) if x not in ica_includes]))
+
+            if ica_path is not None:
+                f = open(ica_path + '.txt', "w")
+                f.writelines("%s\n" % ica_comp for ica_comp in ica.exclude)
+                f.close()
+                ica.save(ica_path + '-ica.fif', overwrite=True)
+            print('Saving ICA components', end='')
+        else:
+            ica = mne.preprocessing.read_ica(ica_path + '-ica.fif')
+            with open(ica_path + '.txt', 'r') as filehandle:
+                ica.exclude = [int(line.rstrip()) for line in filehandle.readlines()]
+            print('Found and loaded existing ICA file', end='')
+
+        print(': ICA exlucde component {0}'.format(str(ica.exclude)))
+        ica.apply(raw)
+
+        return raw
 def preprocess_session_eeg(data, timestamps, ica_path, srate=2048, resample_rate=None, lowcut_eeg=1, lowcut_ecg='0.67', lowcut_eog=0.3, highcut_eeg=50., highcut_ecg=40., highcut_eog=35, bad_channels=None, is_running_ica=True, is_regenerate_ica=True, is_ica_selection_inclusive=True, ocular_artifact_mode='proxy', n_jobs=20):
     """
 
