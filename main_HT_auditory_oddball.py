@@ -20,7 +20,7 @@ colors = {
 }
 picks = 'eeg'
 models = ['HT', 'HDCA', 'EEGCNN']
-n_folds = 2
+n_folds = 10
 ht_l2 = 1e-5
 
 reload_saved_samples = True
@@ -60,9 +60,9 @@ for m in models:
 #     new_results[new_key] = value
 # pickle.dump(new_results, open('model_locking_performances', 'wb'))
 # exit()
-plt.rcParams["figure.figsize"] = (24, 12)
+# plt.rcParams["figure.figsize"] = (24, 12)
 
-models = ['HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil', 'EEGPupilCNN', 'EEGCNN']
+models = ['HDCA_EEG', 'HT', 'EEGCNN']
 
 width = 0.175
 metric = 'test auc'
@@ -76,5 +76,5 @@ plt.ylim(0.0, 1.1)
 plt.ylabel(f'{metric} (averaged across folds)')
 plt.title(f'Auditory oddball {metric}')
 plt.xticks(np.arange(len(metric_values)), models)
-plt.legend(loc=4)
+plt.legend()
 plt.show()
