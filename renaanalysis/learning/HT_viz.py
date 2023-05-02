@@ -14,12 +14,13 @@ from renaanalysis.learning.HT import HierarchicalTransformer, Attention
 from renaanalysis.learning.transformer_rollout import VITAttentionRollout
 
 
-def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
+def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_names,
            data_root,
            split_window_eeg, exg_resample_rate, eeg_montage, num_timesteps=None, num_channels=None,
            note='',
            head_fusion='max', discard_ratio=0.9,
            load_saved_rollout=False, batch_size=64):
+    event_ids = {event_name: event_id for event_id, event_name in zip(np.sort(np.unique(Y)), event_names)}
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if isinstance(model, str):
         assert num_timesteps is not None and num_channels is not None, "Must provide num_timesteps and num_channels if model is a path"
@@ -56,9 +57,10 @@ def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
         # y_test = torch.Tensor(y_test)
 
         rollout = VITAttentionRollout(model, device, attention_layer_class=Attention, token_shape=model.grid_dims, discard_ratio=discard_ratio, head_fusion=head_fusion)
-        y = torch.Tensor(y).to(device)
-        x = torch.Tensor(x).to(device)
-        val_dataset = TensorDataset(x, y)
+        Y_encoded = y_encoder(Y)
+        Y_encoded_tensor = torch.Tensor(Y_encoded).to(device)
+        X_tensor = torch.Tensor(X).to(device)
+        val_dataset = TensorDataset(X_tensor, Y_encoded_tensor)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
         val_size = len(val_dataset)
 
@@ -89,11 +91,13 @@ def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
     fig = plt.figure(figsize=(22, 10), constrained_layout=True)
     subfigs = fig.subfigures(2, 1)
     x_mean_max = np.max(np.mean(_x, axis=(0, -1)))
-    for class_index, e_name in enumerate(event_names):
+    for class_index, (e_name, e_id) in enumerate(event_ids.items()):
         axes = subfigs[class_index].subplots(1, model.num_windows, sharey=True)
+        y_event = np.squeeze(y_encoder(np.array([e_id])[np.newaxis, :]))
+        _x_class = _x[np.all(_y == y_event, axis=1)]
         for window_i in range(model.num_windows):
-            _x_class = _x[_y == class_index][:, :, (window_i) * window_size:(window_i + 1) * window_size]
-            _x_mean = np.mean(_x_class, axis=(0, -1))
+            _x_class_window = _x_class[:, :, (window_i) * window_size:(window_i + 1) * window_size]
+            _x_mean = np.mean(_x_class_window, axis=(0, -1))
 
             plot_topomap(_x_mean, info, axes=axes[window_i - 1], show=False, res=512, vlim=(0, x_mean_max))
             # plot_topomap(activation, info, axes=axes[window_i - 1], show=False, res=512, vlim=(np.min(this__roll), np.max(this_roll)))
@@ -130,14 +134,15 @@ def ht_viz(model: Union[str, HierarchicalTransformer], x, y, event_names,
         subfigs = fig.subfigures(2, 1)
 
         # plot the topomap rollouts
-        for class_index, e_name in enumerate(event_names):
+        for class_index, (e_name, e_id) in enumerate(event_ids.items()):
             axes = subfigs[class_index].subplots(1, model.num_windows, sharey=True)
-
-            activation_max = np.max(np.sum(this_roll, axis=0))
+            y_event = np.squeeze(y_encoder(np.array([e_id])[np.newaxis, :]))
+            activation_class = this_roll[np.all(_y == y_event, axis=1)]
+            # activation_max = np.max(np.sum(this_roll, axis=0))
             for window_i in range(model.num_windows):
-                activation = this_roll[_y == class_index][:, :, window_i]
-                # activation = np.sum(activation, axis=0)
-                activation = activation[0]
+                activation = activation_class[:, :, window_i]
+                activation = np.sum(activation, axis=0)
+                # activation = activation[0]
                 activation_max = np.max(activation)
 
                 plot_topomap(activation, info, axes=axes[window_i - 1], show=False, res=512, vlim=(0, activation_max))

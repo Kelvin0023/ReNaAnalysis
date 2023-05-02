@@ -97,6 +97,8 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     x_eeg_train, x_eeg_pca_ica_train = x_eeg[train], x_eeg_pca_ica[train]
     x_eeg_test, x_eeg_pca_ica_test = x_eeg[test], x_eeg_pca_ica[test]
     y_train, y_test = y[train], y[test]
+    assert np.all(np.unique(y_test) == np.unique(y_train) ), "train and test labels are not the same"
+    assert len(np.unique(y_test)) == len(event_names), "number of unique labels is not the same as number of event names"
 
     if x_pupil is not None:
         x_pupil_train, x_pupil_test = x_pupil[train], x_pupil[test]
@@ -135,7 +137,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             rollout_data_root = f'HT_{note}'
             if not os.path.exists(rollout_data_root):
                 os.mkdir(rollout_data_root)
-            ht_viz(model, x_eeg_test, y_test, event_names, rollout_data_root, model.window_duration, exg_resample_rate,
+            ht_viz(model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, model.window_duration, exg_resample_rate,
                    eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9,
                    load_saved_rollout=False, batch_size=64)
         else:  # these models use PCA-ICA reduced EEG data
@@ -236,12 +238,14 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
         label_encoder = LabelEncoder()
         label_encoder.fit(Y)
         _encoder = lambda y: label_encoder.transform(y).reshape(-1, 1)
+        # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
         criterion = nn.BCELoss(reduction='mean')
         last_activation = nn.Sigmoid()
     else:
         label_encoder = preprocessing.OneHotEncoder()
         label_encoder.fit(Y.reshape(-1, 1))
         _encoder = lambda y: label_encoder.transform(y.reshape(-1, 1)).toarray()
+        # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
         criterion = nn.CrossEntropyLoss()
         last_activation = nn.Softmax(dim=1)
 
