@@ -35,6 +35,7 @@ x, y = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_sa
 # lockings test  ####################################################################################################
 
 results = dict()
+pickle.dump(results, open('model_locking_performances_auditory_oddball', 'wb'))
 
 x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x, None)
 now = datetime.datetime.now()
