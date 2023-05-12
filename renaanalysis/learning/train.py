@@ -49,7 +49,7 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
                 y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
             except FileNotFoundError:
                 raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model_name == 'EEGPupil' else "")
-        model_performance = eval_model(x[0], x[1], y, event_names, model_name, eeg_montage, test_name=test_name, n_folds=n_folds, exg_resample_rate=exg_resample_rate, ht_lr=ht_lr, ht_l2=ht_l2, ht_output_mode=ht_output_mode)
+        model_performance, training_histories = eval_model(x[0], x[1], y, event_names, model_name, eeg_montage, test_name=test_name, n_folds=n_folds, exg_resample_rate=exg_resample_rate, ht_lr=ht_lr, ht_l2=ht_l2, ht_output_mode=ht_output_mode)
         for _m_name, _performance in model_performance.items():  # HDCA expands into three models, thus having three performance results
             locking_performance[locking_name, _m_name] = _performance
     return locking_performance
@@ -68,8 +68,8 @@ def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
     if x_eeg_znormed is None or x_eeg_pca_ica is None or x_pupil_znormed is None:
         x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
 
-    model_performance = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate)
-    return model_performance
+    model_performance, training_histories = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate)
+    return model_performance, training_histories
 
 def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_name,
                ht_output_mode, eeg_montage, ht_lr=1e-4, ht_l2=1e-6,
@@ -107,6 +107,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
 
     note = f"{test_name}_{model_name}"
     performance = {}
+    training_histories = None
     if model_name == 'HDCA':
         # hdca_func = hdca if x_pupil is not None else hdca_eeg
         # roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca_func(x_eeg_train, x_eeg_pca_ica_train, x_pupil_train, y_train, event_names,is_plots=True, exg_srate=exg_resample_rate, notes=note, verbose=0)  # give the original eeg data, no need to apply HDCA again
@@ -156,7 +157,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
         print(f'{test_name}: test AUC {test_auc}, test accuracy: {test_acc}, test loss: {test_loss}\n'
               f'folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}\n')
     print("#" * 100)
-    return performance
+    return performance, training_histories
 
 def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_filter, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True):
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
