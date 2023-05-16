@@ -19,7 +19,12 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
            split_window_eeg, exg_resample_rate, eeg_montage, num_timesteps=None, num_channels=None,
            note='',
            head_fusion='max', discard_ratio=0.9,
-           load_saved_rollout=False, batch_size=64):
+           load_saved_rollout=False, batch_size=64, X_pca_ica=None):
+    """
+    @param num_channels: number of channels for the model. This can be different from the number of channels in X. If they are different,
+    we assume the model is using dimension reduced data.
+    @param X_pca_ica: if None, assume model is not using dimension reduced data
+    """
     event_ids = {event_name: event_id for event_id, event_name in zip(np.sort(np.unique(Y)), event_names)}
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if isinstance(model, str):
@@ -60,20 +65,44 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
         Y_encoded = y_encoder(Y)
         Y_encoded_tensor = torch.Tensor(Y_encoded).to(device)
         X_tensor = torch.Tensor(X).to(device)
-        val_dataset = TensorDataset(X_tensor, Y_encoded_tensor)
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
-        val_size = len(val_dataset)
+
+        if X_pca_ica is not None:
+            X_pca_ica_tensor = torch.Tensor(X_pca_ica).to(device)
+        else:  # otherwise just duplicate the X_tensor
+            X_pca_ica_tensor = X_tensor
+        dataset = TensorDataset(X_tensor, X_pca_ica_tensor, Y_encoded_tensor)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+        val_size = len(dataset)
 
         rolls = defaultdict(list)
         _y = []
         _x = []
-        for i, (x, y) in enumerate(val_dataloader):
+        for i, (x, x_pca_ica, y) in enumerate(dataloader):
             print(f"Rolling out attention for batch {i} of {val_size // batch_size}")
-            for j, single_x in enumerate(x): # one sample at a time
+            for j, (single_x, single_x_pca_ica) in enumerate(zip(x, x_pca_ica)): # one sample at a time
                 print(f"Working on sample {j} of {len(x)}")
                 for roll_depth in range(model.depth):
                     with torch.no_grad():
-                        rolls[roll_depth].append(rollout(depth=roll_depth, input_tensor=single_x.unsqueeze(0)))
+                        x_data = single_x.unsqueeze(0) if X_pca_ica is None else single_x_pca_ica.unsqueeze(0)
+                        # rolls[roll_depth].append(rollout(depth=roll_depth, input_tensor=x_data))
+
+                        roll = rollout(depth=roll_depth, input_tensor=x_data)
+                        roll_tensor = torch.Tensor(roll).to(device)
+                        activation = torch.empty((X.shape[1], model.num_windows))
+                        if roll.shape[0] != X.shape[1]:  # HT is using dimension-reduced input
+                            # compute forward activation
+                            single_x_windowed = torch.chunk(single_x, model.num_windows, dim=1)
+                            for window_i, x_window_data in enumerate(single_x_windowed):
+                                roll_tensor_window = roll_tensor[:, window_i]
+                                denom = torch.matmul(roll_tensor_window.T, roll_tensor_window)
+                                if denom == 0:
+                                    activation[:, window_i] = 0
+                                else:
+                                    activation[:, window_i] = torch.matmul(x_window_data, roll_tensor_window) / denom
+                        else:
+                            activation = roll
+                        rolls[roll_depth].append(activation)
+
             _y.append(y.cpu().numpy())
             _x.append(x.cpu().numpy())
         _x = np.concatenate(_x)

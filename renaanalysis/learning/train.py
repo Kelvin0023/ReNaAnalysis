@@ -130,17 +130,20 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             # model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica_train, x_pupil_train], y_train, model, test_name=test_name, n_folds=n_folds)
             test_auc, test_loss, test_acc = eval(model, [x_eeg_pca_ica_test, x_pupil_test], y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
 
-        elif model_name == 'HT':  # this model uses un-dimension reduced EEG data
-            num_channels, num_timesteps = x_eeg_train.shape[1:]
+        elif model_name == 'HT' or model_name == 'HT-pca-ica':  # this model uses un-dimension reduced EEG data
+            num_timesteps = x_eeg_train.shape[2]
+            num_channels = x_eeg_pca_ica_train.shape[1] if model_name == 'HT-pca-ica' else x_eeg_train.shape[1]
+
             model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
-            model, training_histories, criterion, last_activation, _encoder = train_model(x_eeg_train, y_train, model, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
-            test_auc, test_loss, test_acc = eval(model, x_eeg_test, y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
+            training_data = x_eeg_pca_ica_train if model_name == 'HT-pca-ica' else x_eeg_train
+            test_data = x_eeg_pca_ica_test if model_name == 'HT-pca-ica' else x_eeg_test
+            model, training_histories, criterion, last_activation, _encoder = train_model(training_data, y_train, model, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
+            test_auc, test_loss, test_acc = eval(model, test_data, y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
             rollout_data_root = f'HT_{note}'
             if not os.path.exists(rollout_data_root):
                 os.mkdir(rollout_data_root)
             ht_viz(model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, model.window_duration, exg_resample_rate,
-                   eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9,
-                   load_saved_rollout=False, batch_size=64)
+                   eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
         else:  # these models use PCA-ICA reduced EEG data
             if model_name == 'EEGCNN':
                 model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
@@ -437,7 +440,7 @@ def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mod
             predicted_labels = torch.argmax(y_pred, dim=1)
             true_label = torch.argmax(y_tensor, dim=1)
         num_correct_preds += torch.sum(true_label == predicted_labels).item()
-        if verbose >= 1: pbar.set_description('Validating [{}]: loss:{:.8f}'.format(mini_batch_i, loss.item()))
+        if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
     if verbose >= 1: pbar.close()
     return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset)

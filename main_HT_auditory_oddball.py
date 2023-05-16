@@ -21,8 +21,9 @@ colors = {
     "oddball_with_reponse": "green"
 }
 picks = 'eeg'
-models = ['HT', 'HDCA', 'EEGCNN']
-n_folds = 10
+# models = ['HT', 'HDCA', 'EEGCNN']
+models = ['HT-pca-ica']
+n_folds = 1
 ht_l2 = 1e-5
 
 reload_saved_samples = True
