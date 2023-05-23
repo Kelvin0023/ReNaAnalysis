@@ -65,8 +65,13 @@ def preprocess_model_data(x_eeg, x_pupil, n_top_components=20):
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
                test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
                x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20):
-    if x_eeg_znormed is None or x_eeg_pca_ica is None or x_pupil_znormed is None:
-        x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+    if x_pupil is None:
+        if x_eeg_znormed is None or x_eeg_pca_ica is None:
+            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+    else:
+        if x_eeg_znormed is None or x_eeg_pca_ica is None or x_pupil_znormed is None:
+            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+
 
     model_performance, training_histories = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate)
     return model_performance, training_histories
