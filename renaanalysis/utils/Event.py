@@ -135,33 +135,45 @@ def get_overlapping_events_single_target(target_time, events, event_filter: call
     return filter_events[mask]
 
 def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, events, event_names, event_filters, deviate=25e-2):
-    event_array = np.zeros(data_timestamp.shape)
+    event_array = np.zeros(((3,) + data_timestamp.shape))
     event_ids = {}
     deviant = 0
     for i, e_filter in enumerate(event_filters):
         filtered_events = np.array([e for e in events if e_filter(e)])
         event_ts = [e.timestamp for e in filtered_events]
-
+        event_block_id = [e.block_id for  e in filtered_events]
+        event_item_id = [e.item_id for e in filtered_events]
         event_data_indices = [np.argmin(np.abs(data_timestamp - t)) for t in event_ts if np.min(np.abs(data_timestamp - t)) < deviate]
 
         if len(event_data_indices) > 0:
             deviate_event_count = len(event_ts) - len(event_data_indices)
             if deviate_event_count > 0: print("Removing {} deviate events".format(deviate_event_count))
             deviant += deviate_event_count
-
-            event_array[event_data_indices] = i + 1
             event_ids[event_names[i]] = i + 1
+
+            event_array[0, event_data_indices] = i + 1
+            event_array[1, event_data_indices] = event_block_id
+            event_array[2, event_data_indices] = event_item_id
+
         else:
             print(f'Unable to find event with name {event_names[i]}, skipping')
+
     if type(data_array) is np.ndarray:
-        rtn = np.concatenate([data_array, np.expand_dims(event_array, axis=1)], axis=1)
+        rtn = np.concatenate([data_array, event_array], axis=1)
     elif type(data_array) is RawArray:
         stim_index = data_array.ch_names.index('stim')
         rtn = data_array.copy()
-        rtn._data[stim_index, :] = event_array
+        rtn._data[stim_index, :] = event_array[0, :]
+
+        # add the block and item ids
+        new_channel_info = mne.create_info(ch_names=['BlockIDs', 'ItemIDs'], ch_types=['misc', 'misc'], sfreq=rtn.info['sfreq'])  # Replace sampling_frequency with the actual sampling frequency
+        raw = mne.io.RawArray(event_array[1:, :].astype(int), new_channel_info)
+        rtn.add_channels([raw], True)
+
     else:
         raise Exception(f'Unsupported data type {type(data_array)}')
     return rtn, event_ids, deviant
+
 
 def get_filtered_events(events, event_filters):
     all_filtered_events = list()

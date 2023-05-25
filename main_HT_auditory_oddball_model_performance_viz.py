@@ -13,8 +13,9 @@ from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 # analysis parameters ######################################################################################
 
 
-models = ['HDCA_EEG', 'HT', 'EEGCNN']
-results = pickle.load(open('model_locking_performances_auditory_oddball', 'rb'))
+models = ['HDCA_EEG', 'EEGCNN', 'HT', 'HT-pca-ica']
+results = pickle.load(open('results/model_performances_auditory_oddball_5_16_2023_all', 'rb'))
+
 metrics = ['test auc', 'folds val auc', 'folds val acc', 'folds train acc']
 
 viz_model_performance(results, metrics, models, width=0.125)

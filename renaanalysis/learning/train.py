@@ -27,6 +27,11 @@ from renaanalysis.utils.data_utils import compute_pca_ica, rebalance_classes, me
     mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
 import matplotlib.pyplot as plt
 
+
+def eval_multi_locking_model(rdf, epoch_encoder_path):
+    pass
+    # get_multi_locking_data(rdf)
+
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, n_folds=10, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='single'):
     # verify number of event types
     eeg_montage = mne.channels.make_standard_montage('biosemi64')
