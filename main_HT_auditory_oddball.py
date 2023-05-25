@@ -23,7 +23,7 @@ colors = {
 picks = 'eeg'
 # models = ['HT', 'HDCA', 'EEGCNN']
 models = ['HT-pca-ica']
-n_folds = 10
+n_folds = 6
 ht_l2 = 1e-5
 
 reload_saved_samples = True

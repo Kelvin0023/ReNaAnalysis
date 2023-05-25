@@ -26,6 +26,7 @@ from renaanalysis.params.params import epochs, batch_size, model_save_dir, patie
 from renaanalysis.utils.data_utils import compute_pca_ica, rebalance_classes, mean_max_sublists, \
     mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
 import matplotlib.pyplot as plt
+from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, n_folds=10, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='single'):
     # verify number of event types
@@ -167,23 +168,22 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     print("#" * 100)
     return performance, training_histories
 
-def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_filter, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True):
+def grid_search_ht(grid_search_params, data_root, event_names, locking_name, picks, reject, eeg_resample_rate, colors, exg_resample_rate=128, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True):
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
     locking_performance = {}
     test_name = f'Locking-{locking_name}_Model-HT_P-{participant}_S-{session}'
     if regenerate_epochs:
-        x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', exg_resample_rate=exg_resample_rate)
+        x, y = get_auditory_oddball_samples(data_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
         pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
         pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
     else:
         try:
-            x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
-            y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+            x = pickle.load(open(os.path.join(export_data_root, f'x_auditory_oddball.p'), 'rb'))
+            y = pickle.load(open(os.path.join(export_data_root, f'y_auditory_oddball.p'), 'rb'))
         except FileNotFoundError:
             raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}")
-    x_eeg = z_norm_by_trial(x[0])
-    x_pupil = z_norm_by_trial(x[1])
-    x_eeg_pca_ica, _, _ = compute_pca_ica(x[0], num_top_components)
+    x_eeg = z_norm_by_trial(x)
+    x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, num_top_components)
     num_channels, num_timesteps = x_eeg.shape[1:]
 
     param_grid = ParameterGrid(grid_search_params)

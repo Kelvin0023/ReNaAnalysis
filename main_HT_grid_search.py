@@ -13,10 +13,12 @@ from RenaAnalysis import get_rdf
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.train import eval_lockings, grid_search_ht
 from renaanalysis.params.params import *
+from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
 
 # user parameters
 exg_resample_rate = 200
+'''
 grid_search_params = {
     "depth": [2, 4, 6],
     "num_heads": [4, 8, 12],
@@ -36,6 +38,35 @@ grid_search_params = {
     "lr_scheduler_type": ['cosine', 'exponential'],
     "output": ['single', 'multi'],
 }
+'''
+grid_search_params = {
+    "depth": [4],
+    "num_heads": [8],
+    "pool": ['cls'],
+    "feedforward_mlp_dim": [64, 128],
+
+    # "patch_embed_dim": [64, 128, 256],
+    "patch_embed_dim": [64, 128],
+
+    "dim_head": [128],
+    "attn_dropout": [0.5],
+    "emb_dropout": [0.5],
+    "lr": [1e-4],
+    "l2_weight": [1e-5],
+
+    # "lr_scheduler_type": ['cosine'],
+    "lr_scheduler_type": ['cosine', 'exponential'],
+    "output": ['single', 'multi'],
+}
+bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
+eeg_resample_rate = 200
+reject = 'auto'
+event_names = ["standard", "oddball_with_reponse"]
+colors = {
+    "standard": "red",
+    "oddball_with_reponse": "green"
+}
+picks = 'eeg'
 locking_name = 'RSVP-Item-Onset'
 locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                   lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]]
@@ -50,7 +81,7 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 # rdf = get_rdf(exg_resample_rate=exg_resample_rate, ocular_artifact_mode='proxy')
-rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+# rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
@@ -95,8 +126,7 @@ locking_name_filters_constrained = {
                                     } #nyamu <3
 
 
-
-locking_performance, training_histories, models = grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_filter, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate)
+locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, locking_name, picks, reject, eeg_resample_rate, colors, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate)
 pickle.dump(training_histories, open('model_training_histories.p', 'wb'))
 pickle.dump(locking_performance, open('model_locking_performances.p', 'wb'))
 
