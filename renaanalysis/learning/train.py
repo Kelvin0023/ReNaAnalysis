@@ -14,6 +14,11 @@ from torch import nn
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
+from renaanalysis.learning.transformer_rollout import VITAttentionRollout
+from renaanalysis.learning.HT import Attention
+from renaanalysis.learning.HT_viz import ht_viz_training
+from collections import defaultdict
+import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
@@ -65,7 +70,7 @@ def preprocess_model_data(x_eeg, x_pupil, n_top_components=20):
 
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
-               test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
+               test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='multi',
                x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20):
     if x_pupil is None:
         if x_eeg_znormed is None or x_eeg_pca_ica is None:
@@ -144,7 +149,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
             training_data = x_eeg_pca_ica_train if model_name == 'HT-pca-ica' else x_eeg_train
             test_data = x_eeg_pca_ica_test if model_name == 'HT-pca-ica' else x_eeg_test
-            model, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(training_data, y_train, test_data, y_test, model, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
+            model, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(training_data, y_train, model, X_test=test_data, Y_test=y_test, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
             rollout_data_root = f'HT_{note}'
             if not os.path.exists(rollout_data_root):
                 os.mkdir(rollout_data_root)
@@ -195,7 +200,7 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
                                         depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                         pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                         dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
-        model, training_histories, criterion, last_activation, _encoder = train_model(x_eeg, y, model, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'])  # use un-dimension reduced EEG data
+        model, training_histories, criterion, last_activation, _encoder = cv_train_test_model(x_eeg, y, model, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], is_test=False)  # use un-dimension reduced EEG data
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
         folds_val_auc = mean_max_sublists(training_histories['auc_val'])
         print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
@@ -377,7 +382,7 @@ def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbos
 
     return _run_one_epoch(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
 
-def cv_train_test_model(X, Y, X_test, Y_test, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', plot_histories=True):
+def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', X_test=None, Y_test=None, plot_histories=False, is_test=True):
     """
 
     @param X: can be a list of inputs
@@ -393,13 +398,14 @@ def cv_train_test_model(X, Y, X_test, Y_test, model, test_name="CNN", n_folds=10
     """
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
+    # model = model.to(device)
 
     if isinstance(X, list):
         # create dummy random input for each input
         rand_input = []
         for x in X:
             input_shape = x.shape[1:]
-            rand_input.append(torch.randn(1, *input_shape))
+            rand_input.append(torch.randn(1, *input_shape)).to(device)
         dataset_class = MultiInputDataset
     else:
         # check the model's output shape
@@ -435,10 +441,18 @@ def cv_train_test_model(X, Y, X_test, Y_test, model, test_name="CNN", n_folds=10
     val_losses_folds = []
     val_accs_folds = []
     val_aucs_folds = []
+    models = []
 
     for f_index, (train, val) in enumerate(skf.split(X[0] if isinstance(X, list) else X, Y)):
         model_copy = copy.deepcopy(model)
+        # model_copy = HierarchicalTransformer(180, 20, 200, num_classes=2,
+        #                                 output='multi')
         model_copy = model_copy.to(device)
+        # model = model.to(device)
+        rollout = VITAttentionRollout(model_copy, device, attention_layer_class=Attention,
+                                      token_shape=model_copy.grid_dims,
+                                      discard_ratio=0.9, head_fusion='max')
+
         if isinstance(X, list):
             x_train = []
             x_val = []
@@ -486,9 +500,20 @@ def cv_train_test_model(X, Y, X_test, Y_test, model, test_name="CNN", n_folds=10
 
 
         for epoch in range(epochs):
+            # prev_para = []
+            # for param in model_copy.parameters():
+            #     prev_para.append(param.cpu().detach().numpy())
             train_auc, train_loss, train_accuracy = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
             scheduler.step()
+            # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
             val_auc, val_loss, val_accuracy = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            # para = []
+            # for param in model_copy.parameters():
+            #     para.append(param.cpu().detach().numpy())
+            # if epoch != 0:
+            #     for i in range(52):
+            #         if not np.all(np.equal(prev_para[i], para[i])):
+            #             print('diff')
 
             train_losses.append(train_loss)
             train_accs.append(train_accuracy)
@@ -516,15 +541,16 @@ def cv_train_test_model(X, Y, X_test, Y_test, model, test_name="CNN", n_folds=10
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
-
-        test_auc_model, test_loss_model, test_acc_model = eval(model_copy, X_test, Y_test, criterion, last_activation, _encoder,
+        if is_test:
+            test_auc_model, test_loss_model, test_acc_model = eval(model_copy, X_test, Y_test, criterion, last_activation, _encoder,
                                              test_name='', verbose=1)
-        if verbose >= 1:
-            print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
-        test_auc.append(test_auc_model)
-        test_loss.append(test_loss_model)
-        test_acc.append(test_acc_model)
+            if verbose >= 1:
+                print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
+            test_auc.append(test_auc_model)
+            test_loss.append(test_loss_model)
+            test_acc.append(test_acc_model)
 
+    models.append(model_copy)
     training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds}
     if plot_histories:
         plt.plot(training_histories_folds['acc_train'])
@@ -538,9 +564,12 @@ def cv_train_test_model(X, Y, X_test, Y_test, model, test_name="CNN", n_folds=10
         plt.title(f"Loss, {test_name}")
         plt.tight_layout()
         plt.show()
-    return model, training_histories_folds, criterion, last_activation, _encoder, max(test_auc), max(test_loss), max(test_acc)
+    if is_test:
+        return models[test_auc.index(max(test_auc))], training_histories_folds, criterion, last_activation, _encoder, max(test_auc), max(test_loss), max(test_acc)
+    else:
+        return model, training_histories_folds, criterion, last_activation, _encoder
 
-def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', verbose=1):
+def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', verbose=1, check_param=1):
     """
 
     @param model:
@@ -579,6 +608,15 @@ def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mod
         mini_batch_i += 1
         if verbose >= 1:
             pbar.update(1)
+
+        # if check_param:
+        #     for key1, value1 in a.items():
+        #         value2 = b[key1]
+        #         # Perform tensor comparison
+        #         if torch.equal(value1, value2):
+        #             print(f"Tensor {key1} is equal in both models.")
+        #         else:
+        #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
             y_pred = model(x)

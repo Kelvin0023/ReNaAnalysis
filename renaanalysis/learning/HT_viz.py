@@ -10,9 +10,36 @@ from matplotlib import pyplot as plt
 from mne.viz import plot_topomap
 from torch.utils.data import TensorDataset, DataLoader
 
+
 from renaanalysis.learning.HT import HierarchicalTransformer, Attention
 from renaanalysis.learning.transformer_rollout import VITAttentionRollout
 
+
+def ht_viz_training(X, Y, model, roll_out_cls, encoder, device, epoch, roll_start_epoch=15):
+    if epoch >= roll_start_epoch:
+        Y_encoded = encoder(Y[100])
+        Y_encoded_tensor = torch.Tensor(Y_encoded)
+        X_tensor = torch.Tensor(X[100])
+
+        rolls = defaultdict(list)
+        for roll_depth in range(model.depth):
+            with torch.no_grad():
+                x_data = X_tensor.unsqueeze(0)
+                # rolls[roll_depth].append(rollout(depth=roll_depth, input_tensor=x_data)
+                roll = roll_out_cls(depth=roll_depth, input_tensor=x_data)
+                rolls[roll_depth].append(roll)
+
+        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(10, 8))
+        axes[0, 0].imshow(rolls[0][0], cmap='hot', interpolation='nearest')
+        axes[0, 0].set_title(f'attention of layer {0}')
+        axes[0, 1].imshow(rolls[1][0], cmap='hot', interpolation='nearest')
+        axes[0, 1].set_title(f'attention of layer {1}')
+        axes[1, 0].imshow(rolls[2][0], cmap='hot', interpolation='nearest')
+        axes[1, 0].set_title(f'attention of layer {2}')
+        axes[1, 1].imshow(rolls[3][0], cmap='hot', interpolation='nearest')
+        axes[1, 1].set_title(f'attention of layer {3}')
+        # plt.colorbar()
+        plt.show()
 
 def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_names,
            data_root,
