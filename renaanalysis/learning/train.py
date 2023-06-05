@@ -449,9 +449,9 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbo
         #                                 output='multi')
         model_copy = model_copy.to(device)
         # model = model.to(device)
-        rollout = VITAttentionRollout(model_copy, device, attention_layer_class=Attention,
-                                      token_shape=model_copy.grid_dims,
-                                      discard_ratio=0.9, head_fusion='max')
+        # rollout = VITAttentionRollout(model_copy, device, attention_layer_class=Attention,
+        #                               token_shape=model_copy.grid_dims,
+        #                               discard_ratio=0.9, head_fusion='max')
 
         if isinstance(X, list):
             x_train = []
