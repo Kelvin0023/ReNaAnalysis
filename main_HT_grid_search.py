@@ -41,17 +41,17 @@ grid_search_params = {
 '''
 grid_search_params = {
     "depth": [4],
-    "num_heads": [8],
+    "num_heads": [4, 8],
     "pool": ['cls'],
-    "feedforward_mlp_dim": [64, 128],
+    "feedforward_mlp_dim": [32, 64],
 
     # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [64, 128],
+    "patch_embed_dim": [32, 64],
 
-    "dim_head": [64, 128],
+    "dim_head": [32, 64],
     "attn_dropout": [0.5],
     "emb_dropout": [0.5],
-    "lr": [1e-4],
+    "lr": [1e-3, 1e-4],
     "l2_weight": [1e-5],
 
     # "lr_scheduler_type": ['cosine'],
@@ -130,6 +130,8 @@ locking_name_filters_constrained = {
 locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate)
 pickle.dump(training_histories, open('model_training_histories.p', 'wb'))
 pickle.dump(locking_performance, open('model_locking_performances.p', 'wb'))
+
+
 
 
 # import pickle

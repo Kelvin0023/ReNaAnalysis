@@ -70,7 +70,7 @@ def preprocess_model_data(x_eeg, x_pupil, n_top_components=20):
 
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
-               test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='multi',
+               test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
                x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20):
     if x_pupil is None:
         if x_eeg_znormed is None or x_eeg_pca_ica is None:
@@ -189,6 +189,12 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
             raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}")
     x_eeg = z_norm_by_trial(x)
     x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, num_top_components)
+    if not os.path.exists('HT_grid/RSVP-itemonset-locked'):
+        os.mkdir('HT_grid/RSVP-itemonset-locked')
+    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb') as f:
+        pickle.dump(x_eeg_pca_ica, f)
+    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
+        pickle.dump(y, f)
     num_channels, num_timesteps = x_eeg.shape[1:]
 
     param_grid = ParameterGrid(grid_search_params)
@@ -209,6 +215,9 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
         locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss}
         training_histories[hashable_params] = training_histories
         models[hashable_params] = model
+        if not os.path.exists('HT_grid'):
+            os.mkdir('HT_grid')
+        torch.save(model, f'HT_grid/{params}_model.pt')
     return locking_performance, training_histories, models
 
 
@@ -382,7 +391,7 @@ def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbos
 
     return _run_one_epoch(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
 
-def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', X_test=None, Y_test=None, plot_histories=False, is_test=True):
+def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', X_test=None, Y_test=None, plot_histories=False, is_test=True):
     """
 
     @param X: can be a list of inputs
@@ -432,6 +441,8 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbo
         # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
         criterion = nn.CrossEntropyLoss()
         last_activation = nn.Softmax(dim=1)
+    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb') as f:
+        pickle.dump(label_encoder, f)
 
     X = model.prepare_data(X)
 
@@ -480,7 +491,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbo
 
         train_dataset = dataset_class(x_train, y_train_encoded)
         val_dataset = dataset_class(x_val, y_val_encoded)
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)

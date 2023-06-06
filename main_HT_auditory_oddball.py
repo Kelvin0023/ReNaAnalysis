@@ -24,6 +24,7 @@ picks = 'eeg'
 # models = ['HT', 'HDCA', 'EEGCNN']
 models = ['HT-pca-ica']
 n_folds = 6
+ht_lr = 1e-3
 ht_l2 = 1e-5
 
 reload_saved_samples = True
@@ -47,7 +48,7 @@ result_path = result_path + datetime_string
 pickle.dump(results, open(result_path, 'wb'))
 
 for m in models:
-    m_results, training_histories = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_l2=ht_l2, eeg_montage=eeg_montage,
+    m_results, training_histories = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2, eeg_montage=eeg_montage,
                            x_eeg_znormed=x_eeg_znormed, x_eeg_pca_ica=x_eeg_pca_ica, x_pupil_znormed=x_pupil_znormed,
                            test_name=f"auditory_oddball_{m}_{datetime_string}")
     results = {**m_results, **results}
