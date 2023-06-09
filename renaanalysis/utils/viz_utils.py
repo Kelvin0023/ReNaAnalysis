@@ -13,6 +13,7 @@ from renaanalysis.eye.eyetracking import Fixation, Saccade, GazeRayIntersect
 from renaanalysis.utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_target
 from renaanalysis.params.params import *
 from renaanalysis.utils.TorchUtils import prepare_image_for_sim_score
+from renaanalysis.utils.utils import visualize_pupil_epochs, visualize_eeg_epochs
 
 
 def visualiza_session(events):
@@ -93,7 +94,7 @@ def visualize_block_gaze_event(rdf, participant, session, block_id=None, only_lo
     generate_video = rdf.participant_session_videos[participant, session] if generate_video else None
     visualize_gaze_events(events, block_id, only_long_gaze=only_long_gaze, generate_video=generate_video, video_fix_alg=video_fix_alg)
 
-def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y=.5, IDT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=None, video_fix_alg='I-VT'):
+def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_head_y=.5, IVT_fix_head_y=1., pathSim_fix_y = 1.5, only_long_gaze=False, generate_video=None, video_fix_alg='I-VT'):
     f, ax = plt.subplots(figsize=[40, 5])
 
     block_start_timestamps = [e.timestamp for e in events if e.is_block_start]
@@ -116,20 +117,23 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_y
             gaze_ray_intersects = draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp and x.is_first_long_gaze, gaze_intersect_y)
         else:
             gaze_ray_intersects = draw_fixations(ax, events, lambda x: type(x) == GazeRayIntersect and block_start_timestamp < x.timestamp < block_end_timestamp, gaze_intersect_y)
-        fix_ivt = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
-        fix_ivt_head = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
+        # fix_ivt = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_y)
+        fix_idt_head = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-DT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IDT_fix_head_y)
+        fix_ivt_head = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'I-VT-Head' and block_start_timestamp < x.timestamp < block_end_timestamp, IVT_fix_head_y)
         fix_patch_sim = draw_fixations(ax, events, lambda x: type(x) == Fixation and x.detection_alg == 'Patch-Sim' and block_start_timestamp < x.timestamp < block_end_timestamp, pathSim_fix_y)
 
         ax.set_xlim(block_start_timestamp, block_end_timestamp)
         ax.set_title("Block ID {}, condition {}".format(block_id, get_block_start_event(block_id, events).block_condition))
 
+    ax.set_yticks([gaze_intersect_y, IDT_fix_head_y, IVT_fix_head_y, pathSim_fix_y])
+    ax.set_yticklabels(['Gaze Ray Intersect', 'I-DT-Head', 'I-VT-Head', 'Patch-Sim'])
     ax.legend()
     ax.set_xlabel('Time (sec)')
     plt.show()
 
     if generate_video is not None and block_id is not None:
         generate_block_video(image_folder=generate_video, block_id=block_id, block_start_time=block_start_timestamp,
-                             block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects, fix_ivt=fix_ivt, fix_ivt_head=fix_ivt_head, fix_patch_sim=fix_patch_sim, video_fix_alg=video_fix_alg)
+                             block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects, fix_ivt=fix_idt_head, fix_ivt_head=fix_ivt_head, fix_patch_sim=fix_patch_sim, video_fix_alg=video_fix_alg)
 
 
 def add_bounding_box(a, x, y, width, height, color):
@@ -341,3 +345,13 @@ def add_fix_detection_circle(img_modified, center, timestamp, fix_events, marker
         raise Exception(
             "There can only be at most one fixation event with a certain detection algorithm at a eyetracking frame")
     return img_modified
+
+
+def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', eyetracking_resample_srate=20, participant=None, session=None, tmin=-1., tmax=3., n_jobs=1):
+    pupil_epochs, pupil_event_ids, _ = rdf.get_pupil_epochs(event_names, event_filters, eyetracking_resample_srate, participant, session, tmin=tmin, tmax=tmax, n_jobs=n_jobs)
+    visualize_pupil_epochs(pupil_epochs, pupil_event_ids, colors, title=title)
+
+
+def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=-0.1, tmax=0.8, n_jobs=1):
+    eeg_epochs, eeg_event_ids, _, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin, tmax, participant, session, n_jobs=n_jobs)
+    visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)

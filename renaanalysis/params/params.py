@@ -11,7 +11,10 @@ from renaanalysis.utils.Bidict import Bidict
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 # base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-base_root = "F:/RenaData_01-31-2023"
+# base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "D:/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "D:/Dropbox/Dropbox/ReNa/data/RenaPipeline-2023Spring"
+
 data_directory = "Subjects"
 export_data_root = 'C:/Data'
 # data_directory = "Subjects-Test"
@@ -35,7 +38,7 @@ dtn_color_dict = {None: 'grey', 1: 'blue', 2: 'red', 3: 'orange', 4: 'grey'}
 event_viz = 'GazeRayIntersect'
 
 
-conditions = Bidict({'RSVP': 1., 'Carousel': 2., 'VS': 3., 'TS': 4., 'TS-gnd': 8, 'TS-id': 9})
+conditions = Bidict({'RSVP': 1., 'Carousel': 2., 'VS': 3., 'TS': 4., 'TSgnd': 8, 'TSid': 9})
 dtnn_types = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
 meta_blocks = Bidict({'cp': 5, 'ip': 7})
 
@@ -56,6 +59,7 @@ eventmarker_chs = [
     "CarouselSpeed",
     "CarouselAngle",
     "TSHandLeft","TSHandRight",
+    "TSCollectItem",
     "Likert"]
 
 headtracker_chs = [
@@ -105,16 +109,13 @@ varjoEyetracking_chs = [
 # eventmarker_preset = json.load(pkg_resources.resource_stream(__name__, 'ReNaEventMarker.json'))
 # headtracker_preset = json.load(pkg_resources.resource_stream(__name__, 'UnityHeadTracking.json'))
 
-tmin_pupil = -1
+tmin_pupil = -1.
 tmax_pupil = 3.
 tmin_pupil_viz = -0.1
 tmax_pupil_viz = 3.
 
-tmin_eeg = -1.2
-tmax_eeg = 2.4
-
 tmin_eeg_viz = -0.1
-tmax_eeg_viz = 1.
+tmax_eeg_viz = 0.8
 
 eyetracking_srate = 200
 eyetracking_resample_srate = 20
@@ -125,6 +126,7 @@ eeg_picks = ['Fpz', 'AFz', 'Fz', 'FCz', 'Cz', 'CPz', 'Pz', 'POz', 'Oz']
 eeg_montage = mne.channels.make_standard_montage('biosemi64')
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
 ecg_ch_name='ECG00'
+proxy_eog_ch_names=['EOG00', 'EOG01']
 
 note = "test_v3"
 
@@ -160,24 +162,21 @@ num_items_per_constrainted_block = 30
 
 reject = dict(eeg=100e-6)  # DO NOT reject or we will have a mismatch between EEG and pupil
 
-is_regenerate_ica = False
 debug = True
 
 eeg_epoch_ticks = np.array([0, 0.3, 0.6, 0.8])
 pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 
 lr = 1e-3
-batch_size = 64
+batch_size = 32
 epochs = 5000
 patience = 75
 train_ratio = 0.8
 model_save_dir = 'renaanalysis/learning/saved_models'
 l2_weight = 1e-5
 
-random_seed = 42
+random_seed = 13
 
 # HDCA parameters
-split_window_eeg=100e-3
-split_window_pupil=500e-3
 num_folds = 10
-num_top_compoenents = 20
+num_top_components = 20

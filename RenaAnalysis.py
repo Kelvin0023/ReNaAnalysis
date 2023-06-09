@@ -1,3 +1,4 @@
+import json
 import math
 # analysis parameters ######################################################################################
 import os
@@ -5,6 +6,7 @@ import time
 
 # analysis parameters ######################################################################################
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from mne.viz import plot_topomap
 from numpy.lib.stride_tricks import sliding_window_view
@@ -14,11 +16,13 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedShuffleSplit
-from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim
+from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, \
+    gaze_event_detection_I_DT
 from renaanalysis.learning.train import prepare_sample_label
-from renaanalysis.params.params import *
+from renaanalysis.params.params import eeg_picks, eeg_epoch_ticks, pupil_epoch_ticks, tmin_pupil, eyetracking_srate, \
+    tmax_pupil_viz, tmin_pupil_viz, base_root, note, data_directory
 from renaanalysis.utils.RenaDataFrame import RenaDataFrame
-from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes, epochs_to_class_samples
+from renaanalysis.utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes, epochs_to_class_samples_rdf
 from renaanalysis.utils.fs_utils import load_participant_session_dict, get_data_file_paths, get_analysis_result_paths
 from renaanalysis.utils.utils import get_item_events, visualize_pupil_epochs
 
@@ -44,7 +48,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1,
             r_square_grid[channel_i, time_i] = model.score(x_train, y)
 
     xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
-    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * exg_resample_srate
+    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * rdf.exg_resample_rate
     plt.xticks(xticks_locations, xtick_labels)
     plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
     plt.imshow(r_square_grid, aspect='auto', cmap='Blues')
@@ -54,7 +58,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1,
     plt.show()
 
     xtick_labels = [f'{int(x)} ms' for x in eeg_epoch_ticks * 1e3]
-    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * exg_resample_srate
+    xticks_locations = (eeg_epoch_ticks - tmin_eeg) * rdf.exg_resample_rate
     plt.xticks(xticks_locations, xtick_labels)
     plt.yticks(list(range(r_square_grid.shape[0])), eeg_picks)
     plt.imshow(d_prime_grid, aspect='auto', cmap='coolwarm', vmin=-0.5, vmax=0.5)
@@ -90,7 +94,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1,
     #     plt.show()
 
     # pupilometries
-    x, y, epochs, event_ids = epochs_to_class_samples(rdf, event_names, event_filters, data_type='pupil', participant=participant, session=session)
+    x, y, epochs, event_ids = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='pupil', participant=participant, session=session)
     x = np.mean(x, axis=1)
     r_square_grid = np.zeros(x.shape[1])
     for time_i in range(len(r_square_grid)):
@@ -112,7 +116,7 @@ def r_square_test(rdf: RenaDataFrame, event_names, event_filters, tmin_eeg=-0.1,
     plt.show()
 
 
-def get_rdf(is_loading_saved_analysis=False, n_jobs=1):
+def get_rdf(exg_resample_rate=128, is_loading_saved_analysis=False, is_running_ica=True, is_regenerate_ica=True, run_preprocess=True, ocular_artifact_mode='manual', n_jobs=1):
     start_time = time.time()  # record the start time of the analysis
     # get the list of paths to save the analysis results
     preloaded_dats_path, preloaded_epoch_path, preloaded_block_path, gaze_statistics_path, gaze_behavior_path, epoch_data_export_root = get_analysis_result_paths(
@@ -145,16 +149,16 @@ def get_rdf(is_loading_saved_analysis=False, n_jobs=1):
                                          data['Unity.ReNa.ItemMarkers'][0], data['Unity.ReNa.ItemMarkers'][1])
 
                 # add gaze behaviors from I-DT
-                events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events)
                 events += gaze_event_detection_I_VT(data['Unity.VarjoEyeTrackingComplete'], events, headtracking_data_timestamps=data['Unity.HeadTracker'])
+                events += gaze_event_detection_I_DT(data['Unity.VarjoEyeTrackingComplete'], events, headtracking_data_timestamps=data['Unity.HeadTracker'])  # TODO no need to resample the headtracking data again
                 # add gaze behaviors from patch sim
                 events += gaze_event_detection_PatchSim(data['FixationDetection'][0], data['FixationDetection'][1], events)
 
                 # visualize_gaze_events(events, 6)
                 rdf.add_participant_session(data, events, participant_index, session_index, session_bad_eeg_channels,
                                             session_ICA_path, video_path)  # also preprocess the EEG data
-
-    rdf.preprocess(n_jobs=n_jobs)
+    if run_preprocess:
+        rdf.preprocess(exg_resample_rate=exg_resample_rate, is_running_ica=is_running_ica, is_regenerate_ica=is_regenerate_ica, ocular_artifact_mode=ocular_artifact_mode, n_jobs=n_jobs)
     end_time = time.time()
     print("Getting RDF Took {0} seconds".format(end_time - start_time))
     return rdf

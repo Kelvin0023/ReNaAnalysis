@@ -32,10 +32,14 @@ class Event:
 
         # object related markers
         self.item_index = kwargs['item_index'] if 'item_index' in kwargs.keys() else None
-        self.item_id = kwargs['item_id'] if 'itemID' in kwargs.keys() else None
+        self.item_id = kwargs['item_id'] if 'item_id' in kwargs.keys() else None
         self.obj_dist = kwargs['obj_dist'] if 'objDistFromPlayer' in kwargs.keys() else None
+
+        # condition specific attributes
         self.carousel_speed = kwargs['carousel_speed'] if 'CarouselSpeed' in kwargs.keys() else None
         self.carousel_angle = kwargs['carousel_angle'] if 'CarouselAngle' in kwargs.keys() else None
+        self.ts_hand_left = kwargs['ts_hand_left'] if 'ts_hand_left' in kwargs.keys() else None
+        self.ts_hand_right = kwargs['ts_hand_right'] if 'ts_hand_right' in kwargs.keys() else None
 
         self.likert = kwargs['Likert'] if 'Likert' in kwargs.keys() else None  # TODO to be added
 
@@ -111,7 +115,10 @@ def get_overlapping_events(start_time, end_time, events, event_filter: callable=
 
     after_start_event_mask = np.logical_and(onset_times >= start_time, onset_times <= end_time)
     before_start_event_mask = np.logical_and(offset_times <= end_time, offset_times >= start_time)
-    return filter_events[np.logical_or(after_start_event_mask, before_start_event_mask)]
+    overlapping_events = filter_events[np.logical_or(after_start_event_mask, before_start_event_mask)]
+    overlapping_events = list(overlapping_events)
+    overlapping_events.sort(key=lambda e: e.onset_time)
+    return overlapping_events
 
 def get_overlapping_events_single_target(target_time, events, event_filter: callable=None):
     """
@@ -128,35 +135,52 @@ def get_overlapping_events_single_target(target_time, events, event_filter: call
     return filter_events[mask]
 
 def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, events, event_names, event_filters, deviate=25e-2):
-    event_array = np.zeros(data_timestamp.shape)
+    event_array = np.zeros(((3,) + data_timestamp.shape))
     event_ids = {}
     deviant = 0
     for i, e_filter in enumerate(event_filters):
         filtered_events = np.array([e for e in events if e_filter(e)])
         event_ts = [e.timestamp for e in filtered_events]
-
-
+        event_block_id = [e.block_id for  e in filtered_events]
+        event_item_id = [e.item_id for e in filtered_events]
         event_data_indices = [np.argmin(np.abs(data_timestamp - t)) for t in event_ts if np.min(np.abs(data_timestamp - t)) < deviate]
 
         if len(event_data_indices) > 0:
             deviate_event_count = len(event_ts) - len(event_data_indices)
             if deviate_event_count > 0: print("Removing {} deviate events".format(deviate_event_count))
             deviant += deviate_event_count
-
-            event_array[event_data_indices] = i + 1
             event_ids[event_names[i]] = i + 1
+
+            event_array[0, event_data_indices] = i + 1
+            event_array[1, event_data_indices] = event_block_id
+            event_array[2, event_data_indices] = event_item_id
+
         else:
             print(f'Unable to find event with name {event_names[i]}, skipping')
+
     if type(data_array) is np.ndarray:
-        rtn = np.concatenate([data_array, np.expand_dims(event_array, axis=1)], axis=1)
+        rtn = np.concatenate([data_array, event_array], axis=1)
     elif type(data_array) is RawArray:
-        print()
         stim_index = data_array.ch_names.index('stim')
         rtn = data_array.copy()
-        rtn._data[stim_index, :] = event_array
+        rtn._data[stim_index, :] = event_array[0, :]
+
+        # add the block and item ids
+        new_channel_info = mne.create_info(ch_names=['BlockIDs', 'ItemIDs'], ch_types=['misc', 'misc'], sfreq=rtn.info['sfreq'])  # Replace sampling_frequency with the actual sampling frequency
+        raw = mne.io.RawArray(event_array[1:, :].astype(int), new_channel_info)
+        rtn.add_channels([raw], True)
+
     else:
         raise Exception(f'Unsupported data type {type(data_array)}')
     return rtn, event_ids, deviant
+
+
+def get_filtered_events(events, event_filters):
+    all_filtered_events = list()
+    for i, e_filter in enumerate(event_filters):
+        filtered_events = [e for e in events if e_filter(e)]
+        all_filtered_events.append(filtered_events)
+    return all_filtered_events
 
 def get_indices_from_transfer_timestamps(target_timestamps, source_timestamps):
     """
@@ -206,3 +230,21 @@ def get_last_block_end_time(events):
     filter_events = [e for e in events if e.is_block_end]
     return filter_events[-1].timestamp
 
+def get_events(event_filters, events, order) -> list:
+    """
+    order can be either events or time
+    :param event_filters:
+    :param events:
+    :param order:
+    :return:
+    """
+    rtn = []
+    for i, e_filter in enumerate(event_filters):
+        rtn += [e for e in events if e_filter(e)]
+    if order == 'events':
+        return rtn
+    elif order == 'time':
+        rtn.sort(key=lambda x: x.timestamp)
+        return rtn
+    else:
+        raise NotImplementedError(f"Unsupported order type {order}")

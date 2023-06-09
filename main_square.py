@@ -1,30 +1,19 @@
+# analysis parameters ######################################################################################
 import os
 import pickle
 import time
 
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 
 from RenaAnalysis import get_rdf, r_square_test
-from renaanalysis.eye.eyetracking import Fixation
+from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.HDCA import hdca
-from renaanalysis.learning.models import EEGCNN, EEGPupilCNN
-from renaanalysis.learning.train import eval, train_model
+from renaanalysis.learning.models import EEGPupilCNN
 from renaanalysis.archived.train import train_model_pupil_eeg
-from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf, compute_pca_ica, mean_max_sublists, mean_min_sublists
-import matplotlib.pyplot as plt
-import numpy as np
-# analysis parameters ######################################################################################
-import os
-import time
-
-from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation, GazeRayIntersect
 from renaanalysis.params.params import *
-from renaanalysis.utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
-import numpy as np
-from renaanalysis.utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event, viz_pupil_epochs, \
-    viz_eeg_epochs
-import matplotlib.pyplot as plt
-
+from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf, compute_pca_ica, mean_max_sublists, mean_min_sublists
 
 # analysis parameters ######################################################################################
 
@@ -34,7 +23,8 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 '''
 
 selected_locking = 'RSVP-Item-Onset'
-export_data_root = '/data'
+# export_data_root = '/data'
+export_data_root = export_data_root
 
 is_regenerate_rdf = True
 is_regenerate_ica = True  # set this to True if you want to regenerate the ICA components, this should be set to True when you change how rdf is generated.
@@ -98,10 +88,10 @@ locking_filters = {
 
 event_filters = locking_filters[selected_locking]
 
-r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
+# r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
 
 if is_regenerate_epochs:
-    x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0, plots='full')
+    x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0, plots='full', force_square=True)
     pickle.dump(x, open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'wb'))
     pickle.dump(y, open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'wb'))
 else:

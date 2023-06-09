@@ -14,8 +14,8 @@ import joblib
 from sklearn.model_selection import train_test_split
 
 from renaanalysis.learning.train import prepare_sample_label
-from eye.eyetracking import GazeRayIntersect
 from renaanalysis.params.params import *
+from RenaAnalysis import get_rdf, r_square_test
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
@@ -24,7 +24,7 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-# rdf = get_rdf()
+# rdf = get_rdf(exg_resample_rate=exg_resample_srate)
 rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")

@@ -10,7 +10,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from sklearn import metrics
 from sklearn.model_selection import StratifiedShuffleSplit
 
-from renaanalysis.learning.HDCA import compute_forward, compute_window_projections, solve_crossbin_weights, plot_forward
+from renaanalysis.learning.HDCA import compute_forward, compute_window_projections_func, solve_crossbin_weights, plot_forward
 from renaanalysis.params.params import *
 from utils.data_utils import compute_pca_ica, z_norm_projection, rebalance_classes
 
@@ -21,7 +21,7 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-# rdf = get_rdf()
+# rdf = get_rdf(exg_resample_rate=exg_resample_srate)
 rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 # print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
@@ -78,7 +78,7 @@ tpr_folds_pupil = []
 fpr_folds = []
 tpr_folds = []
 
-x_eeg_transformed = compute_pca_ica(x[0], num_top_compoenents)  # apply ICA and PCA
+x_eeg_transformed = compute_pca_ica(x[0], num_top_components)  # apply ICA and PCA
 
 for i, (train, test) in enumerate(cross_val_folds.split(x[0], y)):  # cross-validation; group arguement is not necessary unless using grouped folds
     print(f"Working on {i+1} fold of {num_folds}")
@@ -101,7 +101,7 @@ for i, (train, test) in enumerate(cross_val_folds.split(x[0], y)):  # cross-vali
     num_test_trials = len(x_eeg_transformed_test)
     # compute Fisher's LD for each temporal window
     print("Computing windowed LDA per channel, and project per window and trial")
-    weights_channelWindow_eeg, projection_train_window_trial_eeg, projection_test_window_trial_eeg = compute_window_projections(x_eeg_transformed_train_windowed, x_eeg_transformed_test_windowed, y_train)
+    weights_channelWindow_eeg, projection_train_window_trial_eeg, projection_test_window_trial_eeg = compute_window_projections_func(x_eeg_transformed_train_windowed, x_eeg_transformed_test_windowed, y_train)
     print('Computing forward model from window projections for test set')
     activation = compute_forward(x_eeg_test_windowed, y_test, projection_test_window_trial_eeg)
     # train classifier, use gradient descent to find the cross-window weights
@@ -117,7 +117,7 @@ for i, (train, test) in enumerate(cross_val_folds.split(x[0], y)):  # cross-vali
         x_pupil_train_windowed = sliding_window_view(x_pupil_train, window_shape=split_size_pupil, axis=2)[:, :, 0::split_size_pupil, :]  # shape = #trials, #channels, #windows, #time points per window
         x_pupil_test_windowed = sliding_window_view(x_pupil_test, window_shape=split_size_pupil, axis=2)[:, :, 0::split_size_pupil, :]  # shape = #trials, #channels, #windows, #time points per window
         _, num_channels_pupil, num_windows_pupil, num_timepoints_per_window_pupil = x_pupil_train_windowed.shape
-        weights_channelWindow_pupil, projection_train_window_trial_pupil, projection_test_window_trial_pupil = compute_window_projections(x_pupil_train_windowed, x_pupil_test_windowed, y_train)
+        weights_channelWindow_pupil, projection_train_window_trial_pupil, projection_test_window_trial_pupil = compute_window_projections_func(x_pupil_train_windowed, x_pupil_test_windowed, y_train)
         projection_train_window_trial_pupil, projection_test_window_trial_pupil = z_norm_projection(projection_train_window_trial_pupil, projection_test_window_trial_pupil)
 
     # z-norm the projections

@@ -11,6 +11,7 @@ import torch
 
 from RenaAnalysis import get_rdf
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
+from renaanalysis.learning.result_viz import viz_performances_rena
 from renaanalysis.learning.train import eval_lockings
 from renaanalysis.params.params import *
 
@@ -74,28 +75,30 @@ locking_name_filters_constrained = {
                                                 lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]
                                     } #nyamu <3
 
-models = ['HT', 'EEGPupilCNN', 'HDCA', 'EEGCNN']
-# models = ['EEGPupilCNN', 'HT', 'HDCA', 'EEGCNN']
+# models = ['HT']
+n_folds = 1
+models = ['HDCA', 'HT', 'EEGCNN', 'EEGPupilCNN']
 
 results = dict()
 
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 for m in models:
-    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate)
+    m_results = eval_lockings(rdf, event_names, locking_name_filters_constrained, model_name=m, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate, n_folds=n_folds)
     is_regenerate_epochs = False  # dont regenerate epochs after the first time
     results = {**m_results, **results}
+    pickle.dump(results, open('model_locking_performances', 'wb'))
 
 is_regenerate_epochs = True
 for m in models:
     m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, participant='1', session=2, model_name=m, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate)
     is_regenerate_epochs = False  # dont regenerate epochs after the first time
     results = {**m_results, **results}
+    pickle.dump(results, open('model_locking_performances', 'wb'))
 
-pickle.dump(results, open('model_locking_performances', 'wb'))
 
 
 # import pickle
-#
+
 # results = pickle.load(open('model_locking_performances', 'rb'))
 # new_results = dict()
 # for key, value in results.items():
@@ -106,30 +109,14 @@ pickle.dump(results, open('model_locking_performances', 'wb'))
 #     new_results[new_key] = value
 # pickle.dump(new_results, open('model_locking_performances', 'wb'))
 # exit()
-plt.rcParams["figure.figsize"] = (24, 12)
 
-models = ['HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil', 'EEGPupilCNN', 'EEGCNN']
+models = ['HDCA_EEG-Pupil', 'HDCA_EEG', 'HDCA_Pupil', 'HT', 'EEGCNN', 'EEGPupilCNN']
+
 constrained_conditions = ['RSVP', 'Carousel']
 conditions_names = ['RSVP', 'Carousel', 'VS']
-constrained_lockings = ['Item-Onset', 'I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
-lockings = ['I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
+constrained_lockings = ['Item-Onset']
+lockings = ['I-DT-Head', 'I-VT-Head', 'FLGI', 'Patch-Sim']
 
 width = 0.175
-
-for c in conditions_names:
-    this_lockings = lockings if c not in constrained_conditions else constrained_lockings
-    ind = np.arange(len(this_lockings))
-
-    for m_index, m in enumerate(models):
-        aucs = [results[(f'{c}-{l}', m)]['folds val auc'] for l in this_lockings]  # get the auc for each locking
-
-        plt.bar(ind + m_index * width, aucs, width, label=f'{m}')
-        for j in range(len(aucs)):
-            plt.text(ind[j] + m_index * width, aucs[j] + 0.05, str(round(aucs[j], 3)), horizontalalignment='center',verticalalignment='center')
-
-    plt.ylim(0.0, 1.1)
-    plt.ylabel('AUC')
-    plt.title(f'Condition {c}, Accuracy by model and lockings')
-    plt.xticks(ind + width / 2, this_lockings)
-    plt.legend(loc=4)
-    plt.show()
+viz_performances_rena('folds val auc', results, models, conditions_names, lockings, constrained_conditions, constrained_lockings, width=width)
+viz_performances_rena('test auc', results, models, conditions_names, lockings, constrained_conditions, constrained_lockings, width=width)

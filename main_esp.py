@@ -20,10 +20,12 @@ import time
 from renaanalysis.eye.eyetracking import gaze_event_detection_I_VT, gaze_event_detection_PatchSim, Fixation, GazeRayIntersect
 from renaanalysis.params.params import *
 from renaanalysis.utils.fs_utils import load_participant_session_dict, get_analysis_result_paths, get_data_file_paths
+import matplotlib.pyplot as plt
 import numpy as np
 from renaanalysis.utils.viz_utils import visualize_gaze_events, visualize_block_gaze_event, viz_pupil_epochs, \
     viz_eeg_epochs
 import matplotlib.pyplot as plt
+
 
 
 # analysis parameters ######################################################################################
@@ -35,9 +37,7 @@ If using locking with the prefix VS (meaning it's from the visual search conditi
 
 selected_locking = 'RSVP-Item-Onset'
 export_data_root = '/data'
-
-is_regenerate_rdf = True
-is_regenerate_ica = True  # set this to True if you want to regenerate the ICA components, this should be set to True when you change how rdf is generated.
+is_regenerate_rdf = False
 is_regenerate_epochs = True
 is_reduce_eeg_dim = True
 test_name = 'demo'
@@ -48,7 +48,7 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 if is_regenerate_rdf:
-    rdf = get_rdf(exg_resample_rate=exg_resample_srate, is_regenerate_ica=is_regenerate_ica, n_jobs=20)
+    rdf = get_rdf(n_jobs=20, run_preprocess=False)
     if not os.path.exists(export_data_root):
         os.mkdir(export_data_root)
     pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
@@ -118,5 +118,5 @@ folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_subl
 folds_val_auc = mean_max_sublists(training_histories['auc_val'])
 print(f'{test_name}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
 
-roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, notes=test_name + '\n', exg_srate=exg_resample_srate, verbose=0)  # give the original eeg data
+roc_auc_combined, roc_auc_eeg, roc_auc_pupil = hdca([x_eeg, x[1]], y, event_names, is_plots=True, exg_srate=exg_resample_srate, notes=test_name + '\n', verbose=0)  # give the original eeg data
 print(f'HDCA: {test_name}: folds EEG AUC {roc_auc_eeg}, folds Pupil AUC: {roc_auc_pupil}, folds EEG-pupil AUC: {roc_auc_combined}')

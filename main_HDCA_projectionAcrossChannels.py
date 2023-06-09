@@ -14,7 +14,7 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-# rdf = get_rdf()
+# rdf = get_rdf(exg_resample_rate=exg_resample_srate)
 rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 # print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
@@ -57,7 +57,7 @@ roc_auc_folds = np.empty(num_folds)
 fpr_folds = []
 tpr_folds = []
 
-x_transformed = compute_pca_ica(x, num_top_compoenents)  # apply ICA and PCA
+x_transformed, pca, ica = compute_pca_ica(x, num_top_compoenents)  # apply ICA and PCA
 
 for i, (train, test) in enumerate(cross_val_folds.split(x, y)):  # cross-validation; group arguement is not necessary unless using grouped folds
     print(f"Working on {i+1} fold of {num_folds}")
@@ -74,7 +74,7 @@ for i, (train, test) in enumerate(cross_val_folds.split(x, y)):  # cross-validat
     num_test_trials = len(x_transformed_test)
     # compute Fisher's LD for each temporal window
     print("Computing windowed LDA per channel, and project per window and trial")
-    weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial = compute_window_projections(x_transformed_train_windowed, x_transformed_test_windowed, y_train)
+    weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial = compute_window_projections_func(x_transformed_train_windowed, x_transformed_test_windowed, y_train)
     print('Computing forward model from window projections for test set')
     activation = compute_forward(x_test_windowed, y_test, projectionTest_window_trial)
     # train classifier, use gradient descent to find the cross-window weights
