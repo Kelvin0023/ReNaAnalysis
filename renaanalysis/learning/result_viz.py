@@ -42,5 +42,5 @@ def viz_model_performance(results, metrics, model_names, width = 0.175):
     plt.ylabel(f'Model performance (averaged across folds)')
     plt.title(f'Auditory oddball')
     plt.xticks(ind + width/2, model_names)
-    plt.legend()
+    plt.legend(loc='upper left')
     plt.show()

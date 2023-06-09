@@ -34,6 +34,11 @@ from renaanalysis.utils.data_utils import compute_pca_ica, rebalance_classes, me
 import matplotlib.pyplot as plt
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
+
+def eval_multi_locking_model(rdf, epoch_encoder_path):
+    pass
+    # get_multi_locking_data(rdf)
+
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, n_folds=10, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='single'):
     # verify number of event types
     eeg_montage = mne.channels.make_standard_montage('biosemi64')
@@ -137,7 +142,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     else:
         if model_name == 'EEGPupilCNN':  # this model uses PCA-ICA reduced EEG data plus pupil data
             assert x_pupil is not None, "Pupil data is not provided, which is required for EEGPupilCNN model"
-            model = EEGPupilCNN(eeg_in_shape=x_eeg_pca_ica.shape, pupil_in_shape=x_pupil.shape, num_classes=2)
+            model = lambda: EEGPupilCNN(eeg_in_shape=x_eeg_pca_ica.shape, pupil_in_shape=x_pupil.shape, num_classes=2)
             model, training_histories, criterion, last_activation, _encoder = train_model([x_eeg_pca_ica_train, x_pupil_train], y_train, model, test_name=test_name, verbose=1, n_folds=n_folds)
             # model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica_train, x_pupil_train], y_train, model, test_name=test_name, n_folds=n_folds)
             test_auc, test_loss, test_acc = eval(model, [x_eeg_pca_ica_test, x_pupil_test], y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
@@ -146,7 +151,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             num_timesteps = x_eeg_train.shape[2]
             num_channels = x_eeg_pca_ica_train.shape[1] if model_name == 'HT-pca-ica' else x_eeg_train.shape[1]
 
-            model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
+            model = lambda: HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
             training_data = x_eeg_pca_ica_train if model_name == 'HT-pca-ica' else x_eeg_train
             test_data = x_eeg_pca_ica_test if model_name == 'HT-pca-ica' else x_eeg_test
             model, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(training_data, y_train, model, X_test=test_data, Y_test=y_test, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
@@ -157,9 +162,9 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
                    eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
         else:  # these models use PCA-ICA reduced EEG data
             if model_name == 'EEGCNN':
-                model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
+                model = lambda: EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
             elif model_name == 'EEGInception':
-                model = EEGInceptionNet(in_shape=x_eeg_pca_ica.shape, num_classes=2)
+                model = lambda: EEGInceptionNet(in_shape=x_eeg_pca_ica.shape, num_classes=2)
             else:
                 raise Exception(f"Unknown model name {model_name}")
             model, training_histories, criterion, last_activation, _encoder = train_model(x_eeg_pca_ica_train, y_train, model, test_name=test_name, verbose=1, n_folds=n_folds)
@@ -202,7 +207,7 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
     models = {}
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(training_histories) + 1} of {len(param_grid)}")
-        model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
+        model = lambda: HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
                                         depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                         pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                         dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
@@ -221,12 +226,12 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
     return locking_performance, training_histories, models
 
 
-def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', plot_histories=False):
+def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', plot_histories=False):
     """
 
     @param X: can be a list of inputs
     @param Y:
-    @param model:
+    @param model: lambda experssion for initializing the model
     @param test_name:
     @param n_folds:
     @param lr:
@@ -237,7 +242,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
     """
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
-    model = model.to(device)
+    test_model = model_lambda().to(device)
 
     if isinstance(X, list):
         # create dummy random input for each input
@@ -253,8 +258,8 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
         dataset_class = TensorDataset
 
     with torch.no_grad():
-        model.eval()
-        output_shape = model(rand_input).shape[1]
+        test_model.eval()
+        output_shape = test_model(rand_input).shape[1]
 
     if output_shape == 1:
         assert len(np.unique(Y)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
@@ -272,7 +277,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
         criterion = nn.CrossEntropyLoss()
         last_activation = nn.Softmax(dim=1)
 
-    X = model.prepare_data(X)
+    X = test_model.prepare_data(X)
 
     skf = StratifiedShuffleSplit(n_splits=n_folds, random_state=random_seed)
     train_losses_folds = []
@@ -282,6 +287,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
     val_aucs_folds = []
 
     for f_index, (train, val) in enumerate(skf.split(X[0] if isinstance(X, list) else X, Y)):
+        _model = model_lambda().to(device)
         if isinstance(X, list):
             x_train = []
             x_val = []
@@ -312,7 +318,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        optimizer = torch.optim.Adam(_model.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
         scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
@@ -324,11 +330,11 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
         best_loss = np.inf
         patience_counter = 0
 
-
         for epoch in range(epochs):
             model_copy = copy.deepcopy(model)
             test_auc, train_loss, train_accuracy = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
             scheduler.step()
+            val_auc, val_loss, val_accuracy = _run_one_epoch(_model, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
             val_auc, val_loss, val_accuracy = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
 
             train_losses.append(train_loss)
@@ -344,6 +350,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
             pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
             if val_losses[-1] < best_loss:
                 torch.save(model_copy.state_dict(), os.path.join(model_save_dir, test_name+f'_{f_index}'))
+                torch.save(_model.state_dict(), os.path.join(model_save_dir, test_name))
                 if verbose >= 1: print('Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1], model_save_dir))
                 best_loss = val_losses[-1]
                 patience_counter = 0
@@ -371,7 +378,7 @@ def train_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2
         plt.title(f"Loss, {test_name}")
         plt.tight_layout()
         plt.show()
-    return model, training_histories_folds, criterion, last_activation, _encoder
+    return _model, training_histories_folds, criterion, last_activation, _encoder
 
 
 def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbose=1):
