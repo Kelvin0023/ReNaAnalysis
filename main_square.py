@@ -11,9 +11,9 @@ from RenaAnalysis import get_rdf, r_square_test
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.HDCA import hdca
 from renaanalysis.learning.models import EEGPupilCNN
-from renaanalysis.learning.train import train_model_pupil_eeg
+from renaanalysis.archived.train import train_model_pupil_eeg
 from renaanalysis.params.params import *
-from renaanalysis.utils.data_utils import epochs_to_class_samples, compute_pca_ica, mean_max_sublists, mean_min_sublists
+from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf, compute_pca_ica, mean_max_sublists, mean_min_sublists
 
 # analysis parameters ######################################################################################
 
@@ -91,7 +91,7 @@ event_filters = locking_filters[selected_locking]
 # r_square_test(rdf, event_names, event_filters, title=f'{selected_locking}')
 
 if is_regenerate_epochs:
-    x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0, plots='full', force_square=True)
+    x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='both', rebalance=True, participant='1', session=0, plots='full', force_square=True)
     pickle.dump(x, open(os.path.join(export_data_root, f'x_p1_s2_{selected_locking}.p'), 'wb'))
     pickle.dump(y, open(os.path.join(export_data_root, f'y_p1_s2_{selected_locking}.p'), 'wb'))
 else:
@@ -100,7 +100,7 @@ else:
 
 x_eeg = np.copy(x[0])
 if is_reduce_eeg_dim:
-    x[0], _, _ = compute_pca_ica(x[0], num_top_compoenents)
+    x[0], _, _ = compute_pca_ica(x[0], num_top_components)
 
 model = EEGPupilCNN(eeg_in_shape=x[0].shape, pupil_in_shape=x[1].shape, num_classes=2, eeg_in_channels=x[0].shape[1])
 model, training_histories, criterion, label_encoder = train_model_pupil_eeg(x, y, model, test_name=test_name)

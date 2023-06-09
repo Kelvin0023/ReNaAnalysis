@@ -54,7 +54,7 @@ class RenaDataFrame:
         :param session:
         :return: a dictionary with key being (participant, session), value is (data: dict, events: list of Event)
         """
-        if participant is None and session is None:
+        if (participant is None and session is None ) or (participant == 'all' and session == 'all' ):
             rtn = dict([((p, s), (data, events)) for (p, s), (data, events, bad_channels, ica_path) in self.participant_session_dict.items()])
             return rtn
 
@@ -150,7 +150,7 @@ class RenaDataFrame:
                 print(f"No EEG epochs found participant {p}, session {s}, skipping")
                 continue
             try:
-                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=None)  # resample happens after this loop
+                epochs, _ = generate_eeg_event_epochs(eeg_data_with_events, event_ids, tmin, tmax, resample_rate=None)  # use None because resampling at every loop can result in the epochs having different time vectors, making it impossible to concatenate
             except ValueError:
                 print(f"No EEG epochs found participant {p}, session {s}, skipping")
                 continue
@@ -164,8 +164,7 @@ class RenaDataFrame:
         if eeg_epochs_all is None or len(eeg_epochs_all) == 0:
             print(f"No EEG epochs found participant {participant}, session {session}, returning None")
             return [None] * 4
-        resample_rate = resample_rate if self.exg_resample_rate != resample_rate else None  # only resample when the resample rate is different from what's already been done
-        if resample_rate is not None:
+        if eeg_epochs_all.info['sfreq'] != resample_rate:
             eeg_epochs_all = eeg_epochs_all.resample(resample_rate)  # resample all the epochs together at the end
         if reject == 'auto':
             print("Auto rejecting epochs")

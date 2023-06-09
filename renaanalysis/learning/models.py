@@ -83,10 +83,10 @@ class EEGInceptionNet(nn.Module):
 
 
 class EEGCNN(nn.Module):
-    def __init__(self, in_shape, num_classes, in_channels=64, num_filters=16):
+    def __init__(self, in_shape, num_classes, num_filters=16):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels, num_filters, 5),
+            nn.Conv1d(in_shape[1], num_filters, 5),
             nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),
@@ -107,7 +107,7 @@ class EEGCNN(nn.Module):
         #     cnn_flattened_size = self.conv(torch.rand(in_shape)).shape[1]
 
         self.fcs = nn.Sequential(
-            nn.Linear(160, 128),
+            nn.Linear(304, 128),
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
@@ -124,11 +124,17 @@ class EEGCNN(nn.Module):
     def prepare_data(self, x):
         return x
 
+    def forward_without_classification(self, input):
+        x = self.conv(input)
+        for fc in self.fcs[:-1]:
+            x = fc(x)
+        return x
+
 class EEGPupilCNN(nn.Module):
-    def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, eeg_in_channels=64, pupil_in_channel=2, num_filters=16, fc_feature_size=304):
+    def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, pupil_in_channel=2, num_filters=16, fc_feature_size=432):
         super().__init__()
         self.conv_eeg = nn.Sequential(
-            nn.Conv1d(eeg_in_channels, num_filters, 5),
+            nn.Conv1d(eeg_in_shape[1], num_filters, 5),
             nn.ReLU(),
             nn.BatchNorm1d(num_filters),
             nn.MaxPool1d(2),

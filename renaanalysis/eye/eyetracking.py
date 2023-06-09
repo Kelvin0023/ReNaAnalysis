@@ -1,4 +1,5 @@
 import math
+from collections import defaultdict
 
 import numpy as np
 import scipy
@@ -45,8 +46,9 @@ class Fixation(Event):
         self.offset_time = offset_time
         self.detection_alg = detection_alg
         self.epoched = False
-        self.is_first_long_gaze = False
 
+        self.is_first_long_gaze = False
+        self.gaze_index = None  # index of this fixation on the object
 
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
@@ -109,6 +111,7 @@ def add_event_info_to_gaze(fixations, events, long_gaze_threshold=0.15):
     sac_in_block = []
     gaze_intersects = [x for x in events if type(x) == GazeRayIntersect]
     fixated = []
+    fixation_counts = defaultdict(int)  # (item_index, block_id) -> count
     for i, f in enumerate(fixations):
         if is_event_in_block(f, events):
             f = add_event_meta_info(f, events)
@@ -124,7 +127,9 @@ def add_event_info_to_gaze(fixations, events, long_gaze_threshold=0.15):
                     # gaze_intersect_events = get_events_between(f.onset_time, f.offset_time, events, lambda x: x.gaze_intersect is not None )
             overlapping_gaze_intersects = get_overlapping_events(f.onset_time, f.offset_time, gaze_intersects)
 
-            if len(overlapping_gaze_intersects) > 0:
+            if len(overlapping_gaze_intersects) > 0:  # if the fixation has overlapped a gaze intersect event
+                fixation_counts[(f.item_index, f.block_id)] += 1
+                f.gaze_index = fixation_counts[(f.item_index, f.block_id)] - 1
                 e = overlapping_gaze_intersects[0]  # IMPORTANT pick the first gaze event
                 f = copy_item_info(f, e)
                 if (f.item_index, f.block_id) not in fixated and f.duration > long_gaze_threshold:

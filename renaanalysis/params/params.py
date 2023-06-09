@@ -10,9 +10,10 @@ from renaanalysis.utils.Bidict import Bidict
 
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 # base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 # base_root = "D:/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "D:/Dropbox/Dropbox/ReNa/data/RenaPipeline-2023Spring"
 
 data_directory = "Subjects"
 export_data_root = 'C:/Data'
@@ -167,17 +168,15 @@ eeg_epoch_ticks = np.array([0, 0.3, 0.6, 0.8])
 pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 
 lr = 1e-3
-batch_size = 64
+batch_size = 32
 epochs = 5000
 patience = 75
 train_ratio = 0.8
 model_save_dir = 'renaanalysis/learning/saved_models'
 l2_weight = 1e-5
 
-random_seed = 42
+random_seed = 13
 
 # HDCA parameters
-split_window_eeg=100e-3
-split_window_pupil=500e-3
 num_folds = 10
-num_top_compoenents = 20
+num_top_components = 20

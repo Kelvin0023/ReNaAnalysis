@@ -31,7 +31,7 @@ class Fischer:
 def compute_pca_ica(X, n_components, pca=None, ica=None):
     """
     data will be normaly distributed after applying this dimensionality reduction
-    @param X:
+    @param X: input array
     @param n_components:
     @return:
     """
@@ -73,13 +73,18 @@ def z_norm_projection(x_train, x_test):
     projection_mean = np.mean(np.concatenate((x_train, x_test), axis=0), axis=0, keepdims=True)
     projection_std = np.std(np.concatenate((x_train, x_test), axis=0), axis=0, keepdims=True)
 
-    return (x_train - projection_mean) / projection_std, (x_test - projection_mean) / projection_std
+    return (x_train - projection_mean) / projection_std, (x_test - projection_mean) / projection_std, projection_mean, projection_std
 
+def z_norm_hdca(x, _mean=None, _std=None):
+    if _mean is None or _std is None:
+        _mean = np.mean(x, axis=0, keepdims=True)
+        _std = np.std(x, axis=0, keepdims=True)
+    return (x - _mean) / _std
 
 def rebalance_classes(x, y):
     epoch_shape = x.shape[1:]
     x = np.reshape(x, newshape=(len(x), -1))
-    sm = SMOTE(random_state=42)
+    sm = SMOTE(random_state=random_seed)
     x, y = sm.fit_resample(x, y)
     x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
     return x, y
@@ -149,7 +154,7 @@ def force_square_epochs(epochs, tmin, tmax):
         square_epochs = epochs.resample(target_resample_srate)
     return square_epochs
 
-def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, exg_resample_rate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
+def get_multi_locking_data(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, exg_resample_rate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
@@ -198,7 +203,86 @@ def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False,
         if data_type == 'eeg':
             tmin = tmin_eeg
             tmax = tmax_eeg
-            epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, resample_rate=exg_resample_rate, n_jobs=n_jobs, reject=reject, force_square=force_square)
+            epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs, reject=reject, force_square=force_square)
+        elif data_type == 'pupil':
+            tmin = tmin_pupil
+            tmax = tmax_pupil
+            epochs, event_ids, ps_group_eeg = rdf.get_pupil_epochs(event_names, event_filters, eyetracking_resample_srate, tmin=tmin_pupil, tmax=tmax_pupil, participant=participant, session=session, n_jobs=n_jobs, force_square=force_square)
+        else:
+            raise NotImplementedError(f'data type {data_type} is not implemented')
+        if force_square:
+            epochs = force_square_epochs(epochs, tmin, tmax)
+        x, y = _epoch_to_samples(epochs, event_ids)
+
+        if rebalance:
+            x, y = rebalance_classes(x, y)
+
+        if data_type == 'eeg':
+            sanity_check_eeg(x, y, picks)
+            if plots == 'sanity_check':
+                sanity_check_eeg(x, y, picks)
+            elif plots == 'full':
+                visualize_eeg_epochs(epochs, event_ids, colors, title='EEG Epochs ' + title)
+        elif data_type == 'pupil':
+            sanity_check_pupil(x, y)
+            if plots == 'sanity_check':
+                sanity_check_pupil(x, y)
+            elif plots == 'full':
+                visualize_pupil_epochs(epochs, event_ids, colors, title='Pupil Epochs ' + title)
+
+        # return x, y, epochs, event_ids, ps_group_eeg
+        return x, y, epochs, event_ids
+
+def epochs_to_class_samples_rdf(rdf, event_names, event_filters, *, rebalance=False, participant=None, session=None, picks=None, data_type='eeg', tmin_eeg=-0.1, tmax_eeg=0.8, exg_resample_rate=128, tmin_pupil=-1., tmax_pupil=3., eyetracking_resample_srate=20, n_jobs=1, reject='auto', force_square=False, plots='sanity-check', colors=None, title=''):
+    """
+    script will always z norm along channels for the input
+    @param: data_type: can be eeg, pupil or mixed
+    @param: force_square: whether to call resample again on the data to force the number of epochs to match the
+    number of time points. Enabling this can help algorithms that requires square matrix as their input. Default
+    is disabled. Note when force_square is enabled, the resample rate (both eeg and pupil) will be ignored. rebalance
+    will also be disabled.
+    @param: plots: can be 'sanity_check', 'full', or none
+    """
+    if force_square:
+        eyetracking_resample_srate = exg_resample_rate = None
+        rebalance = False
+    if data_type == 'both':
+        epochs_eeg, event_ids, ar_log, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, resample_rate=exg_resample_rate, n_jobs=n_jobs, reject=reject)
+        if epochs_eeg is None:
+            return None, None, None, event_ids
+        epochs_pupil, event_ids, ps_group_pupil = rdf.get_pupil_epochs(event_names, event_filters, tmin=tmin_pupil, tmax=tmax_pupil, resample_rate=eyetracking_resample_srate, participant=participant, session=session, n_jobs=n_jobs)
+        if reject == 'auto':  # if using auto rejection
+            epochs_pupil = epochs_pupil[np.logical_not(ar_log.bad_epochs)]
+            ps_group_pupil = np.array(ps_group_pupil)[np.logical_not(ar_log.bad_epochs)]
+        try:
+            assert np.all(ps_group_pupil == ps_group_eeg)
+        except AssertionError:
+            raise ValueError(f"pupil and eeg groups does not match: {ps_group_pupil}, {ps_group_eeg}")
+
+        if force_square:
+            epochs_eeg = force_square_epochs(epochs_eeg, tmin_eeg, tmax_eeg)
+            epochs_pupil = force_square_epochs(epochs_pupil, tmin_pupil, tmax_pupil)
+        x_eeg, x_pupil, y = _epochs_to_samples_eeg_pupil(epochs_pupil, epochs_eeg, event_ids)
+
+        if rebalance:
+            x_eeg, y_eeg = rebalance_classes(x_eeg, y)
+            x_pupil, y_pupil = rebalance_classes(x_pupil, y)
+            assert np.all(y_eeg == y_pupil)
+            y = y_eeg
+
+        if plots == 'sanity_check':
+            sanity_check_eeg(x_eeg, y, picks)
+            sanity_check_pupil(x_pupil, y)
+        elif plots == 'full':
+            visualize_eeg_epochs(epochs_eeg, event_ids, colors, title='EEG Epochs ' + title)
+            visualize_pupil_epochs(epochs_pupil, event_ids, colors, title='Pupil Epochs ' + title)
+
+        return [x_eeg, x_pupil], y, [epochs_eeg, epochs_pupil], event_ids
+    else:
+        if data_type == 'eeg':
+            tmin = tmin_eeg
+            tmax = tmax_eeg
+            epochs, event_ids, _, ps_group_eeg = rdf.get_eeg_epochs(event_names, event_filters, tmin=tmin_eeg, tmax=tmax_eeg, participant=participant, session=session, n_jobs=n_jobs, reject=reject, force_square=force_square)
         elif data_type == 'pupil':
             tmin = tmin_pupil
             tmax = tmax_pupil
@@ -235,6 +319,37 @@ def epochs_to_class_samples(rdf, event_names, event_filters, *, rebalance=False,
 
         # return x, y, epochs, event_ids, ps_group_eeg
         return x, y, epochs, event_ids
+
+def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rate=128, n_jobs=1, reject='auto', lots='sanity-check', colors=None, title=''):
+    """
+    script will always z norm along channels for the input
+    @param: data_type: can be eeg, pupil or mixed
+    @param: force_square: whether to call resample again on the data to force the number of epochs to match the
+    number of time points. Enabling this can help algorithms that requires square matrix as their input. Default
+    is disabled. Note when force_square is enabled, the resample rate (both eeg and pupil) will be ignored. rebalance
+    will also be disabled.
+    @param: plots: can be 'sanity_check', 'full', or none
+    """
+    if picks is not None:
+        epochs = epochs.copy().pick(picks)[event_names]
+    else:
+        epochs = epochs.copy()[event_names]
+
+    if epochs.info['sfreq'] != eeg_resample_rate:
+        epochs.resample(eeg_resample_rate, n_jobs=n_jobs)
+    if reject == 'auto':
+        print("Auto rejecting epochs")
+        ar = AutoReject(n_jobs=n_jobs, verbose=False)
+        epochs_clean, log = ar.fit_transform(epochs, return_log=True)
+    else:
+        epochs_clean = epochs
+    event_ids = {event_name: i for i, event_name in enumerate(event_names)}
+    x, y = _epoch_to_samples(epochs_clean, event_ids)
+
+    visualize_eeg_epochs(epochs_clean, event_ids, colors, title='EEG Epochs ' + title)
+
+    return x, y
+
 
 
 def sanity_check_eeg(x, y, picks):
@@ -274,3 +389,37 @@ def binary_classification_metric(y_true, y_pred):
     # Specificity or true negative rate
     TNR = TN / (TN + FP)
     return acc, TPR, TNR
+
+def z_norm_by_trial(data):
+    """
+    Z-normalize data by trial, the input data is in the shape of (num_samples, num_channels, num_timesteps)
+    @param data: data is in the shape of (num_samples, num_channels, num_timesteps)
+    """
+    norm_data = np.copy(data)
+    for i in range(data.shape[0]):
+        sample = data[i]
+        mean = np.mean(sample, axis=(0, 1))
+        std = np.std(sample, axis=(0, 1))
+        sample_norm = (sample - mean) / std
+        norm_data[i] = sample_norm
+    return norm_data
+
+
+import numpy as np
+
+
+def mean_ignore_zero(arr, axis=0):
+    """
+    Calculates the mean of an array along the specified axis, ignoring all zero values.
+
+    Args:
+    - arr: numpy array
+    - axis: int (default: 0)
+
+    Returns:
+    - mean: numpy array containing the mean of non-zero values along the specified axis
+    """
+    # Calculate the mean of non-zero values along the specified axis
+    mean = np.true_divide(arr.sum(axis=axis), (arr != 0).sum(axis=axis))
+
+    return mean

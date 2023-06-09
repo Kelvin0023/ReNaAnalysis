@@ -1,3 +1,6 @@
+import os
+import pickle
+
 import torch
 from torch import nn
 
@@ -62,30 +65,30 @@ class Attention(nn.Module):
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
-        attn = self.attend(dots)
-        attn = self.dropout(attn)
+        attention = self.attend(dots)
+        attention = self.dropout(attention)  # TODO
 
-        out = torch.matmul(attn, v)
+        out = torch.matmul(attention, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
-        return self.to_out(out), attn
+        return self.to_out(out), attention
 
 
 class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
+    def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
                 PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
-                PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout))
+                PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
 
     def forward(self, x):
-        for attn, ff in self.layers:
-            out, alpha = attn(x)
+        for prenorm_attention, prenorm_feedforward in self.layers:
+            out, attention = prenorm_attention(x)
             x = out + x
-            x = ff(x) + x
-        return x, alpha  # last layer
+            x = prenorm_feedforward(x) + x
+        return x, attention  # last layer
 
 
 # class ViT(nn.Module):
@@ -136,61 +139,69 @@ class Transformer(nn.Module):
 #         return self.mlp_head(x)
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, window_duration, num_classes, depth, num_heads, mlp_dim, pool='cls',
-                 path_embed_dim=32, dim_head=64, dropout=0., emb_dropout=0., weak_interaction=True):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=128, window_duration=0.1, pool='cls',
+                 patch_embed_dim=512, dim_head=128, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
+    # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
+    #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """
 
         # a token is a time slice of data on a single channel
 
         @param num_timesteps: int: number of timesteps in each sample
         @param num_channels: int: number of channels of the input data
-
+        @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
+        note that 'single' only works when the number of classes is 2.
         """
+        if output == 'single':
+            assert num_classes == 2, 'output can only be single when num_classes is 2'
         super().__init__()
         self.depth = depth
         self.num_heads = num_heads
+        self.window_duration = window_duration
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
-        self.patch_size = int(window_duration * sampling_rate)
-        self.num_windows = num_timesteps // self.patch_size
+        self.path_embed_dim = patch_embed_dim
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
-
+        # self.to_patch_embedding = nn.Sequential(
+        #     Rearrange('b c (nw ps) -> b (c nw) (ps)', nw=self.num_windows, ps=self.patch_length),
+        #     nn.Linear(self.patch_length, patch_embed_dim),
+        # )
         self.to_patch_embedding = nn.Sequential(
-            Rearrange('b c (nw ps) -> b (c nw) (ps)', nw=self.num_windows, ps=self.patch_size),
-            nn.Linear(self.num_patches, path_embed_dim),
+            Rearrange('b eegc t -> b 1 eegc t', eegc=self.num_channels, t=self.num_timesteps),
+            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
+            # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
         )
-        x = torch.randn(10, self.num_channels, num_timesteps)
+        # x = torch.randn(10, self.num_channels, self.num_timesteps)
 
-        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, dim))
-        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.transformer = Transformer(dim, depth, num_heads, dim_head, mlp_dim, dropout)
+        self.transformer = Transformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
 
         self.pool = pool
         self.to_latent = nn.Identity()
-        self.weak_interaction = weak_interaction
-        if self.weak_interaction:
+
+        if output == 'single':
             self.mlp_head = nn.Sequential(
-                nn.LayerNorm(dim + self.num_layers * self.rnn_hidden_dim),
-                nn.Linear(dim + self.num_layers * self.rnn_hidden_dim, num_classes)
-            )
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, 1))
         else:
             self.mlp_head = nn.Sequential(
-                nn.LayerNorm(dim),
-                nn.Linear(dim, num_classes)
-            )
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, num_classes))
 
-        self.lstm = nn.LSTM(self.num_dim_fixation, self.rnn_hidden_dim, num_layers=self.num_layers, bidirectional=False,
-                            batch_first=True)
+    def forward(self, x_eeg):
+        x = self.to_patch_embedding(x_eeg)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
-    def forward(self, img, fixation_sequence):
-        x = self.to_patch_embedding(img)
         b, n, _ = x.shape
 
         cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
@@ -199,43 +210,46 @@ class HierarchicalTransformer(nn.Module):
         x = self.dropout(x)
 
         x, att_matrix = self.transformer(x)
-        att_matrix = att_matrix[:, :, 1:, 1:]
-        att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
-        att_matrix = torch.sum(att_matrix, dim=2)
+        # att_matrix = att_matrix[:, :, 1:, 1:]
+        # att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
+        # att_matrix = torch.sum(att_matrix, dim=2)
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
 
         x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
 
-        # rnn_input = rnn_utils.pad_sequence(seq, batch_first=True)
-        # output = self.lstm(rnn_input)
-        rnn_outputs, hiddens = self.lstm(fixation_sequence)
-        hidden, cell = hiddens
+        x = self.to_latent(x)
 
-        if self.weak_interaction:
-            x = torch.concat([x] + [hidden[i, :, :] for i in range(self.num_layers)], dim=1)
-        else:
-            x = self.to_latent(x)
+        return self.mlp_head(x)
+    def prepare_data(self, x):
+        return x
+    # def test(self, img):
+    #     x = self.to_patch_embedding(img)
+    #     b, n, _ = x.shape
+    #
+    #     cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
+    #     x = torch.cat((cls_tokens, x), dim=1)
+    #     x += self.pos_embedding[:, :(n + 1)]
+    #     x = self.dropout(x)
+    #
+    #     x, att_matrix = self.transformer(x)
+    #     att_matrix = att_matrix[:, :, 1:, 1:]
+    #     att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
+    #     att_matrix = torch.sum(att_matrix, dim=2)
+    #     # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
+    #     # note test does not have lstm and sequence
+    #     x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
+    #
+    #     return self.mlp_head(x), att_matrix
 
-        return self.mlp_head(x), att_matrix
+    # def get_grid_size(self):
+    #     return self.grid_size
 
-    def test(self, img):
-        x = self.to_patch_embedding(img)
-        b, n, _ = x.shape
+def viz_ht(model: HierarchicalTransformer, x_eeg, y, label_encoder):
+    pass
+    model.eval()
 
-        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x += self.pos_embedding[:, :(n + 1)]
-        x = self.dropout(x)
+    torch.save(model.state_dict(), os.path.join('HT/RSVP-itemonset-locked', 'model.pt'))
+    pickle.dump(x_eeg, open(os.path.join('HT/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb'))
+    pickle.dump(y, open(os.path.join('HT/RSVP-itemonset-locked', 'y.pkl'), 'wb'))
+    pickle.dump(label_encoder, open(os.path.join('HT/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb'))
 
-        x, att_matrix = self.transformer(x)
-        att_matrix = att_matrix[:, :, 1:, 1:]
-        att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
-        att_matrix = torch.sum(att_matrix, dim=2)
-        # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
-        # note test does not have lstm and sequence
-        x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-
-        return self.mlp_head(x), att_matrix
-
-    def get_grid_size(self):
-        return self.grid_size

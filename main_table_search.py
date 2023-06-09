@@ -10,7 +10,7 @@ from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np
 # analysis parameters ######################################################################################
-from renaanalysis.utils.data_utils import epochs_to_class_samples
+from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf
 
 """
 Parameters (in the file /params.py):
@@ -100,4 +100,4 @@ locking_filters = {
 
 event_filters = locking_filters[selected_locking]
 
-x, y, _, _ = epochs_to_class_samples(rdf, event_names, event_filters, data_type='both', rebalance=True, plots='full', colors=colors, title='')
+x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='both', rebalance=True, plots='full', colors=colors, title='')

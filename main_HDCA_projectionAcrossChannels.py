@@ -74,7 +74,7 @@ for i, (train, test) in enumerate(cross_val_folds.split(x, y)):  # cross-validat
     num_test_trials = len(x_transformed_test)
     # compute Fisher's LD for each temporal window
     print("Computing windowed LDA per channel, and project per window and trial")
-    weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial = compute_window_projections(x_transformed_train_windowed, x_transformed_test_windowed, y_train)
+    weights_channelWindow, projectionTrain_window_trial, projectionTest_window_trial = compute_window_projections_func(x_transformed_train_windowed, x_transformed_test_windowed, y_train)
     print('Computing forward model from window projections for test set')
     activation = compute_forward(x_test_windowed, y_test, projectionTest_window_trial)
     # train classifier, use gradient descent to find the cross-window weights
