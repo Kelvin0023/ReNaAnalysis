@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from moviepy.video.io import ImageSequenceClip
+from sklearn.metrics import confusion_matrix
 
 from renaanalysis.eye.EyeUtils import temporal_filter_fixation
 from renaanalysis.eye.eyetracking import Fixation, Saccade, GazeRayIntersect
@@ -355,3 +356,49 @@ def viz_pupil_epochs(rdf, event_names, event_filters, colors, title='', eyetrack
 def viz_eeg_epochs(rdf, event_names, event_filters, colors, title='', participant=None, session=None, tmin=-0.1, tmax=0.8, n_jobs=1):
     eeg_epochs, eeg_event_ids, _, _ = rdf.get_eeg_epochs(event_names, event_filters, tmin, tmax, participant, session, n_jobs=n_jobs)
     visualize_eeg_epochs(eeg_epochs, eeg_event_ids, colors, title=title)
+
+def viz_class_error(standard, target, type):
+    plt.plot(standard, label='Standard')
+    plt.plot(target, label='Target')
+
+    # Adding labels and title
+    plt.xlabel('Epochs')
+    plt.ylabel('num_errors')
+    plt.title(f'{type} Errors')
+
+    # Adding legend
+    plt.legend()
+
+    # Display the plot
+    plt.show()
+
+def viz_confusion_matrix(true_label, pred_label, epoch, fold, type):
+    cm = confusion_matrix(true_label, pred_label)
+
+    fig, ax = plt.subplots()
+
+    # Plot the confusion matrix as an image
+    im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+
+    # Set axis labels and title
+    ax.set(xticks=np.arange(cm.shape[1]),
+           yticks=np.arange(cm.shape[0]),
+           xlabel='Predicted label',
+           ylabel='True label',
+           title=f'{type} Confusion Matrix of epoch {epoch} in fold {fold}')
+
+    # Add colorbar
+    cbar = ax.figure.colorbar(im, ax=ax)
+
+    # Display the tick labels on the x and y axes
+    ax.xaxis.set_ticklabels(['Standard', 'Target'])
+    ax.yaxis.set_ticklabels(['Standard', 'Target'])
+
+    # Loop over data dimensions and create text annotations
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, str(cm[i, j]), ha='center', va='center', color='red')
+
+    plt.savefig(f'renaanalysis/learning/saved_images/confusion_matrixs/{fold}_{epoch}.png')
+    # Show the plot
+    plt.show()

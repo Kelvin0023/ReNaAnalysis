@@ -1,4 +1,5 @@
 import datetime
+import os.path
 import pickle
 
 import matplotlib.pyplot as plt
@@ -34,13 +35,27 @@ torch.manual_seed(random_seed)
 np.random.seed(random_seed)
 
 x, y = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
+with open(os.path.join('HT_grid/RSVP-itemonset-locked','x_raw.p'), 'wb') as f:
+    pickle.dump(x, f)
+with open(os.path.join('HT_grid/RSVP-itemonset-locked','y_raw.p'), 'wb') as f:
+    pickle.dump(y, f)
 
 
 # lockings test  ####################################################################################################
 
 results = dict()
-
-x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x, None)
+if os.path.exists('data/x_pca_ica.p') and os.path.exists('data/x_znormed.p'):
+    with open('data/x_pca_ica.p', "rb") as file:
+        x_eeg_pca_ica = pickle.load(file)
+    with open('data/x_znormed.p', "rb") as file:
+        x_eeg_znormed = pickle.load(file)
+    x_pupil_znormed = None
+else:
+    x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x, None)
+    with open('data/x_pca_ica.p', "wb") as file:
+        pickle.dump(x_eeg_pca_ica, file)
+    with open('data/x_znormed.p', "wb") as file:
+        pickle.dump(x_eeg_znormed, file)
 now = datetime.datetime.now()
 datetime_string = now.strftime("%Y-%m-%d_%H-%M-%S")
 result_path = result_path + datetime_string

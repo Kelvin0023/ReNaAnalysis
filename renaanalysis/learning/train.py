@@ -29,10 +29,13 @@ from renaanalysis.learning.MutiInputDataset import MultiInputDataset
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
     export_data_root, num_top_components
+from renaanalysis.utils.Training_utils import count_standard_error, count_target_error
 from renaanalysis.utils.data_utils import compute_pca_ica, rebalance_classes, mean_max_sublists, \
     mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
 import matplotlib.pyplot as plt
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
+from renaanalysis.utils.viz_utils import viz_class_error, viz_confusion_matrix
+
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, n_folds=10, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='single'):
     # verify number of event types
@@ -217,7 +220,7 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
         models[hashable_params] = model
         if not os.path.exists('HT_grid'):
             os.mkdir('HT_grid')
-        torch.save(model, f'HT_grid/{params}_model.pt')
+        torch.save(model, f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_model.pt")
     return locking_performance, training_histories, models
 
 
@@ -391,7 +394,7 @@ def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbos
 
     return _run_one_epoch(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
 
-def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', X_test=None, Y_test=None, plot_histories=False, is_test=True):
+def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=False, is_test=True):
     """
 
     @param X: can be a list of inputs
@@ -455,9 +458,10 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
     models = []
 
     for f_index, (train, val) in enumerate(skf.split(X[0] if isinstance(X, list) else X, Y)):
-        model_copy = copy.deepcopy(model)
-        # model_copy = HierarchicalTransformer(180, 20, 200, num_classes=2,
-        #                                 output='multi')
+        # model_copy = copy.deepcopy(model)
+        model_copy = HierarchicalTransformer(180, 20, 200, num_classes=2,
+                                        output='multi')
+        # model_copy = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
         model_copy = model_copy.to(device)
         # model = model.to(device)
         # rollout = VITAttentionRollout(model_copy, device, attention_layer_class=Attention,
@@ -479,7 +483,8 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
             y_train = rebalanced_labels[0]
         else:
             x_train, x_val, y_train, y_val = X[train], X[val], Y[train], Y[val]
-            x_train, y_train = rebalance_classes(x_train, y_train)  # rebalance by class
+            if rebalance_method == 'SMOT':
+                x_train, y_train = rebalance_classes(x_train, y_train)  # rebalance by class
             x_train = torch.Tensor(x_train).to(device)
             x_val = torch.Tensor(x_val).to(device)
 
@@ -492,7 +497,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         train_dataset = dataset_class(x_train, y_train_encoded)
         val_dataset = dataset_class(x_val, y_val_encoded)
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
@@ -508,16 +513,25 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         test_auc = []
         test_loss = []
         test_acc = []
-
+        num_train_standard_errors = []
+        num_train_target_errors = []
+        num_val_standard_errors = []
+        num_val_target_errors = []
 
         for epoch in range(epochs):
             # prev_para = []
             # for param in model_copy.parameters():
             #     prev_para.append(param.cpu().detach().numpy())
-            train_auc, train_loss, train_accuracy = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_predicted_labels_all, train_true_label_all = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            num_train_standard_errors.append(num_train_standard_error)
+            num_train_target_errors.append(num_train_target_error)
+            viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
-            val_auc, val_loss, val_accuracy = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_predicted_labels_all, val_true_label_all = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            num_val_standard_errors.append(num_val_standard_error)
+            num_val_target_errors.append(num_val_target_error)
+            viz_confusion_matrix(val_true_label_all, val_predicted_labels_all, epoch, f_index, 'val')
             # para = []
             # for param in model_copy.parameters():
             #     para.append(param.cpu().detach().numpy())
@@ -525,7 +539,6 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
             #     for i in range(52):
             #         if not np.all(np.equal(prev_para[i], para[i])):
             #             print('diff')
-
             train_losses.append(train_loss)
             train_accs.append(train_accuracy)
             val_aucs.append(val_auc)
@@ -535,10 +548,10 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
             if verbose >= 1:
                 print("Fold {}, Epoch {}: val auc = {:.16f}, train accuracy = {:.16f}, train loss={:.16f}; val accuracy = {:.16f}, val loss={:.16f}, patience left {}".format(f_index, epoch, np.max(val_aucs), train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1], patience - patience_counter))
             # Save training histories after every epoch
-            training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses, 'acc_val': val_accs}
-            pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
+            training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses, 'acc_val': val_accs, 'auc_val':val_aucs}
+            pickle.dump(training_histories, open(os.path.join(model_save_dir, test_name+f'training_histories_{f_index}.pickle'), 'wb'))
             if val_losses[-1] < best_loss:
-                torch.save(model_copy.state_dict(), os.path.join(model_save_dir, test_name+f'_{f_index}'))
+                torch.save(model_copy.state_dict(), os.path.join(model_save_dir, test_name+f'_{f_index}.pt'))
                 if verbose >= 1: print('Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1], model_save_dir))
                 best_loss = val_losses[-1]
                 patience_counter = 0
@@ -547,13 +560,15 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
                 if patience_counter > patience:
                     if verbose >= 1: print(f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
                     break
+        viz_class_error(num_train_standard_errors, num_train_target_errors, 'train')
+        viz_class_error(num_val_standard_errors, num_val_target_errors, 'validation')
         train_accs_folds.append(train_accs)
         train_losses_folds.append(train_losses)
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
         if is_test:
-            test_auc_model, test_loss_model, test_acc_model = eval(model_copy, X_test, Y_test, criterion, last_activation, _encoder,
+            test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_predicted_labels_all, test_true_label_all = eval(model_copy, X_test, Y_test, criterion, last_activation, _encoder,
                                              test_name='', verbose=1)
             if verbose >= 1:
                 print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
@@ -613,6 +628,8 @@ def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mod
     num_correct_preds = 0
     y_all = None
     y_all_pred = None
+    num_standard_errors = 0
+    num_target_errors = 0
     for x, y in dataloader:
         if mode == 'train': optimizer.zero_grad()
 
@@ -658,10 +675,14 @@ def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mod
             predicted_labels = torch.argmax(y_pred, dim=1)
             true_label = torch.argmax(y_tensor, dim=1)
         num_correct_preds += torch.sum(true_label == predicted_labels).item()
+        num_standard_errors += count_standard_error(true_label, predicted_labels)
+        num_target_errors += count_target_error(true_label, predicted_labels)
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
+    predicted_labels_all = np.argmax(y_all_pred, axis=1)
+    true_label_all = np.argmax(y_all, axis=1)
     if verbose >= 1: pbar.close()
-    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset)
+    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, predicted_labels_all, true_label_all
 
 
 def train_model_pupil_eeg_no_folds(X, Y, model, num_epochs=5000, test_name="CNN-EEG-Pupil", lr=1e-3, l2_weight=1e-5, verbose=1):
