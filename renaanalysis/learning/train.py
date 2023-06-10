@@ -14,11 +14,6 @@ from torch import nn
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
-from renaanalysis.learning.transformer_rollout import VITAttentionRollout
-from renaanalysis.learning.HT import Attention
-from renaanalysis.learning.HT_viz import ht_viz_training
-from collections import defaultdict
-import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
@@ -35,9 +30,6 @@ import matplotlib.pyplot as plt
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
 
-def eval_multi_locking_model(rdf, epoch_encoder_path):
-    pass
-    # get_multi_locking_data(rdf)
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, n_folds=10, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='single'):
     # verify number of event types

@@ -201,3 +201,34 @@ class RenaDataFrame:
             raw.set_montage(eeg_montage)
 
             data['BioSemi'] = {'array_original': exg_array, 'timestamps_original': timestamps, 'raw': raw, 'timestamps': timestamps}
+
+    def get_condition_block_ids(self, condition, participant=None, session=None):
+        ps_dict = self.get_data_events(participant, session)
+        rtn = {}
+        for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
+            filtered_events = [e for e in events if e.is_block_start and e.block_condition == condition]
+            rtn[(p, s)] = [e.block_id for e in filtered_events]
+        return rtn
+
+    def get_block_item_ids(self, block_id, participant=None, session=None, return_dtn_type=False):
+        ps_dict = self.get_data_events(participant, session)
+        rtn = {}
+        for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
+            filtered_events = [e for e in events if e.item_id is not None and e.block_id == block_id]
+            if return_dtn_type:
+                rtn[(p, s)] = np.unique([(e.item_id, e.dtn) for e in filtered_events], axis=0)
+            else:
+                rtn[(p, s)] = np.unique([e.item_id for e in filtered_events])
+        return rtn
+
+    def get_item_dtn_type_in_block(self, item_id, block_id, participant=None, session=None):
+        ps_dict = self.get_data_events(participant, session)
+        rtn = {}
+        for (i, ((p, s), (data, events))) in enumerate(ps_dict.items()):
+            filtered_events = [e for e in events if e.item_id == item_id and e.block_id == block_id]
+            rtn[(p, s)] = np.unique(filtered_events[0].dtn_type)
+            try:
+                assert len(rtn[(p, s)]) == 1
+            except AssertionError:
+                raise ValueError(f"Item {item_id} in block {block_id} has more than one DTN type: {rtn[(p, s)]}")
+        return rtn
