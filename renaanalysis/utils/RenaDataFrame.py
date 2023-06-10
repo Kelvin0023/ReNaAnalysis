@@ -6,7 +6,7 @@ from autoreject import AutoReject
 
 from renaanalysis.eeg.eeg_utils import simulate_eeg
 from renaanalysis.params.params import varjoEyetracking_chs, varjoEyetracking_stream_name, eeg_channel_names, \
-    ecg_ch_name, proxy_eog_ch_names, eeg_montage
+    ecg_ch_name, proxy_eog_ch_names, eeg_montage, random_seed
 from renaanalysis.utils.Event import add_events_to_data
 from renaanalysis.utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
     validate_get_epoch_args, \
@@ -168,7 +168,7 @@ class RenaDataFrame:
             eeg_epochs_all = eeg_epochs_all.resample(resample_rate)  # resample all the epochs together at the end
         if reject == 'auto':
             print("Auto rejecting epochs")
-            ar = AutoReject(n_jobs=n_jobs, verbose=False)
+            ar = AutoReject(n_jobs=n_jobs, verbose=False, random_state=random_seed)
             eeg_epochs_clean, log = ar.fit_transform(eeg_epochs_all, return_log=True)
             ps_group = np.array(ps_group)[np.logical_not(log.bad_epochs)]
         else:

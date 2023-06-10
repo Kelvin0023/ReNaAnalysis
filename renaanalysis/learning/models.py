@@ -124,6 +124,12 @@ class EEGCNN(nn.Module):
     def prepare_data(self, x):
         return x
 
+    def forward_without_classification(self, input):
+        x = self.conv(input)
+        for fc in self.fcs[:-1]:
+            x = fc(x)
+        return x
+
 class EEGPupilCNN(nn.Module):
     def __init__(self, eeg_in_shape, pupil_in_shape, num_classes, pupil_in_channel=2, num_filters=16, fc_feature_size=432):
         super().__init__()

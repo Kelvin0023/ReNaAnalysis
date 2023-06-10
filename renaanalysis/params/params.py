@@ -10,9 +10,10 @@ from renaanalysis.utils.Bidict import Bidict
 
 # base_root = "C:/Users/LLINC-Lab/Dropbox/ReNa/data/ReNaPilot-2022Fall/"
 # base_root = "/Users/Leo/Dropbox/ReNa/data/ReNaPilot-2022Fall"
-base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+# base_root = "D:/Dropbox/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 # base_root = "C:/Users/S-Vec/Dropbox/ReNa/data/ReNaPilot-2022Fall"
 # base_root = "D:/Dropbox/ReNa/data/ReNaPilot-2022Fall"
+base_root = "D:/Dropbox/Dropbox/ReNa/data/RenaPipeline-2023Spring"
 
 data_directory = "Subjects"
 export_data_root = 'C:/Data'
