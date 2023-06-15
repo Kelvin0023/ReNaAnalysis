@@ -46,12 +46,12 @@ grid_search_params = {
     "feedforward_mlp_dim": [32, 64],
 
     # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [32, 64],
+    "patch_embed_dim": [64],
 
-    "dim_head": [32, 64],
+    "dim_head": [64],
     "attn_dropout": [0.5],
     "emb_dropout": [0.5],
-    "lr": [1e-3, 1e-4],
+    "lr": [1e-4],
     "l2_weight": [1e-5],
 
     # "lr_scheduler_type": ['cosine'],
@@ -90,6 +90,7 @@ plt.rcParams.update({'font.size': 22})
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 event_names = ["Distractor", "Target"]
 n_folds = 3
+is_pca_ica = True
 # locking_name_filters_vs = {
 #                         'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
 #                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
@@ -127,9 +128,10 @@ locking_name_filters_constrained = {
                                     } #nyamu <3
 
 
-locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate)
-pickle.dump(training_histories, open('model_training_histories.p', 'wb'))
-pickle.dump(locking_performance, open('model_locking_performances.p', 'wb'))
+locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, is_pca_ica=True, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate)
+pickle.dump(training_histories, open(f'model_training_histories_pca_{is_pca_ica}.p', 'wb'))
+pickle.dump(locking_performance, open(f'model_locking_performances_pca_{is_pca_ica}.p', 'wb'))
+pickle.dump(models, open(f'models_with_params_pca_{is_pca_ica}.p', 'wb'))
 
 
 

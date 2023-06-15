@@ -81,12 +81,47 @@ def z_norm_hdca(x, _mean=None, _std=None):
         _std = np.std(x, axis=0, keepdims=True)
     return (x - _mean) / _std
 
-def rebalance_classes(x, y):
+def rebalance_classes(x, y, by_channel=False):
+    """
+    Resamples the data to balance the classes using SMOTE algorithm.
+
+    Parameters:
+        x (np.ndarray): Input data array of shape (epochs, channels, samples).
+        y (np.ndarray): Target labels array of shape (epochs,).
+        by_channel (bool): If True, balance the classes separately for each channel. Otherwise,
+            balance the classes for the whole input data.
+
+    Returns:
+        tuple: A tuple containing the resampled input data and target labels as numpy arrays.
+    """
     epoch_shape = x.shape[1:]
-    x = np.reshape(x, newshape=(len(x), -1))
-    sm = SMOTE(random_state=random_seed)
-    x, y = sm.fit_resample(x, y)
-    x = np.reshape(x, newshape=(len(x),) + epoch_shape)  # reshape back x after resampling
+
+    if by_channel:
+        y_resample = None
+        channel_data = []
+        channel_num = epoch_shape[0]
+
+        # Loop through each channel and balance the classes separately
+        for channel_index in range(0, channel_num):
+            sm = SMOTE(random_state=42)
+            x_channel = x[:, channel_index, :]
+            x_channel, y_resample = sm.fit_resample(x_channel, y)
+            channel_data.append(x_channel)
+
+        # Expand dimensions for each channel array and concatenate along the channel axis
+        channel_data = [np.expand_dims(x, axis=1) for x in channel_data]
+        x = np.concatenate([x for x in channel_data], axis=1)
+        y = y_resample
+
+    else:
+        # Reshape the input data to 2D array and balance the classes
+        x = np.reshape(x, newshape=(len(x), -1))
+        sm = SMOTE(random_state=42)
+        x, y = sm.fit_resample(x, y)
+
+        # Reshape the input data back to its original shape
+        x = np.reshape(x, newshape=(len(x),) + epoch_shape)
+
     return x, y
 
 def reject_combined(epochs_pupil, epochs_eeg, event_ids, n_jobs=1, n_folds=10, ar=None, return_rejections=False):

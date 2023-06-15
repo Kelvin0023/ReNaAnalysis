@@ -157,12 +157,13 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
             training_data = x_eeg_pca_ica_train if model_name == 'HT-pca-ica' else x_eeg_train
             test_data = x_eeg_pca_ica_test if model_name == 'HT-pca-ica' else x_eeg_test
-            model, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(training_data, y_train, model, X_test=test_data, Y_test=y_test, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
+            models, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(training_data, y_train, model, X_test=test_data, Y_test=y_test, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds, is_test=True)  # use un-dimension reduced EEG data
             rollout_data_root = f'HT_{note}'
             if not os.path.exists(rollout_data_root):
                 os.mkdir(rollout_data_root)
-            ht_viz(model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, model.window_duration, exg_resample_rate,
-                   eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
+            for i in range(n_folds):
+                ht_viz(models[i], x_eeg_test, y_test, _encoder, event_names, rollout_data_root, models[i].window_duration, exg_resample_rate,
+                       eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
         else:  # these models use PCA-ICA reduced EEG data
             if model_name == 'EEGCNN':
                 model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
@@ -181,7 +182,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     print("#" * 100)
     return performance, training_histories
 
-def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, exg_resample_rate=128, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True):
+def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, exg_resample_rate=128, is_pca_ica=True, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True):
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
     locking_performance = {}
     test_name = f'Locking-{locking_name}_Model-HT_P-{participant}_S-{session}'
@@ -197,6 +198,15 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
             raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}")
     x_eeg = z_norm_by_trial(x)
     x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, num_top_components)
+
+    skf = StratifiedShuffleSplit(n_splits=1, random_state=random_seed)
+    train, test = [(train, test) for train, test in skf.split(x_eeg, y)][0]
+    x_eeg_train, x_eeg_pca_ica_train = x_eeg[train], x_eeg_pca_ica[train]
+    x_eeg_test, x_eeg_pca_ica_test = x_eeg[test], x_eeg_pca_ica[test]
+    y_train, y_test = y[train], y[test]
+    assert np.all(np.unique(y_test) == np.unique(y_train)), "train and test labels are not the same"
+    assert len(np.unique(y_test)) == len(event_names), "number of unique labels is not the same as number of event names"
+
     if not os.path.exists('HT_grid/RSVP-itemonset-locked'):
         os.mkdir('HT_grid/RSVP-itemonset-locked')
     with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb') as f:
@@ -207,14 +217,14 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
 
     param_grid = ParameterGrid(grid_search_params)
     training_histories = {}
-    models = {}
+    models_param = {}
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(training_histories) + 1} of {len(param_grid)}")
         model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
                                         depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                         pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                         dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
-        model, training_histories, criterion, last_activation, _encoder = cv_train_test_model(x_eeg, y, model, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], is_test=False)  # use un-dimension reduced EEG data
+        models, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(x_eeg_pca_ica_train if is_pca_ica else x_eeg_train, y_train, model, X_test=x_eeg_pca_ica_test if is_pca_ica else x_eeg_test, Y_test=y_test, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], is_test=True)  # use un-dimension reduced EEG data
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
         folds_val_auc = mean_max_sublists(training_histories['auc_val'])
         print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
@@ -222,11 +232,12 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
         hashable_params = tuple(params.items())
         locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss}
         training_histories[hashable_params] = training_histories
-        models[hashable_params] = model
+        models_param[hashable_params] = models
         if not os.path.exists('HT_grid'):
             os.mkdir('HT_grid')
-        torch.save(model, f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_model.pt")
-    return locking_performance, training_histories, models
+        for i in range(n_folds):
+            torch.save(models, f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt")
+    return locking_performance, training_histories, models_param
 
 
 # def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', plot_histories=False):
@@ -401,7 +412,7 @@ def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbos
 
     return _run_one_epoch(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
 
-def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=False, is_test=True):
+def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=False, is_test=False):
     """
 
     @param X: can be a list of inputs
@@ -431,6 +442,13 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         input_shape = X.shape[1:]
         rand_input = torch.randn(1, *input_shape)
         dataset_class = TensorDataset
+    if rebalance_method == 'class weight':
+        #compute class proportion
+        unique_classes, counts = np.unique(Y, return_counts=True)
+        num_unique_classes = len(unique_classes)
+        class_proportions = counts / len(Y)
+        class_weights = 1/class_proportions
+        class_weights = torch.tensor(class_weights).to(device)
 
     with torch.no_grad():
         model.eval()
@@ -449,7 +467,10 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         label_encoder.fit(Y.reshape(-1, 1))
         _encoder = lambda y: label_encoder.transform(y.reshape(-1, 1)).toarray()
         # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
-        criterion = nn.CrossEntropyLoss()
+        if rebalance_method == 'SMOT':
+            criterion = nn.CrossEntropyLoss()
+        else:
+            criterion = nn.CrossEntropyLoss(weight=class_weights)
         last_activation = nn.Softmax(dim=1)
     with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb') as f:
         pickle.dump(label_encoder, f)
@@ -483,7 +504,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
 
             rebalanced_labels = []
             for this_x in X:
-                this_x_train, this_y_train = rebalance_classes(this_x[train], y_train)
+                this_x_train, this_y_train = rebalance_classes(this_x[train], y_train, by_channel=True) if rebalance_method == 'SMOT' else zip(this_x[train], y_train)
                 x_train.append(torch.Tensor(this_x_train).to(device))
                 rebalanced_labels.append(this_y_train)
                 x_val.append(torch.Tensor(this_x[val]).to(device))
@@ -600,9 +621,9 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         plt.tight_layout()
         plt.show()
     if is_test:
-        return models[test_auc.index(max(test_auc))], training_histories_folds, criterion, last_activation, _encoder, max(test_auc), max(test_loss), max(test_acc)
+        return models, training_histories_folds, criterion, last_activation, _encoder, test_auc, test_loss, test_acc
     else:
-        return model, training_histories_folds, criterion, last_activation, _encoder
+        return models, training_histories_folds, criterion, last_activation, _encoder
 
 def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', verbose=1, check_param=1):
     """

@@ -399,6 +399,6 @@ def viz_confusion_matrix(true_label, pred_label, epoch, fold, type):
         for j in range(cm.shape[1]):
             ax.text(j, i, str(cm[i, j]), ha='center', va='center', color='red')
 
-    plt.savefig(f'renaanalysis/learning/saved_images/confusion_matrixs/{fold}_{epoch}.png')
+    plt.savefig(f'renaanalysis/learning/saved_images/confusion_matrixs/{fold}_{epoch}_{type}.png')
     # Show the plot
     plt.show()
