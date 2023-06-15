@@ -103,7 +103,7 @@ def rebalance_classes(x, y, by_channel=False):
 
         # Loop through each channel and balance the classes separately
         for channel_index in range(0, channel_num):
-            sm = SMOTE(random_state=42)
+            sm = SMOTE(random_state=random_seed)
             x_channel = x[:, channel_index, :]
             x_channel, y_resample = sm.fit_resample(x_channel, y)
             channel_data.append(x_channel)
@@ -116,7 +116,7 @@ def rebalance_classes(x, y, by_channel=False):
     else:
         # Reshape the input data to 2D array and balance the classes
         x = np.reshape(x, newshape=(len(x), -1))
-        sm = SMOTE(random_state=42)
+        sm = SMOTE(random_state=random_seed)
         x, y = sm.fit_resample(x, y)
 
         # Reshape the input data back to its original shape

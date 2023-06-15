@@ -157,7 +157,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
             training_data = x_eeg_pca_ica_train if model_name == 'HT-pca-ica' else x_eeg_train
             test_data = x_eeg_pca_ica_test if model_name == 'HT-pca-ica' else x_eeg_test
-            models, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(training_data, y_train, model, X_test=test_data, Y_test=y_test, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds, is_test=True)  # use un-dimension reduced EEG data
+            models, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(training_data, y_train, model, is_plot_conf_matrix=True, X_test=test_data, Y_test=y_test, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds, is_test=True)  # use un-dimension reduced EEG data
             rollout_data_root = f'HT_{note}'
             if not os.path.exists(rollout_data_root):
                 os.mkdir(rollout_data_root)
@@ -182,7 +182,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     print("#" * 100)
     return performance, training_histories
 
-def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, exg_resample_rate=128, is_pca_ica=True, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True):
+def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, exg_resample_rate=128, is_plot_conf=False, is_pca_ica=True, is_by_channel=False, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True):
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
     locking_performance = {}
     test_name = f'Locking-{locking_name}_Model-HT_P-{participant}_S-{session}'
@@ -199,6 +199,19 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
     x_eeg = z_norm_by_trial(x)
     x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, num_top_components)
 
+    # if os.path.exists('data/x_pca_ica.p') and os.path.exists('data/x_znormed.p'):
+    #     with open('data/x_pca_ica.p', "rb") as file:
+    #         x_eeg_pca_ica = pickle.load(file)
+    #     with open('data/x_znormed.p', "rb") as file:
+    #         x_eeg = pickle.load(file)
+    #     x_pupil_znormed = None
+    # else:
+    #     x_eeg, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x, None)
+    #     with open('data/x_pca_ica.p', "wb") as file:
+    #         pickle.dump(x_eeg_pca_ica, file)
+    #     with open('data/x_znormed.p', "wb") as file:
+    #         pickle.dump(x_eeg, file)
+
     skf = StratifiedShuffleSplit(n_splits=1, random_state=random_seed)
     train, test = [(train, test) for train, test in skf.split(x_eeg, y)][0]
     x_eeg_train, x_eeg_pca_ica_train = x_eeg[train], x_eeg_pca_ica[train]
@@ -213,31 +226,31 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
         pickle.dump(x_eeg_pca_ica, f)
     with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
         pickle.dump(y, f)
-    num_channels, num_timesteps = x_eeg.shape[1:]
+    num_channels, num_timesteps = x_eeg_pca_ica.shape[1:] if is_pca_ica else x_eeg.shape[1:]
 
     param_grid = ParameterGrid(grid_search_params)
-    training_histories = {}
+    total_training_histories = {}
     models_param = {}
     for params in param_grid:
-        print(f"Grid search params: {params}. Searching {len(training_histories) + 1} of {len(param_grid)}")
+        print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
         model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
                                         depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                         pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                         dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
-        models, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(x_eeg_pca_ica_train if is_pca_ica else x_eeg_train, y_train, model, X_test=x_eeg_pca_ica_test if is_pca_ica else x_eeg_test, Y_test=y_test, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], is_test=True)  # use un-dimension reduced EEG data
+        models, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(x_eeg_pca_ica_train if is_pca_ica else x_eeg_train, y_train, model, is_plot_conf_matrix=is_plot_conf, is_by_channel=is_by_channel, X_test=x_eeg_pca_ica_test if is_pca_ica else x_eeg_test, Y_test=y_test, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], is_test=True)  # use un-dimension reduced EEG data
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
         folds_val_auc = mean_max_sublists(training_histories['auc_val'])
-        print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
+        print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}, ')
 
         hashable_params = tuple(params.items())
-        locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss}
-        training_histories[hashable_params] = training_histories
+        locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss, 'folds test auc': test_auc}
+        total_training_histories[hashable_params] = training_histories
         models_param[hashable_params] = models
         if not os.path.exists('HT_grid'):
             os.mkdir('HT_grid')
         for i in range(n_folds):
             torch.save(models, f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt")
-    return locking_performance, training_histories, models_param
+    return locking_performance, total_training_histories, models_param
 
 
 # def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', plot_histories=False):
@@ -412,7 +425,7 @@ def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbos
 
     return _run_one_epoch(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
 
-def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=False, is_test=False):
+def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', is_plot_conf_matrix=False, is_by_channel=False, rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=False, is_test=False):
     """
 
     @param X: can be a list of inputs
@@ -486,7 +499,9 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
     models = []
 
     model_copy = None
-    test_auc, test_acc, test_loss = [None] * 3
+    test_auc = []
+    test_acc = []
+    test_loss = []
     for f_index, (train, val) in enumerate(skf.split(X[0] if isinstance(X, list) else X, Y)):
         model_copy = copy.deepcopy(model)
         # model_copy = HierarchicalTransformer(180, 20, 200, num_classes=2,
@@ -504,7 +519,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
 
             rebalanced_labels = []
             for this_x in X:
-                this_x_train, this_y_train = rebalance_classes(this_x[train], y_train, by_channel=True) if rebalance_method == 'SMOT' else zip(this_x[train], y_train)
+                this_x_train, this_y_train = rebalance_classes(this_x[train], y_train, by_channel=is_by_channel) if rebalance_method == 'SMOT' else zip(this_x[train], y_train)
                 x_train.append(torch.Tensor(this_x_train).to(device))
                 rebalanced_labels.append(this_y_train)
                 x_val.append(torch.Tensor(this_x[val]).to(device))
@@ -513,7 +528,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         else:
             x_train, x_val, y_train, y_val = X[train], X[val], Y[train], Y[val]
             if rebalance_method == 'SMOT':
-                x_train, y_train = rebalance_classes(x_train, y_train)  # rebalance by class
+                x_train, y_train = rebalance_classes(x_train, y_train, by_channel=is_by_channel)  # rebalance by class
             x_train = torch.Tensor(x_train).to(device)
             x_val = torch.Tensor(x_val).to(device)
 
@@ -539,9 +554,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         val_aucs = []
         best_loss = np.inf
         patience_counter = 0
-        test_auc = []
-        test_loss = []
-        test_acc = []
+
         num_train_standard_errors = []
         num_train_target_errors = []
         num_val_standard_errors = []
@@ -552,15 +565,17 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
             # for param in model_copy.parameters():
             #     prev_para.append(param.cpu().detach().numpy())
             train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_predicted_labels_all, train_true_label_all = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
-            num_train_standard_errors.append(num_train_standard_error)
-            num_train_target_errors.append(num_train_target_error)
-            viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
+            if is_plot_conf_matrix:
+                num_train_standard_errors.append(num_train_standard_error)
+                num_train_target_errors.append(num_train_target_error)
+                viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
             val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_predicted_labels_all, val_true_label_all = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
-            num_val_standard_errors.append(num_val_standard_error)
-            num_val_target_errors.append(num_val_target_error)
-            viz_confusion_matrix(val_true_label_all, val_predicted_labels_all, epoch, f_index, 'val')
+            if is_plot_conf_matrix:
+                num_val_standard_errors.append(num_val_standard_error)
+                num_val_target_errors.append(num_val_target_error)
+                viz_confusion_matrix(val_true_label_all, val_predicted_labels_all, epoch, f_index, 'val')
             # para = []
             # for param in model_copy.parameters():
             #     para.append(param.cpu().detach().numpy())
@@ -590,8 +605,8 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
                 if patience_counter > patience:
                     if verbose >= 1: print(f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
                     break
-        viz_class_error(num_train_standard_errors, num_train_target_errors, 'train')
-        viz_class_error(num_val_standard_errors, num_val_target_errors, 'validation')
+        # viz_class_error(num_train_standard_errors, num_train_target_errors, 'train')
+        # viz_class_error(num_val_standard_errors, num_val_target_errors, 'validation')
         train_accs_folds.append(train_accs)
         train_losses_folds.append(train_losses)
         val_accs_folds.append(val_accs)
@@ -605,9 +620,9 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
             test_auc.append(test_auc_model)
             test_loss.append(test_loss_model)
             test_acc.append(test_acc_model)
+        models.append(model_copy)
 
-    models.append(model_copy)
-    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds}
+    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds, 'auc_test': test_auc, 'acc_test': test_acc, 'loss_test': test_loss}
     if plot_histories:
         plt.plot(training_histories_folds['acc_train'])
         plt.plot(training_histories_folds['acc_val'])
