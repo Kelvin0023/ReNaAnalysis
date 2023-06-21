@@ -41,7 +41,7 @@ x, y = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_sa
 
 results = dict()
 
-x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x, None)
+x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x, None, n_top_components=15)
 now = datetime.datetime.now()
 datetime_string = now.strftime("%Y-%m-%d_%H-%M-%S")
 result_path = result_path + datetime_string

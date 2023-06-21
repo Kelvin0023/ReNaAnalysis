@@ -79,11 +79,11 @@ def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
             assert pca is not None and ica is not None, Exception("pca and ica must not be None if x_eeg_znormed and x_eeg_pca_ica are given")
 
 
-    model_performance, training_histories = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate)
+    model_performance, training_histories = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate, pca=pca, ica=ica)
     return model_performance, training_histories
 
 def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_name,
-               ht_output_mode, eeg_montage, ht_lr=1e-4, ht_l2=1e-6,
+               ht_output_mode, eeg_montage, pca, ica, ht_lr=1e-4, ht_l2=1e-6,
                n_folds=10, exg_resample_rate=200):
     """
     runs a given model. This funciton is called by eval_model
@@ -153,7 +153,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             if not os.path.exists(rollout_data_root):
                 os.mkdir(rollout_data_root)
             ht_viz(model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, model.window_duration, exg_resample_rate,
-                   eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
+                   eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None, pca=pca, ica=ica)
         else:  # these models use PCA-ICA reduced EEG data
             if model_name == 'EEGCNN':
                 model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
