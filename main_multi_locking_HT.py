@@ -11,6 +11,7 @@ import torch
 
 from RenaAnalysis import get_rdf
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
+from renaanalysis.learning.multilock import eval_multi_locking_model
 from renaanalysis.learning.train import eval_lockings
 from renaanalysis.params.params import *
 
@@ -36,26 +37,25 @@ plt.rcParams.update({'font.size': 22})
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 event_names = ["Distractor", "Target"]
 
-locking_name_filters_vs = {
-                        'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
-                                lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
-                        'VS-FLGI': [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
-                                lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]],
-                        'VS-I-DT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Distractor"],
-                                lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"]],
-                       'VS-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
-                                 lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]}
+# locking_name_filters_vs = {
+#                         'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
+#                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
+#                         'VS-FLGI': [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
+#                                 lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]],
+#                         'VS-I-DT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Distractor"],
+#                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"]],
+#                        'VS-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
+#                                  lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]}
 
 
-models = ['HT', 'EEGPupilCNN', 'HDCA', 'EEGCNN']
+
+
+# models = ['HT', 'EEGPupilCNN', 'HDCA', 'EEGCNN']
 
 results = dict()
-
-is_regenerate_epochs = True
-for m in models:
-    m_results = eval_lockings(rdf, event_names, locking_name_filters_vs, model_name=m, regenerate_epochs=is_regenerate_epochs, exg_resample_rate=exg_resample_rate)
-    is_regenerate_epochs = False  # dont regenerate epochs after the first time
-    results = {**m_results, **results}
+# for m in models:
+m_results = eval_multi_locking_model(rdf, event_names,  regenerate_epochs=True, exg_resample_rate=exg_resample_rate)
+results = {**m_results, **results}
 
 pickle.dump(results, open('model_locking_performances', 'wb'))
 
@@ -72,30 +72,30 @@ pickle.dump(results, open('model_locking_performances', 'wb'))
 #     new_results[new_key] = value
 # pickle.dump(new_results, open('model_locking_performances', 'wb'))
 # exit()
-plt.rcParams["figure.figsize"] = (24, 12)
-
-models = ['HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil', 'EEGPupilCNN', 'EEGCNN']
-constrained_conditions = ['RSVP', 'Carousel']
-conditions_names = ['RSVP', 'Carousel', 'VS']
-constrained_lockings = ['Item-Onset', 'I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
-lockings = ['I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
-
-width = 0.175
-
-for c in conditions_names:
-    this_lockings = lockings if c not in constrained_conditions else constrained_lockings
-    ind = np.arange(len(this_lockings))
-
-    for m_index, m in enumerate(models):
-        aucs = [results[(f'{c}-{l}', m)]['folds val auc'] for l in this_lockings]  # get the auc for each locking
-
-        plt.bar(ind + m_index * width, aucs, width, label=f'{m}')
-        for j in range(len(aucs)):
-            plt.text(ind[j] + m_index * width, aucs[j] + 0.05, str(round(aucs[j], 3)), horizontalalignment='center',verticalalignment='center')
-
-    plt.ylim(0.0, 1.1)
-    plt.ylabel('AUC')
-    plt.title(f'Condition {c}, Accuracy by model and lockings')
-    plt.xticks(ind + width / 2, this_lockings)
-    plt.legend(loc=4)
-    plt.show()
+# plt.rcParams["figure.figsize"] = (24, 12)
+#
+# models = ['HDCA EEG', 'HDCA Pupil', 'HDCA EEG-Pupil', 'EEGPupilCNN', 'EEGCNN']
+# constrained_conditions = ['RSVP', 'Carousel']
+# conditions_names = ['RSVP', 'Carousel', 'VS']
+# constrained_lockings = ['Item-Onset', 'I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
+# lockings = ['I-VT', 'I-VT-Head', 'FLGI', 'Patch-Sim']
+#
+# width = 0.175
+#
+# for c in conditions_names:
+#     this_lockings = lockings if c not in constrained_conditions else constrained_lockings
+#     ind = np.arange(len(this_lockings))
+#
+#     for m_index, m in enumerate(models):
+#         aucs = [results[(f'{c}-{l}', m)]['folds val auc'] for l in this_lockings]  # get the auc for each locking
+#
+#         plt.bar(ind + m_index * width, aucs, width, label=f'{m}')
+#         for j in range(len(aucs)):
+#             plt.text(ind[j] + m_index * width, aucs[j] + 0.05, str(round(aucs[j], 3)), horizontalalignment='center',verticalalignment='center')
+#
+#     plt.ylim(0.0, 1.1)
+#     plt.ylabel('AUC')
+#     plt.title(f'Condition {c}, Accuracy by model and lockings')
+#     plt.xticks(ind + width / 2, this_lockings)
+#     plt.legend(loc=4)
+#     plt.show()

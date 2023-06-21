@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 
 from renaanalysis.utils.utils import remove_value
 
-search_params = ['num_heads', 'patch_embed_dim', 'pool']
+search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim"]
 metric = 'folds train acc'
 
 training_histories = pickle.load(open('model_training_histories.p', 'rb'))

@@ -139,8 +139,13 @@ class Transformer(nn.Module):
 #         return self.mlp_head(x)
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
+    def __init__(self, token_encoder,
+
+                 num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi',
+
+
+                 ):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """
@@ -199,10 +204,6 @@ class HierarchicalTransformer(nn.Module):
                 nn.Linear(patch_embed_dim, num_classes))
 
     def forward(self, x_eeg):
-        x = self.encode(x_eeg)
-        return self.mlp_head(x)
-
-    def encode(self, x_eeg):
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
@@ -222,8 +223,8 @@ class HierarchicalTransformer(nn.Module):
         x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
 
         x = self.to_latent(x)
-        return x
 
+        return self.mlp_head(x)
     def prepare_data(self, x):
         return x
     # def test(self, img):

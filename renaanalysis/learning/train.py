@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import math
 import os
 import pickle
@@ -26,11 +27,9 @@ from renaanalysis.params.params import epochs, batch_size, model_save_dir, patie
 from renaanalysis.utils.data_utils import compute_pca_ica, rebalance_classes, mean_max_sublists, \
     mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
 import matplotlib.pyplot as plt
+from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
 
-def eval_multi_locking_model(rdf, epoch_encoder_path):
-    pass
-    # get_multi_locking_data(rdf)
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, n_folds=10, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='single'):
     # verify number of event types
@@ -63,26 +62,28 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
 def preprocess_model_data(x_eeg, x_pupil, n_top_components=20):
     x_eeg_znormed = z_norm_by_trial(x_eeg)
     x_pupil_znormed = z_norm_by_trial(x_pupil) if x_pupil is not None else None
-    x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, n_top_components)
-    return x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed
+    x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, n_top_components)
+    return x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica
 
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
                test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
-               x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20):
+               x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20, pca=None, ica=None):
     if x_pupil is None:
         if x_eeg_znormed is None or x_eeg_pca_ica is None:
-            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x_eeg, x_pupil, n_top_components)
     else:
         if x_eeg_znormed is None or x_eeg_pca_ica is None or x_pupil_znormed is None:
-            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+        else:
+            assert pca is not None and ica is not None, Exception("pca and ica must not be None if x_eeg_znormed and x_eeg_pca_ica are given")
 
 
-    model_performance, training_histories = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate)
+    model_performance, training_histories = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate, pca=pca, ica=ica)
     return model_performance, training_histories
 
 def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_name,
-               ht_output_mode, eeg_montage, ht_lr=1e-4, ht_l2=1e-6,
+               ht_output_mode, eeg_montage, pca, ica, ht_lr=1e-4, ht_l2=1e-6,
                n_folds=10, exg_resample_rate=200):
     """
     runs a given model. This funciton is called by eval_model
@@ -135,8 +136,8 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     else:
         if model_name == 'EEGPupilCNN':  # this model uses PCA-ICA reduced EEG data plus pupil data
             assert x_pupil is not None, "Pupil data is not provided, which is required for EEGPupilCNN model"
-            model = lambda: EEGPupilCNN(eeg_in_shape=x_eeg_pca_ica.shape, pupil_in_shape=x_pupil.shape, num_classes=2)
-            model, training_histories, criterion, last_activation, _encoder = train_model([x_eeg_pca_ica_train, x_pupil_train], y_train, model, test_name=test_name, verbose=1, n_folds=n_folds)
+            model = EEGPupilCNN(eeg_in_shape=x_eeg_pca_ica.shape, pupil_in_shape=x_pupil.shape, num_classes=2)
+            model, training_histories, criterion, last_activation, _encoder = cv_train_test_model([x_eeg_pca_ica_train, x_pupil_train], y_train, model, test_name=test_name, verbose=1, n_folds=n_folds)
             # model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica_train, x_pupil_train], y_train, model, test_name=test_name, n_folds=n_folds)
             test_auc, test_loss, test_acc = eval(model, [x_eeg_pca_ica_test, x_pupil_test], y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
 
@@ -144,24 +145,23 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             num_timesteps = x_eeg_train.shape[2]
             num_channels = x_eeg_pca_ica_train.shape[1] if model_name == 'HT-pca-ica' else x_eeg_train.shape[1]
 
-            model = lambda: HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
+            model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output=ht_output_mode)
             training_data = x_eeg_pca_ica_train if model_name == 'HT-pca-ica' else x_eeg_train
             test_data = x_eeg_pca_ica_test if model_name == 'HT-pca-ica' else x_eeg_test
-            model, training_histories, criterion, last_activation, _encoder = train_model(training_data, y_train, model, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
-            test_auc, test_loss, test_acc = eval(model, test_data, y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
+            model, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(training_data, y_train, model, X_test=test_data, Y_test=y_test, test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
             rollout_data_root = f'HT_{note}'
             if not os.path.exists(rollout_data_root):
                 os.mkdir(rollout_data_root)
             ht_viz(model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, model.window_duration, exg_resample_rate,
-                   eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
+                   eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None, pca=pca, ica=ica)
         else:  # these models use PCA-ICA reduced EEG data
             if model_name == 'EEGCNN':
-                model = lambda: EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
+                model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
             elif model_name == 'EEGInception':
-                model = lambda: EEGInceptionNet(in_shape=x_eeg_pca_ica.shape, num_classes=2)
+                model = EEGInceptionNet(in_shape=x_eeg_pca_ica.shape, num_classes=2)
             else:
                 raise Exception(f"Unknown model name {model_name}")
-            model, training_histories, criterion, last_activation, _encoder = train_model(x_eeg_pca_ica_train, y_train, model, test_name=test_name, verbose=1, n_folds=n_folds)
+            model, training_histories, criterion, last_activation, _encoder = cv_train_test_model(x_eeg_pca_ica_train, y_train, model, test_name=test_name, verbose=1, n_folds=n_folds)
             test_auc, test_loss, test_acc = eval(model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
 
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
@@ -172,23 +172,28 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     print("#" * 100)
     return performance, training_histories
 
-def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_filter, exg_resample_rate=128, participant=None, session=None, regenerate_epochs=True):
+def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, exg_resample_rate=128, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True):
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
     locking_performance = {}
     test_name = f'Locking-{locking_name}_Model-HT_P-{participant}_S-{session}'
     if regenerate_epochs:
-        x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', exg_resample_rate=exg_resample_rate)
+        x, y = get_auditory_oddball_samples(data_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
         pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
         pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
     else:
         try:
-            x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
-            y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+            x = pickle.load(open(os.path.join(export_data_root, f'x_auditory_oddball.p'), 'rb'))
+            y = pickle.load(open(os.path.join(export_data_root, f'y_auditory_oddball.p'), 'rb'))
         except FileNotFoundError:
             raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}")
-    x_eeg = z_norm_by_trial(x[0])
-    x_pupil = z_norm_by_trial(x[1])
-    x_eeg_pca_ica, _, _ = compute_pca_ica(x[0], num_top_components)
+    x_eeg = z_norm_by_trial(x)
+    x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, num_top_components)
+    if not os.path.exists('HT_grid/RSVP-itemonset-locked'):
+        os.mkdir('HT_grid/RSVP-itemonset-locked')
+    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb') as f:
+        pickle.dump(x_eeg_pca_ica, f)
+    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
+        pickle.dump(y, f)
     num_channels, num_timesteps = x_eeg.shape[1:]
 
     param_grid = ParameterGrid(grid_search_params)
@@ -196,11 +201,11 @@ def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_f
     models = {}
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(training_histories) + 1} of {len(param_grid)}")
-        model = lambda: HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
+        model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
                                         depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                         pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                         dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
-        model, training_histories, criterion, last_activation, _encoder = train_model(x_eeg, y, model, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'])  # use un-dimension reduced EEG data
+        model, training_histories, criterion, last_activation, _encoder = cv_train_test_model(x_eeg, y, model, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], is_test=False)  # use un-dimension reduced EEG data
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
         folds_val_auc = mean_max_sublists(training_histories['auc_val'])
         print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}')
@@ -209,15 +214,191 @@ def grid_search_ht(grid_search_params, rdf, event_names, locking_name, locking_f
         locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss}
         training_histories[hashable_params] = training_histories
         models[hashable_params] = model
+        if not os.path.exists('HT_grid'):
+            os.mkdir('HT_grid')
+        torch.save(model, f'HT_grid/{params}_model.pt')
     return locking_performance, training_histories, models
 
 
-def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', plot_histories=False):
+# def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', plot_histories=False):
+#     """
+#
+#     @param X: can be a list of inputs
+#     @param Y:
+#     @param model: lambda experssion for initializing the model
+#     @param test_name:
+#     @param n_folds:
+#     @param lr:
+#     @param verbose:
+#     @param l2_weight:
+#     @param lr_scheduler: can be 'exponential' or 'cosine' or None
+#     @return:
+#     """
+#     use_cuda = torch.cuda.is_available()
+#     device = torch.device("cuda:0" if use_cuda else "cpu")
+#     test_model = model_lambda().to(device)
+#
+#     if isinstance(X, list):
+#         # create dummy random input for each input
+#         rand_input = []
+#         for x in X:
+#             input_shape = x.shape[1:]
+#             rand_input.append(torch.randn(1, *input_shape).to(device))
+#         dataset_class = MultiInputDataset
+#     else:
+#         # check the model's output shape
+#         input_shape = X.shape[1:]
+#         rand_input = torch.randn(1, *input_shape).to(device)
+#         dataset_class = TensorDataset
+#
+#     with torch.no_grad():
+#         test_model.eval()
+#         output_shape = test_model(rand_input).shape[1]
+#
+#     if output_shape == 1:
+#         assert len(np.unique(Y)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
+#         label_encoder = LabelEncoder()
+#         label_encoder.fit(Y)
+#         _encoder = lambda y: label_encoder.transform(y).reshape(-1, 1)
+#         # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
+#         criterion = nn.BCELoss(reduction='mean')
+#         last_activation = nn.Sigmoid()
+#     else:
+#         label_encoder = preprocessing.OneHotEncoder()
+#         label_encoder.fit(Y.reshape(-1, 1))
+#         _encoder = lambda y: label_encoder.transform(y.reshape(-1, 1)).toarray()
+#         # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
+#         criterion = nn.CrossEntropyLoss()
+#         last_activation = nn.Softmax(dim=1)
+#
+#     X = test_model.prepare_data(X)
+#
+#     skf = StratifiedShuffleSplit(n_splits=n_folds, random_state=random_seed)
+#     train_losses_folds = []
+#     train_accs_folds = []
+#     val_losses_folds = []
+#     val_accs_folds = []
+#     val_aucs_folds = []
+#
+#     for f_index, (train, val) in enumerate(skf.split(X[0] if isinstance(X, list) else X, Y)):
+#         _model = model_lambda().to(device)
+#         if isinstance(X, list):
+#             x_train = []
+#             x_val = []
+#             y_train, y_val = Y[train], Y[val]
+#
+#             rebalanced_labels = []
+#             for this_x in X:
+#                 this_x_train, this_y_train = rebalance_classes(this_x[train], y_train)
+#                 x_train.append(torch.Tensor(this_x_train).to(device))
+#                 rebalanced_labels.append(this_y_train)
+#                 x_val.append(torch.Tensor(this_x[val]).to(device))
+#             assert np.all([label_set == rebalanced_labels[0] for label_set in rebalanced_labels])
+#             y_train = rebalanced_labels[0]
+#         else:
+#             x_train, x_val, y_train, y_val = X[train], X[val], Y[train], Y[val]
+#             x_train, y_train = rebalance_classes(x_train, y_train)  # rebalance by class
+#             x_train = torch.Tensor(x_train).to(device)
+#             x_val = torch.Tensor(x_val).to(device)
+#
+#         y_train_encoded = _encoder(y_train)
+#         y_val_encoded = _encoder(y_val)
+#
+#         y_train_encoded = torch.Tensor(y_train_encoded)
+#         y_val_encoded = torch.Tensor(y_val_encoded)
+#
+#         train_dataset = dataset_class(x_train, y_train_encoded)
+#         val_dataset = dataset_class(x_val, y_val_encoded)
+#         train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
+#         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+#
+#         optimizer = torch.optim.Adam(_model.parameters(), lr=lr)
+#         # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+#         scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+#
+#         train_losses = []
+#         train_accs = []
+#         val_losses = []
+#         val_accs = []
+#         val_aucs = []
+#         best_loss = np.inf
+#         patience_counter = 0
+#
+#         for epoch in range(epochs):
+#             model_copy = copy.deepcopy(model)
+#             test_auc, train_loss, train_accuracy = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+#             scheduler.step()
+#             val_auc, val_loss, val_accuracy = _run_one_epoch(_model, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+#             val_auc, val_loss, val_accuracy = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+#
+#             train_losses.append(train_loss)
+#             train_accs.append(train_accuracy)
+#             val_aucs.append(val_auc)
+#             val_losses.append(val_loss)
+#             val_accs.append(val_accuracy)
+#
+#             if verbose >= 1:
+#                 print("Fold {}, Epoch {}: val auc = {:.8f}, train accuracy = {:.8f}, train loss={:.8f}; val accuracy = {:.8f}, val loss={:.8f}, patience left {}".format(f_index, epoch, np.max(val_aucs), train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1], patience - patience_counter))
+#             # Save training histories after every epoch
+#             training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses, 'acc_val': val_accs}
+#             pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
+#             if val_losses[-1] < best_loss:
+#                 torch.save(model_copy.state_dict(), os.path.join(model_save_dir, test_name+f'_{f_index}'))
+#                 torch.save(_model.state_dict(), os.path.join(model_save_dir, test_name))
+#                 if verbose >= 1: print('Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1], model_save_dir))
+#                 best_loss = val_losses[-1]
+#                 patience_counter = 0
+#             else:
+#                 patience_counter += 1
+#                 if patience_counter > patience:
+#                     if verbose >= 1: print(f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+#                     break
+#         train_accs_folds.append(train_accs)
+#         train_losses_folds.append(train_losses)
+#         val_accs_folds.append(val_accs)
+#         val_losses_folds.append(val_losses)
+#         val_aucs_folds.append(val_aucs)
+#
+#     training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds}
+#     if plot_histories:
+#         plt.plot(training_histories_folds['acc_train'])
+#         plt.plot(training_histories_folds['acc_val'])
+#         plt.title(f"Accuracy, {test_name}")
+#         plt.tight_layout()
+#         plt.show()
+#
+#         plt.plot(training_histories_folds['loss_train'])
+#         plt.plot(training_histories_folds['loss_val'])
+#         plt.title(f"Loss, {test_name}")
+#         plt.tight_layout()
+#         plt.show()
+#     return _model, training_histories_folds, criterion, last_activation, _encoder
+
+
+def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbose=1):
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+    if isinstance(X, list):
+        X = [torch.Tensor(this_x).to(device) for this_x in X]
+        dataset_class = MultiInputDataset
+    else:
+        X = torch.Tensor(X).to(device)
+        dataset_class = TensorDataset
+
+    Y = _encoder(Y)
+    Y = torch.Tensor(Y).to(device)
+    test_dataset = dataset_class(X, Y)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
+
+    return _run_one_epoch(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
+
+
+def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', X_test=None, Y_test=None, plot_histories=False, is_test=True):
     """
 
     @param X: can be a list of inputs
     @param Y:
-    @param model: lambda experssion for initializing the model
+    @param model:
     @param test_name:
     @param n_folds:
     @param lr:
@@ -228,7 +409,7 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
     """
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
-    test_model = model_lambda().to(device)
+    # model = model.to(device)
 
     if isinstance(X, list):
         # create dummy random input for each input
@@ -240,12 +421,12 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
     else:
         # check the model's output shape
         input_shape = X.shape[1:]
-        rand_input = torch.randn(1, *input_shape).to(device)
+        rand_input = torch.randn(1, *input_shape)
         dataset_class = TensorDataset
 
     with torch.no_grad():
-        test_model.eval()
-        output_shape = test_model(rand_input).shape[1]
+        model.eval()
+        output_shape = model(rand_input).shape[1]
 
     if output_shape == 1:
         assert len(np.unique(Y)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
@@ -262,8 +443,10 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
         # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
         criterion = nn.CrossEntropyLoss()
         last_activation = nn.Softmax(dim=1)
+    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb') as f:
+        pickle.dump(label_encoder, f)
 
-    X = test_model.prepare_data(X)
+    X = model.prepare_data(X)
 
     skf = StratifiedShuffleSplit(n_splits=n_folds, random_state=random_seed)
     train_losses_folds = []
@@ -271,9 +454,20 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
     val_losses_folds = []
     val_accs_folds = []
     val_aucs_folds = []
+    models = []
 
+    model_copy = None
+    test_auc, test_acc, test_loss = [None] * 3
     for f_index, (train, val) in enumerate(skf.split(X[0] if isinstance(X, list) else X, Y)):
-        _model = model_lambda().to(device)
+        model_copy = copy.deepcopy(model)
+        # model_copy = HierarchicalTransformer(180, 20, 200, num_classes=2,
+        #                                 output='multi')
+        model_copy = model_copy.to(device)
+        # model = model.to(device)
+        # rollout = VITAttentionRollout(model_copy, device, attention_layer_class=Attention,
+        #                               token_shape=model_copy.grid_dims,
+        #                               discard_ratio=0.9, head_fusion='max')
+
         if isinstance(X, list):
             x_train = []
             x_val = []
@@ -301,11 +495,11 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
 
         train_dataset = dataset_class(x_train, y_train_encoded)
         val_dataset = dataset_class(x_val, y_val_encoded)
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
-        optimizer = torch.optim.Adam(_model.parameters(), lr=lr)
-        # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+        optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
+        # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
         scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
         train_losses = []
@@ -315,12 +509,26 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
         val_aucs = []
         best_loss = np.inf
         patience_counter = 0
+        test_auc = []
+        test_loss = []
+        test_acc = []
+
 
         for epoch in range(epochs):
-
-            test_auc, train_loss, train_accuracy = _run_one_epoch(_model, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            # prev_para = []
+            # for param in model_copy.parameters():
+            #     prev_para.append(param.cpu().detach().numpy())
+            train_auc, train_loss, train_accuracy = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
             scheduler.step()
-            val_auc, val_loss, val_accuracy = _run_one_epoch(_model, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
+            val_auc, val_loss, val_accuracy = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            # para = []
+            # for param in model_copy.parameters():
+            #     para.append(param.cpu().detach().numpy())
+            # if epoch != 0:
+            #     for i in range(52):
+            #         if not np.all(np.equal(prev_para[i], para[i])):
+            #             print('diff')
 
             train_losses.append(train_loss)
             train_accs.append(train_accuracy)
@@ -329,12 +537,12 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
             val_accs.append(val_accuracy)
 
             if verbose >= 1:
-                print("Fold {}, Epoch {}: val auc = {:.8f}, train accuracy = {:.8f}, train loss={:.8f}; val accuracy = {:.8f}, val loss={:.8f}, patience left {}".format(f_index, epoch, np.max(val_aucs), train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1], patience - patience_counter))
+                print("Fold {}, Epoch {}: val auc = {:.16f}, train accuracy = {:.16f}, train loss={:.16f}; val accuracy = {:.16f}, val loss={:.16f}, patience left {}".format(f_index, epoch, np.max(val_aucs), train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1], patience - patience_counter))
             # Save training histories after every epoch
             training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses, 'acc_val': val_accs}
             pickle.dump(training_histories, open(os.path.join(model_save_dir, 'training_histories.pickle'), 'wb'))
             if val_losses[-1] < best_loss:
-                torch.save(_model.state_dict(), os.path.join(model_save_dir, test_name))
+                torch.save(model_copy.state_dict(), os.path.join(model_save_dir, test_name+f'_{f_index}'))
                 if verbose >= 1: print('Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1], model_save_dir))
                 best_loss = val_losses[-1]
                 patience_counter = 0
@@ -348,7 +556,16 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
+        if is_test:
+            test_auc_model, test_loss_model, test_acc_model = eval(model_copy, X_test, Y_test, criterion, last_activation, _encoder,
+                                             test_name='', verbose=1)
+            if verbose >= 1:
+                print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
+            test_auc.append(test_auc_model)
+            test_loss.append(test_loss_model)
+            test_acc.append(test_acc_model)
 
+    models.append(model_copy)
     training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds}
     if plot_histories:
         plt.plot(training_histories_folds['acc_train'])
@@ -362,27 +579,12 @@ def train_model(X, Y, model_lambda, test_name="CNN", n_folds=10, lr=1e-3, verbos
         plt.title(f"Loss, {test_name}")
         plt.tight_layout()
         plt.show()
-    return _model, training_histories_folds, criterion, last_activation, _encoder
-
-
-def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbose=1):
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda:0" if use_cuda else "cpu")
-    if isinstance(X, list):
-        X = [torch.Tensor(this_x).to(device) for this_x in X]
-        dataset_class = MultiInputDataset
+    if is_test:
+        return models[test_auc.index(max(test_auc))], training_histories_folds, criterion, last_activation, _encoder, max(test_auc), max(test_loss), max(test_acc)
     else:
-        X = torch.Tensor(X).to(device)
-        dataset_class = TensorDataset
+        return model, training_histories_folds, criterion, last_activation, _encoder
 
-    Y = _encoder(Y)
-    Y = torch.Tensor(Y).to(device)
-    test_dataset = dataset_class(X, Y)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
-
-    return _run_one_epoch(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
-
-def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', verbose=1):
+def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', verbose=1, check_param=1):
     """
 
     @param model:
@@ -421,6 +623,15 @@ def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mod
         mini_batch_i += 1
         if verbose >= 1:
             pbar.update(1)
+
+        # if check_param:
+        #     for key1, value1 in a.items():
+        #         value2 = b[key1]
+        #         # Perform tensor comparison
+        #         if torch.equal(value1, value2):
+        #             print(f"Tensor {key1} is equal in both models.")
+        #         else:
+        #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
             y_pred = model(x)

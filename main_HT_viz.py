@@ -26,7 +26,7 @@ head_fusion = 'mean'
 channel_fusion = 'sum'  # TODO when plotting the cross window actiavtion
 sample_fusion = 'sum'  # TODO
 
-load_saved_rollout = True
+load_saved_rollout = False
 
 
 info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))
@@ -36,15 +36,15 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 
 # Load x_eeg
-with open(os.path.join('HT/RSVP-itemonset-locked', 'x_eeg.pkl'), 'rb') as f:
+with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'x_eeg.pkl'), 'rb') as f:
     X = pickle.load(f)
 
 # Load y
-with open(os.path.join('HT/RSVP-itemonset-locked', 'y.pkl'), 'rb') as f:
+with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'rb') as f:
     Y = pickle.load(f)
 
 # Load label_encoder
-with open(os.path.join('HT/RSVP-itemonset-locked', 'label_encoder.pkl'), 'rb') as f:
+with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'label_encoder.pkl'), 'rb') as f:
     label_encoder = pickle.load(f)
 
 num_channels, num_timesteps = X.shape[1:]  # X is x_eeg
