@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from moviepy.video.io import ImageSequenceClip
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 from renaanalysis.eye.EyeUtils import temporal_filter_fixation
 from renaanalysis.eye.eyetracking import Fixation, Saccade, GazeRayIntersect
@@ -15,7 +15,6 @@ from renaanalysis.utils.Event import get_events_between, get_block_start_event, 
 from renaanalysis.params.params import *
 from renaanalysis.utils.TorchUtils import prepare_image_for_sim_score
 from renaanalysis.utils.utils import visualize_pupil_epochs, visualize_eeg_epochs
-
 
 def visualiza_session(events):
     plt.rcParams["figure.figsize"] = [40, 3.5]
@@ -402,3 +401,73 @@ def viz_confusion_matrix(true_label, pred_label, epoch, fold, type):
     plt.savefig(f'renaanalysis/learning/saved_images/confusion_matrixs/{fold}_{epoch}_{type}.png')
     # Show the plot
     plt.show()
+
+def viz_binary_roc(true_label, pred_score, param_list, fold, target_label=1):
+    '''
+
+    @param true_label:
+    @param pred_score:
+    @param fold:
+    @param target_label: the index of the target in the label if multiclass is presented. For example,
+    if there are two classes, and target_label = 1, that means the true_label = [0, 1] is a target, and
+    [1. 0] being non-target
+
+    '''
+
+    if true_label.ndim == 2:
+        true_label = true_label.take([target_label], axis=1).ravel()
+    if pred_score.ndim == 2:
+        pred_score = pred_score.take([target_label], axis=1).ravel()
+    fpr, tpr, thresholds = roc_curve(true_label, pred_score)
+    # Compute AUC (Area Under the ROC Curve)
+    auc_score = auc(fpr, tpr)
+    # Plot ROC curve
+    plt.plot(fpr, tpr, label=f'AUC = {auc_score:.2f}')
+    plt.plot([0, 1], [0, 1], 'r--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'ROC Curve of param {param_list} in fold {fold}')
+    plt.legend()
+    if not os.path.exists('renaanalysis/learning/saved_images/roc'):
+        os.mkdir('renaanalysis/learning/saved_images/roc')
+    plt.savefig(f'renaanalysis/learning/saved_images/roc/{param_list}_{fold}.png')
+
+    plt.show()
+
+def plot_training_history(history, param_list, fold):
+    # Extract the training history
+    train_loss = history['loss_train']
+    val_loss = history['loss_val']
+    train_acc = history['acc_train']
+    val_acc = history['acc_val']
+    val_auc = history['auc_val']
+    test_auc = history['auc_test']
+    test_acc = history['acc_test']
+    test_loss = history['loss_test']
+
+    # Plot the training and validation loss
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    fig.suptitle(f'Training history of param {param_list} in fold {fold}, test auc = {test_auc}')
+    axs[0].plot(range(1, len(train_loss) + 1), train_loss, label='Training Loss')
+    axs[0].plot(range(1, len(val_loss) + 1), val_loss, label='Validation Loss')
+    axs[0].set_xlabel('Epochs')
+    axs[0].set_ylabel('Loss')
+    axs[0].set_title(f'Training and Validation Loss')
+    axs[0].legend()
+
+    # Plot the training and validation accuracy
+    axs[1].plot(range(1, len(train_acc) + 1), train_acc, label='Training Accuracy')
+    axs[1].plot(range(1, len(val_acc) + 1), val_acc, label='Validation Accuracy')
+    axs[1].plot(range(1, len(val_auc) + 1), val_auc, label='Validation AUC')
+    axs[1].set_xlabel('Epochs')
+    axs[1].set_ylabel('Accuracy / Area')
+    axs[1].set_title('Training and Validation Accuracy')
+    axs[1].legend()
+
+    # Display the plot
+    plt.tight_layout()
+    plt.savefig(f'renaanalysis/learning/saved_images/training_history/{param_list}_{fold}.png')
+    plt.show()
+
+def compare_epochs():
+    pass

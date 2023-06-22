@@ -46,7 +46,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
            split_window_eeg, exg_resample_rate, eeg_montage, num_timesteps=None, num_channels=None,
            note='',
            head_fusion='max', discard_ratio=0.9,
-           load_saved_rollout=False, batch_size=64, X_pca_ica=None):
+           load_saved_rollout=False, batch_size=64, X_pca_ica=None, pca=None, ica=None):
     """
     @param num_channels: number of channels for the model. This can be different from the number of channels in X. If they are different,
     we assume the model is using dimension reduced data.
@@ -118,14 +118,17 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
                         activation = torch.empty((X.shape[1], model.num_windows))
                         if roll.shape[0] != X.shape[1]:  # HT is using dimension-reduced input
                             # compute forward activation
-                            single_x_windowed = torch.chunk(single_x, model.num_windows, dim=1)
-                            for window_i, x_window_data in enumerate(single_x_windowed):
-                                roll_tensor_window = roll_tensor[:, window_i]
-                                denom = torch.matmul(roll_tensor_window.T, roll_tensor_window)
-                                if denom == 0:
-                                    activation[:, window_i] = 0
-                                else:
-                                    activation[:, window_i] = torch.matmul(x_window_data, roll_tensor_window) / denom
+                            # single_x_windowed = torch.chunk(single_x, model.num_windows, dim=1)
+                            # for window_i, x_window_data in enumerate(single_x_windowed):
+                            #     roll_tensor_window = roll_tensor[:, window_i]
+                            #     denom = torch.matmul(roll_tensor_window.T, roll_tensor_window)
+                            #     if denom == 0:
+                            #         activation[:, window_i] = 0
+                            #     else:
+                            #         activation[:, window_i] = torch.matmul(x_window_data, roll_tensor_window) / denom
+                            # inverse ica transform
+                            roll = ica.inverse_transform(np.expand_dims(roll, axis=0))
+                            activation = np.squeeze(pca.inverse_transform(roll), axis=0)
                         else:
                             activation = roll
                         rolls[roll_depth].append(activation)
@@ -176,6 +179,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
         x_ticks = np.arange(0.5, model.num_windows + 0.5, 1)
         plt.twinx()
         plt.plot(list(range(1, model.num_windows + 1)), np.sum(cross_window_activates, axis=0), label=f"Sum across samples")
+        # plt.plot(list(range(1, model.num_windows + 1)), np.median(cross_window_activates, axis=0), label=f"Median across samples")
         # plt.plot(list(range(1, model.num_windows + 1)), mean_ignore_zero(cross_window_activates, axis=0), label="Max across samples")
 
         plt.xticks(ticks=x_ticks, labels=x_labels)

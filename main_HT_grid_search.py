@@ -41,14 +41,14 @@ grid_search_params = {
 '''
 grid_search_params = {
     "depth": [4],
-    "num_heads": [4, 8],
+    "num_heads": [8],
     "pool": ['cls'],
-    "feedforward_mlp_dim": [32, 64],
+    "feedforward_mlp_dim": [128, 256],
 
     # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [32, 64],
+    "patch_embed_dim": [128, 256],
 
-    "dim_head": [32, 64],
+    "dim_head": [128, 256],
     "attn_dropout": [0.5],
     "emb_dropout": [0.5],
     "lr": [1e-3],
@@ -58,7 +58,7 @@ grid_search_params = {
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
 }
-bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
+bids_root = 'D:/Dataset/auditory_oddball'
 eeg_resample_rate = 200
 reject = 'auto'
 event_names = ["standard", "oddball_with_reponse"]
@@ -130,10 +130,10 @@ locking_name_filters_constrained = {
                                     } #nyamu <3
 
 
-locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, is_pca_ica=True, is_by_channel=False, is_plot_conf=is_plot_conf, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate)
-pickle.dump(training_histories, open(f'model_training_histories_pca_{is_pca_ica}.p', 'wb'))
-pickle.dump(locking_performance, open(f'model_locking_performances_pca_{is_pca_ica}.p', 'wb'))
-pickle.dump(models, open(f'models_with_params_pca_{is_pca_ica}.p', 'wb'))
+locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, is_pca_ica=is_pca_ica, is_by_channel=is_by_channel, is_plot_conf=is_plot_conf, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate)
+pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
 
 
 

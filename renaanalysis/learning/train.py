@@ -37,7 +37,6 @@ from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 from renaanalysis.utils.viz_utils import viz_class_error, viz_confusion_matrix
 
 
-
 def eval_multi_locking_model(rdf, epoch_encoder_path):
     pass
     # get_multi_locking_data(rdf)
@@ -164,6 +163,9 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             for i in range(n_folds):
                 ht_viz(models[i], x_eeg_test, y_test, _encoder, event_names, rollout_data_root, models[i].window_duration, exg_resample_rate,
                        eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
+        elif model_name == 'HT-pca-ica-sesup':
+            num_timesteps = x_eeg_train.shape[2]
+            num_channels = x_eeg_pca_ica_train.shape[1]
         else:  # these models use PCA-ICA reduced EEG data
             if model_name == 'EEGCNN':
                 model = EEGCNN(in_shape=x_eeg_pca_ica.shape, num_classes=2)
@@ -197,7 +199,12 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
         except FileNotFoundError:
             raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}")
     x_eeg = z_norm_by_trial(x)
-    x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, num_top_components)
+    x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, num_top_components)
+    if is_pca_ica:
+        with open(f'HT_grid/pca_object.p', 'wb') as f:
+            pickle.dump(pca, f)
+        with open(f'HT_grid/ica_object.p', 'wb') as f:
+            pickle.dump(ica, f)
 
     # if os.path.exists('data/x_pca_ica.p') and os.path.exists('data/x_znormed.p'):
     #     with open('data/x_pca_ica.p', "rb") as file:
@@ -249,7 +256,7 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
         if not os.path.exists('HT_grid'):
             os.mkdir('HT_grid')
         for i in range(n_folds):
-            torch.save(models, f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt")
+            torch.save(models[i], f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt")
     return locking_performance, total_training_histories, models_param
 
 
@@ -552,7 +559,8 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         val_losses = []
         val_accs = []
         val_aucs = []
-        best_loss = np.inf
+        # best_loss = np.inf
+        best_auc = 0
         patience_counter = 0
 
         num_train_standard_errors = []
@@ -564,15 +572,19 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
             # prev_para = []
             # for param in model_copy.parameters():
             #     prev_para.append(param.cpu().detach().numpy())
-            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_predicted_labels_all, train_true_label_all = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
             if is_plot_conf_matrix:
+                train_predicted_labels_all = np.argmax(train_y_all_pred, axis=1)
+                train_true_label_all = np.argmax(train_y_all, axis=1)
                 num_train_standard_errors.append(num_train_standard_error)
                 num_train_target_errors.append(num_train_target_error)
                 viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
-            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_predicted_labels_all, val_true_label_all = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
+            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, verbose=verbose)
             if is_plot_conf_matrix:
+                val_predicted_labels_all = np.argmax(val_y_all_pred, axis=1)
+                val_true_label_all = np.argmax(val_y_all, axis=1)
                 num_val_standard_errors.append(num_val_standard_error)
                 num_val_target_errors.append(num_val_target_error)
                 viz_confusion_matrix(val_true_label_all, val_predicted_labels_all, epoch, f_index, 'val')
@@ -595,11 +607,13 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
             # Save training histories after every epoch
             training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses, 'acc_val': val_accs, 'auc_val':val_aucs}
             pickle.dump(training_histories, open(os.path.join(model_save_dir, test_name+f'training_histories_{f_index}.pickle'), 'wb'))
-            if val_losses[-1] < best_loss:
+            if val_auc > best_auc:
                 torch.save(model_copy.state_dict(), os.path.join(model_save_dir, test_name+f'_{f_index}.pt'))
-                if verbose >= 1: print('Best model loss improved from {} to {}, saved best model to {}'.format(best_loss, val_losses[-1], model_save_dir))
-                best_loss = val_losses[-1]
+                if verbose >= 1: print('Best validation auc improved from {} to {}, saved best model to {}'.format(best_auc, val_auc, model_save_dir))
+                # best_loss = val_losses[-1]
+                best_auc = val_auc
                 patience_counter = 0
+                best_model = copy.deepcopy(model_copy)
             else:
                 patience_counter += 1
                 if patience_counter > patience:
@@ -613,14 +627,14 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
         if is_test:
-            test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_predicted_labels_all, test_true_label_all = eval(model_copy, X_test, Y_test, criterion, last_activation, _encoder,
+            test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval(best_model, X_test, Y_test, criterion, last_activation, _encoder,
                                              test_name='', verbose=1)
             if verbose >= 1:
                 print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
             test_auc.append(test_auc_model)
             test_loss.append(test_loss_model)
             test_acc.append(test_acc_model)
-        models.append(model_copy)
+        models.append(best_model)
 
     training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds, 'auc_test': test_auc, 'acc_test': test_acc, 'loss_test': test_loss}
     if plot_histories:
@@ -724,10 +738,8 @@ def _run_one_epoch(model, dataloader, criterion, last_activation, optimizer, mod
         num_target_errors += count_target_error(true_label, predicted_labels)
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
-    predicted_labels_all = np.argmax(y_all_pred, axis=1)
-    true_label_all = np.argmax(y_all, axis=1)
     if verbose >= 1: pbar.close()
-    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, predicted_labels_all, true_label_all
+    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
 
 
 def train_model_pupil_eeg_no_folds(X, Y, model, num_epochs=5000, test_name="CNN-EEG-Pupil", lr=1e-3, l2_weight=1e-5, verbose=1):

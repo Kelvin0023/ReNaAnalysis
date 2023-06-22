@@ -1,18 +1,87 @@
 import pickle
+import os
 
+import mne
 import numpy as np
 from matplotlib import pyplot as plt
+from sklearn.metrics import roc_curve, auc
+from torch import nn
+import torch
 
+from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
+from renaanalysis.learning.train import eval
+from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history
 
-search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim"]
-metric = 'folds train acc'
+search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_head"]
+metric = 'folds val auc'
+is_by_channel = False
+is_pca_ica = True
 
-training_histories = pickle.load(open('model_training_histories.p', 'rb'))
-locking_performance = pickle.load(open('model_locking_performances.p', 'rb'))
+training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+nfolds = 3
+model_dir = 'C:/Users/ixiic/PycharmProjects/ReNaAnalysis/HT_grid'
+y_test = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/y_test.p', 'rb'))
+y_train = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/y_train.p', 'rb'))
+x_eeg_pca_ica_test = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/x_eeg_pca_ica_test.p', 'rb'))
+x_eeg_test = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/x_eeg_test.p', 'rb'))
+label_encoder = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/label_encoder.p', 'rb'))
+pca = pickle.load(open(f'HT_grid/pca_object.p', 'rb'))
+ica = pickle.load(open(f'HT_grid/ica_object.p', 'rb'))
+criterion = nn.CrossEntropyLoss()
+last_activation = nn.Sigmoid()
+_encoder = lambda y: label_encoder.transform(y.reshape(-1, 1)).toarray()
+exg_resample_rate = 200
+event_names = ["Distractor", "Target"]
+head_fusion = 'mean'
+channel_fusion = 'sum'  # TODO when plotting the cross window actiavtion
+sample_fusion = 'sum'  # TODO
 
 print('\n'.join([f"{str(x)}, {y[metric]}" for x, y in locking_performance.items()]))
 
+# find the model with best test auc
+best_auc = 0
+for params, model_performance in locking_performance.items():
+    for i in range(nfolds):
+        if model_performance['folds test auc'][i] > best_auc:
+            model_idx = [params, i]
+            best_auc = model_performance['folds test auc'][i]
+
+
+# plot training history
+for params, history_folds in training_histories.items():
+    params_dict = dict(params)
+    seached_params = [params_dict[key] for key in search_params]
+    for i in range(nfolds):
+        history = {'loss_train': history_folds['loss_train'][i], 'acc_train': history_folds['acc_train'][i], 'loss_val': history_folds['loss_val'][i], 'acc_val': history_folds['acc_val'][i], 'auc_val': history_folds['auc_val'][i], 'auc_test': history_folds['auc_test'][i], 'acc_test': history_folds['acc_test'][i], 'loss_test': history_folds['loss_test'][i]}
+        plot_training_history(history, seached_params, i)
+
+
+# plot ROC curve for each stored model
+
+for params, model_list in models.items():
+    for i in range(len(model_list)):
+        model = model_list[i]
+        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval(
+            model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder,
+            test_name='', verbose=1)
+        params_dict = dict(params)
+        seached_params = [params_dict[key] for key in search_params]
+        viz_binary_roc(y_all, y_all_pred, seached_params, fold=i)
+
+# plot attention weights
+rollout_data_root = f'HT_viz'
+eeg_montage = mne.channels.make_standard_montage('biosemi64')
+eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
+num_channels, num_timesteps = x_eeg_pca_ica_test.shape[1:]
+best_model = models[model_idx[0]][model_idx[1]]
+ht_viz(best_model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, best_model.window_duration, exg_resample_rate,
+                   eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max', discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
+
+
+# plot performance for different params
 grouped_results = {}
 for key, value in locking_performance.items():
     params = [dict(key)[x] for x in search_params]
