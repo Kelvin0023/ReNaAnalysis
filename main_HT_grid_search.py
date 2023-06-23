@@ -90,8 +90,8 @@ plt.rcParams.update({'font.size': 22})
 colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
 event_names = ["Distractor", "Target"]
 n_folds = 3
-is_pca_ica = True
-is_by_channel = True
+is_pca_ica = False
+is_by_channel = False
 is_plot_conf = False
 # locking_name_filters_vs = {
 #                         'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],

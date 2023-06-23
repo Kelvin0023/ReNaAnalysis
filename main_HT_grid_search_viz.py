@@ -12,6 +12,7 @@ from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
 from renaanalysis.learning.train import eval
 from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history
+from renaanalysis.params.params import *
 
 search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_head"]
 metric = 'folds val auc'
@@ -23,13 +24,14 @@ locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_
 models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 nfolds = 3
 model_dir = 'C:/Users/ixiic/PycharmProjects/ReNaAnalysis/HT_grid'
-y_test = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/y_test.p', 'rb'))
-y_train = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/y_train.p', 'rb'))
-x_eeg_pca_ica_test = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/x_eeg_pca_ica_test.p', 'rb'))
-x_eeg_test = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/x_eeg_test.p', 'rb'))
-label_encoder = pickle.load(open('C:/Users/ixiic/PycharmProjects/ReNaAnalysis/data/label_encoder.p', 'rb'))
-pca = pickle.load(open(f'HT_grid/pca_object.p', 'rb'))
-ica = pickle.load(open(f'HT_grid/ica_object.p', 'rb'))
+y_test = pickle.load(open(f'{export_data_root}y_test.p', 'rb'))
+y_train = pickle.load(open(f'{export_data_root}/y_train.p', 'rb'))
+x_eeg_pca_ica_test = pickle.load(open(f'{export_data_root}/x_eeg_pca_ica_test.p', 'rb'))
+x_eeg_test = pickle.load(open(f'{export_data_root}/x_eeg_test.p', 'rb'))
+label_encoder = pickle.load(open(f'{export_data_root}/label_encoder.p', 'rb'))
+if is_pca_ica:
+    pca = pickle.load(open(f'{export_data_root}/pca_object.p', 'rb'))
+    ica = pickle.load(open(f'{export_data_root}/ica_object.p', 'rb'))
 criterion = nn.CrossEntropyLoss()
 last_activation = nn.Sigmoid()
 _encoder = lambda y: label_encoder.transform(y.reshape(-1, 1)).toarray()

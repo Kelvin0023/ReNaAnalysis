@@ -29,7 +29,7 @@ from renaanalysis.learning.MutiInputDataset import MultiInputDataset
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
     export_data_root, num_top_components
-from renaanalysis.utils.Training_utils import count_standard_error, count_target_error
+from renaanalysis.utils.training_utils import count_standard_error, count_target_error
 from renaanalysis.utils.data_utils import compute_pca_ica, rebalance_classes, mean_max_sublists, \
     mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
 import matplotlib.pyplot as plt
@@ -200,9 +200,9 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
     x_eeg = z_norm_by_trial(x)
     x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, num_top_components)
     if is_pca_ica:
-        with open(f'HT_grid/pca_object.p', 'wb') as f:
+        with open(f'{export_data_root}/pca_object.p', 'wb') as f:
             pickle.dump(pca, f)
-        with open(f'HT_grid/ica_object.p', 'wb') as f:
+        with open(f'{export_data_root}/ica_object.p', 'wb') as f:
             pickle.dump(ica, f)
 
     # if os.path.exists('data/x_pca_ica.p') and os.path.exists('data/x_znormed.p'):
@@ -226,12 +226,20 @@ def grid_search_ht(grid_search_params, data_root, event_names, locking_name, n_f
     assert np.all(np.unique(y_test) == np.unique(y_train)), "train and test labels are not the same"
     assert len(np.unique(y_test)) == len(event_names), "number of unique labels is not the same as number of event names"
 
-    if not os.path.exists('HT_grid/RSVP-itemonset-locked'):
-        os.mkdir('HT_grid/RSVP-itemonset-locked')
-    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb') as f:
-        pickle.dump(x_eeg_pca_ica, f)
-    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
-        pickle.dump(y, f)
+    # if not os.path.exists('HT_grid/RSVP-itemonset-locked'):
+    #     os.mkdir('HT_grid/RSVP-itemonset-locked')
+    # with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb') as f:
+    #     pickle.dump(x_eeg_pca_ica, f)
+    # with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
+    #     pickle.dump(y, f)
+    with open(os.path.join(export_data_root, 'y_train.p'), 'wb') as f:
+        pickle.dump(y_train, f)
+    with open(os.path.join(export_data_root, 'y_test.p'), 'wb') as f:
+        pickle.dump(y_train, f)
+    with open(os.path.join(export_data_root, 'x_eeg_pca_ica_test.p'), 'wb') as f:
+        pickle.dump(x_eeg_pca_ica_test, f)
+    with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
+        pickle.dump(x_eeg_test, f)
     num_channels, num_timesteps = x_eeg_pca_ica.shape[1:] if is_pca_ica else x_eeg.shape[1:]
 
     param_grid = ParameterGrid(grid_search_params)
@@ -491,7 +499,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
         else:
             criterion = nn.CrossEntropyLoss(weight=class_weights)
         last_activation = nn.Softmax(dim=1)
-    with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb') as f:
+    with open(os.path.join(export_data_root, 'label_encoder.p'), 'wb') as f:
         pickle.dump(label_encoder, f)
 
     X = model.prepare_data(X)
