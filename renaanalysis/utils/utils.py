@@ -346,6 +346,7 @@ def generate_pupil_event_epochs(data_, data_channels, data_channel_types, event_
     raw = mne.io.RawArray(data_.transpose(), info)
 
     found_events = mne.find_events(raw, stim_channel='stim', shortest_event=1)
+
     # pupil epochs
     epochs_pupil = Epochs(raw, events=found_events, event_id=event_ids,
                           tmin=tmin_pupil,
@@ -381,7 +382,8 @@ def generate_eeg_event_epochs(raw, event_ids, tmin, tmax, resample_rate=None, in
     # event_durations = np.array(event_durations)
     if not include_last:
         tmax -= 1/raw.info['sfreq']
-    epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin, tmax=tmax, baseline=(-0.1, 0.0),preload=True,verbose=False,picks='eeg')
+
+    epochs = Epochs(raw, events=found_events, event_id=event_ids, tmin=tmin, tmax=tmax, baseline=(-0.1, 0.0),preload=True,verbose=False, picks='eeg')
     if resample_rate is not None and epochs.info['sfreq'] != resample_rate:
         epochs = epochs.resample(resample_rate)
     return epochs, epochs.events[:, 2]

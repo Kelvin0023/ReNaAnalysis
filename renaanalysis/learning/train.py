@@ -37,9 +37,6 @@ from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 from renaanalysis.utils.viz_utils import viz_class_error, viz_confusion_matrix
 
 
-def eval_multi_locking_model(rdf, epoch_encoder_path):
-    pass
-    # get_multi_locking_data(rdf)
 
 def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, n_folds=10, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='single'):
     # verify number of event types
@@ -72,26 +69,28 @@ def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resamp
 def preprocess_model_data(x_eeg, x_pupil, n_top_components=20):
     x_eeg_znormed = z_norm_by_trial(x_eeg)
     x_pupil_znormed = z_norm_by_trial(x_pupil) if x_pupil is not None else None
-    x_eeg_pca_ica, _, _ = compute_pca_ica(x_eeg, n_top_components)
-    return x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed
+    x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, n_top_components)
+    return x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica
 
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
                test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
-               x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20):
+               x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20, pca=None, ica=None):
     if x_pupil is None:
         if x_eeg_znormed is None or x_eeg_pca_ica is None:
-            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x_eeg, x_pupil, n_top_components)
     else:
         if x_eeg_znormed is None or x_eeg_pca_ica is None or x_pupil_znormed is None:
-            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+        else:
+            assert pca is not None and ica is not None, Exception("pca and ica must not be None if x_eeg_znormed and x_eeg_pca_ica are given")
 
 
-    model_performance, training_histories = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate)
+    model_performance, training_histories = _run_model(model_name, x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, y, event_names, test_name, ht_output_mode, eeg_montage, ht_lr=ht_lr, ht_l2=ht_l2, n_folds=n_folds, exg_resample_rate=exg_resample_rate, pca=pca, ica=ica)
     return model_performance, training_histories
 
 def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_name,
-               ht_output_mode, eeg_montage, ht_lr=1e-4, ht_l2=1e-6,
+               ht_output_mode, eeg_montage, pca, ica, ht_lr=1e-4, ht_l2=1e-6,
                n_folds=10, exg_resample_rate=200):
     """
     runs a given model. This funciton is called by eval_model

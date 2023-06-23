@@ -138,75 +138,14 @@ class Transformer(nn.Module):
 #         x = self.to_latent(x)
 #         return self.mlp_head(x)
 
-def norm_block(is_layer_norm, dim, affine=True):
-    if is_layer_norm:
-        mod = nn.Sequential(
-            TransposeLast(),
-            Fp32LayerNorm(dim, elementwise_affine=affine),
-            TransposeLast(),
-        )
-    else:
-        mod = Fp32GroupNorm(1, dim, affine=affine)
-
-    return mod
-
-class ConvFeatureExtractionModel(nn.Module):
-    def __init__(
-        self,
-        conv_layers,
-        dropout,
-        log_compression,
-        skip_connections,
-        residual_scale,
-        non_affine_group_norm,
-        activation,
-    ):
-        super().__init__()
-
-        def block(n_in, n_out, k, stride):
-            return nn.Sequential(
-                nn.Conv1d(n_in, n_out, k, stride=stride, bias=False),
-                nn.Dropout(p=dropout),
-                norm_block(
-                    is_layer_norm=False, dim=n_out, affine=not non_affine_group_norm
-                ),
-                activation,
-            )
-
-        in_d = 1
-        self.conv_layers = nn.ModuleList()
-        for dim, k, stride in conv_layers:
-            self.conv_layers.append(block(in_d, dim, k, stride))
-            in_d = dim
-
-        self.log_compression = log_compression
-        self.skip_connections = skip_connections
-        self.residual_scale = math.sqrt(residual_scale)
-
-    def forward(self, x):
-        # BxT -> BxCxT
-        x = x.unsqueeze(1)
-
-        for conv in self.conv_layers:
-            residual = x
-            x = conv(x)
-            if self.skip_connections and x.size(1) == residual.size(1):
-                tsz = x.size(2)
-                r_tsz = residual.size(2)
-                residual = residual[..., :: r_tsz // tsz][..., :tsz]
-                x = (x + residual) * self.residual_scale
-
-        if self.log_compression:
-            x = x.abs()
-            x = x + 1
-            x = x.log()
-
-        return x
-
-
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
+    def __init__(self, token_encoder,
+
+                 num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi',
+
+
+                 ):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """
@@ -265,10 +204,6 @@ class HierarchicalTransformer(nn.Module):
                 nn.Linear(patch_embed_dim, num_classes))
 
     def forward(self, x_eeg):
-        x = self.encode(x_eeg)
-        return self.mlp_head(x)
-
-    def encode(self, x_eeg):
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
@@ -288,8 +223,8 @@ class HierarchicalTransformer(nn.Module):
         x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
 
         x = self.to_latent(x)
-        return x
 
+        return self.mlp_head(x)
     def prepare_data(self, x):
         return x
     # def test(self, img):
