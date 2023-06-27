@@ -5,6 +5,7 @@ import lpips
 import matplotlib
 import numpy as np
 import pandas as pd
+import scipy
 from matplotlib import pyplot as plt
 from moviepy.video.io import ImageSequenceClip
 from sklearn.metrics import confusion_matrix, roc_curve, auc
@@ -471,3 +472,37 @@ def plot_training_history(history, param_list, fold):
 
 def compare_epochs():
     pass
+
+def visualize_eeg_epoch(x, y, colors, eeg_picks, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
+                         is_plot_timeseries=True):
+
+    # Set the figure size for the plot
+    plt.rcParams["figure.figsize"] = fig_size
+    event_ids = set(y)
+    x = np.swapaxes(x, 0, 1)
+    # Plot each EEG channel for each event type
+    if is_plot_timeseries:
+        for idx, ch in enumerate(eeg_picks):
+            for event in event_ids:
+                event_idx = np.where(y == event)[0]
+                x_mean = np.mean(x[idx][event_idx], axis=0)
+                x1 = x_mean + scipy.stats.sem(x[idx][event_idx], axis=0)  # this is the upper envelope
+                x2 = x_mean - scipy.stats.sem(x[idx][event_idx], axis=0)
+                time_vector = np.linspace(0, x[idx][event_idx].shape[-1], x[idx][event_idx].shape[-1])
+                # Plot the EEG data as a shaded area
+                plt.fill_between(time_vector, x1, x2, where=x2 <= x1, facecolor=colors[event], interpolate=True,
+                                 alpha=0.5)
+                plt.plot(time_vector, x_mean, c=colors[event], label='{0}, N={1}'.format(event, x[idx][event_idx].shape[0]))
+
+                # Set the labels and title for the plot
+            plt.xlabel('Time (sec)')
+            plt.ylabel('BioSemi Channel {0} (μV), shades are SEM'.format(ch))
+            plt.legend()
+            plt.title('{0} - Channel {1}'.format(title, ch))
+
+            # Save or show the plot
+            if out_dir:
+                plt.savefig(os.path.join(out_dir, '{0} - Channel {1}.png'.format(title, ch)))
+                plt.clf()
+            else:
+                plt.show()

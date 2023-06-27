@@ -18,13 +18,16 @@ search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_hea
 metric = 'folds val auc'
 is_by_channel = False
 is_pca_ica = True
+is_plot_train_history = False
+is_plot_ROC = False
+is_plot_topomap = True
 
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 nfolds = 3
 model_dir = 'C:/Users/ixiic/PycharmProjects/ReNaAnalysis/HT_grid'
-y_test = pickle.load(open(f'{export_data_root}y_test.p', 'rb'))
+y_test = pickle.load(open(f'{export_data_root}/y_test.p', 'rb'))
 y_train = pickle.load(open(f'{export_data_root}/y_train.p', 'rb'))
 x_eeg_pca_ica_test = pickle.load(open(f'{export_data_root}/x_eeg_pca_ica_test.p', 'rb'))
 x_eeg_test = pickle.load(open(f'{export_data_root}/x_eeg_test.p', 'rb'))
@@ -41,6 +44,7 @@ head_fusion = 'mean'
 channel_fusion = 'sum'  # TODO when plotting the cross window actiavtion
 sample_fusion = 'sum'  # TODO
 
+
 print('\n'.join([f"{str(x)}, {y[metric]}" for x, y in locking_performance.items()]))
 
 # find the model with best test auc
@@ -53,33 +57,35 @@ for params, model_performance in locking_performance.items():
 
 
 # plot training history
-for params, history_folds in training_histories.items():
-    params_dict = dict(params)
-    seached_params = [params_dict[key] for key in search_params]
-    for i in range(nfolds):
-        history = {'loss_train': history_folds['loss_train'][i], 'acc_train': history_folds['acc_train'][i], 'loss_val': history_folds['loss_val'][i], 'acc_val': history_folds['acc_val'][i], 'auc_val': history_folds['auc_val'][i], 'auc_test': history_folds['auc_test'][i], 'acc_test': history_folds['acc_test'][i], 'loss_test': history_folds['loss_test'][i]}
-        plot_training_history(history, seached_params, i)
+if is_plot_train_history:
+    for params, history_folds in training_histories.items():
+        params_dict = dict(params)
+        seached_params = [params_dict[key] for key in search_params]
+        for i in range(nfolds):
+            history = {'loss_train': history_folds['loss_train'][i], 'acc_train': history_folds['acc_train'][i], 'loss_val': history_folds['loss_val'][i], 'acc_val': history_folds['acc_val'][i], 'auc_val': history_folds['auc_val'][i], 'auc_test': history_folds['auc_test'][i], 'acc_test': history_folds['acc_test'][i], 'loss_test': history_folds['loss_test'][i]}
+            plot_training_history(history, seached_params, i)
 
 
 # plot ROC curve for each stored model
-
-for params, model_list in models.items():
-    for i in range(len(model_list)):
-        model = model_list[i]
-        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval(
-            model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder,
-            test_name='', verbose=1)
-        params_dict = dict(params)
-        seached_params = [params_dict[key] for key in search_params]
-        viz_binary_roc(y_all, y_all_pred, seached_params, fold=i)
+if is_plot_ROC:
+    for params, model_list in models.items():
+        for i in range(len(model_list)):
+            model = model_list[i]
+            test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval(
+                model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder,
+                test_name='', verbose=1)
+            params_dict = dict(params)
+            seached_params = [params_dict[key] for key in search_params]
+            viz_binary_roc(y_all, y_all_pred, seached_params, fold=i)
 
 # plot attention weights
-rollout_data_root = f'HT_viz'
-eeg_montage = mne.channels.make_standard_montage('biosemi64')
-eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
-num_channels, num_timesteps = x_eeg_pca_ica_test.shape[1:]
-best_model = models[model_idx[0]][model_idx[1]]
-ht_viz(best_model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, best_model.window_duration, exg_resample_rate,
+if is_plot_topomap:
+    rollout_data_root = f'HT_viz'
+    eeg_montage = mne.channels.make_standard_montage('biosemi64')
+    eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
+    num_channels, num_timesteps = x_eeg_pca_ica_test.shape[1:]
+    best_model = models[model_idx[0]][model_idx[1]]
+    ht_viz(best_model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, best_model.window_duration, exg_resample_rate,
                    eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max', discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
 
 

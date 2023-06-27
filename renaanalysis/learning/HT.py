@@ -1,3 +1,4 @@
+import copy
 import os
 import pickle
 
@@ -7,6 +8,7 @@ from torch import nn
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 import torch.nn.utils.rnn as rnn_utils
+import torch.nn.functional as F
 
 
 def pair(t):
@@ -138,75 +140,125 @@ class Transformer(nn.Module):
 #         x = self.to_latent(x)
 #         return self.mlp_head(x)
 
-def norm_block(is_layer_norm, dim, affine=True):
-    if is_layer_norm:
-        mod = nn.Sequential(
-            TransposeLast(),
-            Fp32LayerNorm(dim, elementwise_affine=affine),
-            TransposeLast(),
-        )
-    else:
-        mod = Fp32GroupNorm(1, dim, affine=affine)
-
-    return mod
 
 class ConvFeatureExtractionModel(nn.Module):
     def __init__(
         self,
-        conv_layers,
-        dropout,
-        log_compression,
-        skip_connections,
-        residual_scale,
-        non_affine_group_norm,
-        activation,
+        conv_layers: list[tuple[tuple[int, int], tuple[int, int], tuple[int, int]]],
+        dropout: float = 0.0
     ):
         super().__init__()
 
-        def block(n_in, n_out, k, stride):
+        def block(n_in, n_out, kernel_size, stride):
+            def make_conv():
+                conv = nn.Conv2d(n_in, n_out, kernel_size, stride)
+                nn.init.kaiming_normal_(conv.weight)
+                return conv
             return nn.Sequential(
-                nn.Conv1d(n_in, n_out, k, stride=stride, bias=False),
+                make_conv(),
                 nn.Dropout(p=dropout),
-                norm_block(
-                    is_layer_norm=False, dim=n_out, affine=not non_affine_group_norm
-                ),
-                activation,
+                nn.LayerNorm(dim, elementwise_affine=True),
+                nn.GELU(),
             )
 
         in_d = 1
         self.conv_layers = nn.ModuleList()
-        for dim, k, stride in conv_layers:
-            self.conv_layers.append(block(in_d, dim, k, stride))
+        for i, cl in enumerate(conv_layers):
+            assert len(cl) == 3, "invalid conv definition: " + str(cl)
+            (dim, k, stride) = cl
+
+            self.conv_layers.append(
+                block(
+                    in_d,
+                    dim,
+                    k,
+                    stride
+                )
+            )
             in_d = dim
 
-        self.log_compression = log_compression
-        self.skip_connections = skip_connections
-        self.residual_scale = math.sqrt(residual_scale)
-
     def forward(self, x):
-        # BxT -> BxCxT
-        x = x.unsqueeze(1)
+        # BxCxT
+        # x = x.unsqueeze(1)
 
         for conv in self.conv_layers:
-            residual = x
             x = conv(x)
-            if self.skip_connections and x.size(1) == residual.size(1):
-                tsz = x.size(2)
-                r_tsz = residual.size(2)
-                residual = residual[..., :: r_tsz // tsz][..., :tsz]
-                x = (x + residual) * self.residual_scale
-
-        if self.log_compression:
-            x = x.abs()
-            x = x + 1
-            x = x.log()
-
         return x
+
+def _make_span_from_seeds(seeds, span, total=None):
+    inds = list()
+    for seed in seeds:
+        for i in range(seed, seed + span):
+            if total is not None and i >= total:
+                break
+            elif i not in inds:
+                inds.append(int(i))
+    return torch.tensor(inds)
+
+class MaskLayer(nn.Module):
+    def __init__(self, p_t, p_c, c_span, mask_t_span, mask_c_span, t_mask_replacement, c_mask_replacement):
+        super(MaskLayer, self).__init__()
+        self.p_t = p_t
+        self.p_c = p_c
+        self.c_span = c_span
+        self.mask_t_span = mask_t_span
+        self.mask_c_span = mask_c_span
+        self.t_mask_replacement = t_mask_replacement
+        self.c_mask_replacement = c_mask_replacement
+
+    def make_t_mask(self, shape, p, span, allow_no_inds=False):
+        mask = torch.zeros(shape, requires_grad=False, dtype=bool)
+
+        for i in range(shape[0]):
+            mask_seeds = list()
+            while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
+                mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
+
+            mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
+
+        return mask
+
+    def make_c_mask(self, shape, p, span, allow_no_inds=False):
+        mask = torch.zeros(shape, requires_grad=False, dtype=bool)
+        for i in range(shape[0]):
+            mask_seeds = list()
+            while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
+                mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
+            if self.c_span:
+                mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
+            else:
+                mask[i, mask_seeds] = True
+
+        return mask
+
+    def forward(self, x):
+        original_input = torch.clone(x)
+        (batch_size, patch_dim, Height, Width) = x.shape
+        x = x.permute(0, 2, 3, 1)
+        # masks = []
+        # for i in range(x.shape[0]):
+        #     while True:
+        #         mask = torch.rand_like(torch.empty(x.shape[2],x.shape[3])) < self.mask_ratio
+        #         if torch.any(mask):
+        #             break
+        #     masks.append(mask.unsqueeze(0).expand(patch_dim, -1, -1))
+        # masks = torch.stack(masks).to(x.device)
+        # masked_input = x.masked_fill(mask_t, 0.0)
+        if self.p_t > 0:
+            mask_t = self.make_t_mask((batch_size, Width), self.p_t, self.mask_t_span)
+        if self.p_c > 0:
+            mask_c = self.make_c_mask((batch_size, Height), self.p_c, self.mask_c_span)
+        if mask_t is not None:
+            x.transpose(2, 1)[mask_t] = self.t_mask_replacement
+        if mask_c is not None:
+            x[mask_c] = self.c_mask_replacement
+        x = x.permute(0, 3, 1, 2)
+        return x, original_input, mask_t, mask_c
 
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, extraction_layers, mask_ratio=0.01, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', training_mode='classification'):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """
@@ -233,6 +285,7 @@ class HierarchicalTransformer(nn.Module):
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
+        self.extraction_layers = extraction_layers
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
         # self.to_patch_embedding = nn.Sequential(
@@ -244,6 +297,7 @@ class HierarchicalTransformer(nn.Module):
             nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
             # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
         )
+        # self.to_patch_embedding = ConvFeatureExtractionModel(self.extraction_layers, dropout=emb_dropout)
         # x = torch.randn(10, self.num_channels, self.num_timesteps)
 
         self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
@@ -254,6 +308,10 @@ class HierarchicalTransformer(nn.Module):
 
         self.pool = pool
         self.to_latent = nn.Identity()
+        self.training_mode = training_mode
+        self.mask_layer = MaskLayer(p_t=0.2, p_c= 0.1, c_span=False, mask_t_span=2, mask_c_span=5,
+                                    t_mask_replacement=torch.nn.Parameter(torch.zeros(self.num_channels, self.path_embed_dim), requires_grad=True),
+                                    c_mask_replacement=torch.nn.Parameter(torch.zeros(self.num_windows, self.path_embed_dim), requires_grad=True))
 
         if output == 'single':
             self.mlp_head = nn.Sequential(
@@ -265,11 +323,16 @@ class HierarchicalTransformer(nn.Module):
                 nn.Linear(patch_embed_dim, num_classes))
 
     def forward(self, x_eeg):
-        x = self.encode(x_eeg)
-        return self.mlp_head(x)
+        if self.training_mode == 'classification':
+            x = self.encode(x_eeg)
+            return self.mlp_head(x)
+        elif self.training_mode == 'self-sup pretrain':
+            return self.encode(x_eeg)
 
     def encode(self, x_eeg):
         x = self.to_patch_embedding(x_eeg)
+        if self.training_mode == 'self-sup pretrain':
+            x, original_x, mask_t, mask_c = self.mask_layer(x)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
         b, n, _ = x.shape
@@ -284,11 +347,13 @@ class HierarchicalTransformer(nn.Module):
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
         # att_matrix = torch.sum(att_matrix, dim=2)
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
-
-        x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-
-        x = self.to_latent(x)
-        return x
+        if self.training_mode == 'classification':
+            x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
+            x = self.to_latent(x)
+            return x
+        elif self.training_mode == 'self-sup pretrain':
+            x = self.to_latent(x[:,1:].transpose(1,2).view(original_x.shape)) # exclude cls
+            return x, original_x, mask_t, mask_c
 
     def prepare_data(self, x):
         return x
@@ -323,3 +388,76 @@ def viz_ht(model: HierarchicalTransformer, x_eeg, y, label_encoder):
     pickle.dump(y, open(os.path.join('HT/RSVP-itemonset-locked', 'y.pkl'), 'wb'))
     pickle.dump(label_encoder, open(os.path.join('HT/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb'))
 
+class ContrastiveLoss(nn.Module):
+    def __init__(self, temperature, n_neg):
+        super(ContrastiveLoss, self).__init__()
+        self.temperature = temperature
+        self.n_neg = n_neg
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def _generate_negatives(self, orig_tokens):
+        """Generate negative samples to compare each sequence location against"""
+        batch_size, patch_dim, Height, Width = orig_tokens.shape
+        z_k = orig_tokens.permute([0, 3, 2, 1]).reshape(-1, patch_dim)
+        full_len = Height * Width
+        with torch.no_grad():
+            # candidates = torch.arange(full_len).unsqueeze(-1).expand(-1, self.num_negatives).flatten()
+            negative_inds = torch.randint(0, full_len - 1, size=(batch_size, full_len * self.n_neg))
+            # From wav2vec 2.0 implementation, I don't understand
+            # negative_inds[negative_inds >= candidates] += 1
+
+            for i in range(1, batch_size):
+                negative_inds[i] += i * full_len
+
+        z_k = z_k[negative_inds.view(-1)].view(batch_size, full_len, self.n_neg, patch_dim)
+        return z_k
+
+    def _calculate_similarity(self, unmasked_tokens, contextual_output, negatives):
+        contextual_output = contextual_output.unsqueeze(-2)
+        unmasked_tokens = unmasked_tokens.unsqueeze(-2)
+
+        # In case the contextualizer matches exactly, need to avoid divide by zero errors
+        negative_in_target = (unmasked_tokens == negatives).all(-1)
+        targets = torch.cat([unmasked_tokens, negatives], dim=-2)
+
+        logits = F.cosine_similarity(contextual_output, targets, dim=-1) / self.temperature
+        if negative_in_target.any():
+            logits[:, :, 1:][negative_in_target] = float("-inf")
+
+        return logits.view(-1, logits.shape[-1])
+
+    def forward(self, pred_tokens, original_tokens, masks):
+        batch_size, token_dim, num_channels, num_windows = pred_tokens.shape
+        # batch_losses = []
+        # for samp_idx, mask in enumerate(masks):
+        #     masked_indices = torch.unique(torch.nonzero(mask)[:, 1:], dim=0)
+        #     loss = 0
+        #     for row in masked_indices:
+        #         pred_token = pred_tokens[samp_idx, :, row[0], row[1]].view(1, -1)
+        #         orig_token = original_tokens[samp_idx, :, row[0], row[1]].view(1, -1)
+        #         negt_indices = [(i, j) for i in range(num_channels) for j in range(num_windows) if (i, j) != tuple(row.tolist())]
+        #         selected_indices = torch.randperm(len(negt_indices))[:self.n_neg]
+        #         negt_tokens = []
+        #         for idx in selected_indices:
+        #             i, j = negt_indices[idx]
+        #             negt_tokens.append(original_tokens[samp_idx, :, i, j])
+        #         negt_tokens = torch.stack(negt_tokens)
+        #         numerator = torch.exp(F.cosine_similarity(F.normalize(pred_token), F.normalize(orig_token), dim=1) / self.temperature)
+        #         denominator = torch.exp(F.cosine_similarity(F.normalize(negt_tokens), F.normalize(pred_token), dim=1) / self.temperature).sum()
+        #         loss += -torch.log(numerator / denominator)
+        #     batch_losses.append(loss)
+        negt_tokens = self._generate_negatives(original_tokens)
+        pred_tokens = pred_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)
+        original_tokens = original_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)
+        logits = self._calculate_similarity(original_tokens, pred_tokens, negt_tokens)
+        labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
+
+        # masks = masks.view(batch_size, -1)  # Shape: (32, 576, 128)
+        #
+        # pred_tokens_masked = pred_tokens[masks.unsqueeze(-1)].view(batch_size, -1, token_dim)
+        # original_tokens_masked = original_tokens[masks.unsqueeze(-1)].view(batch_size, -1, token_dim)
+        # numerator = torch.matmul(F.normalize(pred_tokens_masked, dim=-1), F.normalize(original_tokens_masked, dim=-1).transpose(1, 2))
+
+
+        # return torch.stack(batch_losses).mean()
+        return self.loss_fn(logits, labels)

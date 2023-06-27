@@ -45,7 +45,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
            data_root,
            split_window_eeg, exg_resample_rate, eeg_montage, num_timesteps=None, num_channels=None,
            note='',
-           head_fusion='max', discard_ratio=0.9,
+           head_fusion='max', discard_ratio=0.1,
            load_saved_rollout=False, batch_size=64,
            X_pca_ica=None, pca=None, ica=None):
     """
