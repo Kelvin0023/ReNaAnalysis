@@ -1,5 +1,6 @@
 import itertools
 import json
+from enum import Enum
 from os import path
 
 import mne
@@ -180,3 +181,8 @@ random_seed = 13
 # HDCA parameters
 num_folds = 10
 num_top_components = 20
+
+class TestName(Enum):
+    OddBallPreTrain = 'oddball-pretrain'
+    FineTune = 'finetune'
+    Normal = 'normal'

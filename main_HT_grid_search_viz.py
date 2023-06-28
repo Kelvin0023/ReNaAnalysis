@@ -11,7 +11,7 @@ import torch
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
 from renaanalysis.learning.train import eval
-from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history
+from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_epoch
 from renaanalysis.params.params import *
 
 search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_head"]
@@ -20,7 +20,8 @@ is_by_channel = False
 is_pca_ica = True
 is_plot_train_history = False
 is_plot_ROC = False
-is_plot_topomap = True
+is_plot_topomap = False
+is_compare_epochs = True
 
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
@@ -54,6 +55,18 @@ for params, model_performance in locking_performance.items():
         if model_performance['folds test auc'][i] > best_auc:
             model_idx = [params, i]
             best_auc = model_performance['folds test auc'][i]
+
+# plot epoch
+if is_compare_epochs:
+    rollout_data_root = f'HT_viz'
+    eeg_montage = mne.channels.make_standard_montage('biosemi64')
+    eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
+    num_channels, num_timesteps = x_eeg_pca_ica_test.shape[1:]
+    best_model = models[model_idx[0]][model_idx[1]]
+    ht_viz(best_model, x_eeg_test[0:10], y_test[0: 10], _encoder, event_names, rollout_data_root, best_model.window_duration,
+           exg_resample_rate,
+           eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+           discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
 
 
 # plot training history

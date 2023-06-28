@@ -448,7 +448,10 @@ def plot_training_history(history, param_list, fold):
 
     # Plot the training and validation loss
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
-    fig.suptitle(f'Training history of param {param_list} in fold {fold}, test auc = {test_auc}')
+    if param_list is not None:
+        fig.suptitle(f'Training history of param {param_list} in fold {fold}, test auc = {test_auc}')
+    else:
+        fig.suptitle(f'Training history of fold {fold}, test auc = {test_auc}')
     axs[0].plot(range(1, len(train_loss) + 1), train_loss, label='Training Loss')
     axs[0].plot(range(1, len(val_loss) + 1), val_loss, label='Validation Loss')
     axs[0].set_xlabel('Epochs')
@@ -467,7 +470,8 @@ def plot_training_history(history, param_list, fold):
 
     # Display the plot
     plt.tight_layout()
-    plt.savefig(f'renaanalysis/learning/saved_images/training_history/{param_list}_{fold}.png')
+    if param_list is not None:
+        plt.savefig(f'renaanalysis/learning/saved_images/training_history/{param_list}_{fold}.png')
     plt.show()
 
 def compare_epochs():
