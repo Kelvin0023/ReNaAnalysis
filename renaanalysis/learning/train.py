@@ -205,7 +205,7 @@ def grid_search_ht(grid_search_params, data_root, event_names, n_folds, picks, r
             x = pickle.load(open(os.path.join(export_data_root, f'x_auditory_oddball.p'), 'rb'))
             y = pickle.load(open(os.path.join(export_data_root, f'y_auditory_oddball.p'), 'rb'))
         except FileNotFoundError:
-            raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}")
+            raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}")
     x_eeg = z_norm_by_trial(x)
     if reload_saved_samples:
         x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, num_top_components)
@@ -245,14 +245,15 @@ def grid_search_ht(grid_search_params, data_root, event_names, n_folds, picks, r
     #     pickle.dump(x_eeg_pca_ica, f)
     # with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
     #     pickle.dump(y, f)
-    with open(os.path.join(export_data_root, 'y_train.p'), 'wb') as f:
-        pickle.dump(y_train, f)
-    with open(os.path.join(export_data_root, 'y_test.p'), 'wb') as f:
-        pickle.dump(y_test, f)
-    with open(os.path.join(export_data_root, 'x_eeg_pca_ica_test.p'), 'wb') as f:
-        pickle.dump(x_eeg_pca_ica_test, f)
-    with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
-        pickle.dump(x_eeg_test, f)
+    if reload_saved_samples:
+        with open(os.path.join(export_data_root, 'y_train.p'), 'wb') as f:
+            pickle.dump(y_train, f)
+        with open(os.path.join(export_data_root, 'y_test.p'), 'wb') as f:
+            pickle.dump(y_test, f)
+        with open(os.path.join(export_data_root, 'x_eeg_pca_ica_test.p'), 'wb') as f:
+            pickle.dump(x_eeg_pca_ica_test, f)
+        with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
+            pickle.dump(x_eeg_test, f)
     num_channels, num_timesteps = x_eeg_pca_ica.shape[1:] if is_pca_ica else x_eeg.shape[1:]
 
     param_grid = ParameterGrid(grid_search_params)
@@ -265,7 +266,7 @@ def grid_search_ht(grid_search_params, data_root, event_names, n_folds, picks, r
                                         depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                         pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                         dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'], training_mode=training_mode)
-        models, training_histories, criterion, last_activation, _encoder = cv_train_test_model(x_eeg_pca_ica_train if is_pca_ica else x_eeg_train, y_train, model, temperature=params['temperature'], n_neg=params['n_neg'], is_plot_conf_matrix=is_plot_conf, is_by_channel=is_by_channel, X_test=x_eeg_pca_ica_test if is_pca_ica else x_eeg_test, Y_test=y_test, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], viz_rebalance=viz_rebalance, training_mode=training_mode)  # use un-dimension reduced EEG data
+        models, training_histories, criterion, last_activation, _encoder = cv_train_test_model(x_eeg_pca_ica_train if is_pca_ica else x_eeg_train, y_train, model, temperature=params['temperature'], n_neg=params['n_neg'], is_plot_conf_matrix=is_plot_conf, is_by_channel=is_by_channel, X_test=x_eeg_pca_ica_test if is_pca_ica else x_eeg_test, Y_test=y_test, n_folds=n_folds, test_name=test_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], viz_rebalance=viz_rebalance)  # use un-dimension reduced EEG data
         if model_name == 'HT-sesup':
             folds_train_loss, folds_val_loss =  mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
             print(f'{test_name} with param {params}: folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss} ')
@@ -278,7 +279,7 @@ def grid_search_ht(grid_search_params, data_root, event_names, n_folds, picks, r
             if not os.path.exists('HT_grid_pretrain'):
                 os.mkdir('HT_grid_pretrain')
             for i in range(n_folds):
-                torch.save(models[i].state_dict(), os.path.join(model_save_dir, test_name + f"lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt"))
+                torch.save(models[i], os.path.join(model_save_dir, test_name + f"_lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt"))
         else:
             folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
             folds_val_auc = mean_max_sublists(training_histories['auc_val'])
@@ -304,18 +305,18 @@ def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbos
         X = torch.Tensor(X).to(device)
         dataset_class = TensorDataset
 
-    if test_name == TestName.OddBallPreTrain:
+    if test_name == TestName.OddBallPreTrain.value:
         test_dataset = dataset_class(X)
-    elif test_name == TestName.Normal or TestName == TestName.FineTune:
+    elif test_name == TestName.Normal.value or test_name == TestName.FineTune.value:
         Y = _encoder(Y)
         Y = torch.Tensor(Y).to(device)
         test_dataset = dataset_class(X, Y)
 
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
 
-    if test_name == TestName.OddBallPreTrain:
+    if test_name == TestName.OddBallPreTrain.value:
         return _run_one_epoch_self_sup(model, test_dataloader, criterion, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
-    elif test_name == TestName.Normal or TestName == TestName.FineTune:
+    elif test_name == TestName.Normal.value or test_name == TestName.FineTune.value:
         return _run_one_epoch_classification(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
 
 def fine_tuning(X, Y, model, n_folds=10, lr=2e-5, l2_weight=1e-6, test_name='', X_test=None, Y_test=None, verbose=1, rebalance_method='SMOT', is_by_channel=False, viz_rebalance=False, is_plot_conf_matrix=False, plot_histories=True):
@@ -549,9 +550,9 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     # determine training mode
-    if test_name == TestName.OddBallPreTrain:
+    if test_name == TestName.OddBallPreTrain.value:
         training_mode = 'self-sup pretrain'
-    elif test_name == TestName.FineTune or test_name == TestName.Normal:
+    elif test_name == TestName.FineTune.value or test_name == TestName.Normal.value:
         training_mode = 'classification'
 
     if isinstance(X, list):
@@ -564,7 +565,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
     else:
         # check the model's output shape
         input_shape = X.shape[1:]
-        rand_input = torch.randn(1, *input_shape)
+        rand_input = torch.randn(1, *input_shape).to(device)
         dataset_class = TensorDataset
     if rebalance_method == 'class weight':
         #compute class proportion
@@ -834,13 +835,14 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     mini_batch_i = 0
 
     # determine which layer to require grad
-    if test_name == TestName.FineTune:
+    if test_name == TestName.FineTune.value:
         for param in model.parameters():
             param.requires_grad = False
+        for param in model.transformer.parameters():
+            param.requires_grad = True
         for param in model.mlp_head.parameters():
             param.requires_grad = True
-        for param in model.cls_token.parameters():
-            param.requires_grad = True
+        model.cls_token.requires_grad = True
 
     if verbose >= 1:
         pbar = tqdm(total=math.ceil(len(dataloader.dataset) / dataloader.batch_size), desc=f'{mode} {test_name}')

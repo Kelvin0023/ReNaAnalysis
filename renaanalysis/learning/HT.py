@@ -257,7 +257,7 @@ class MaskLayer(nn.Module):
 
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, extraction_layers, mask_ratio=0.01, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, extraction_layers, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
                  patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', training_mode='classification'):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
@@ -417,10 +417,10 @@ class ContrastiveLoss(nn.Module):
         unmasked_tokens = unmasked_tokens.unsqueeze(-2)
 
         # In case the contextualizer matches exactly, need to avoid divide by zero errors
-        negative_in_target = (unmasked_tokens == negatives).all(-1)
-        targets = torch.cat([unmasked_tokens, negatives], dim=-2)
+        negative_in_target = (contextual_output == negatives).all(-1)
+        targets = torch.cat([contextual_output, negatives], dim=-2)
 
-        logits = F.cosine_similarity(contextual_output, targets, dim=-1) / self.temperature
+        logits = F.cosine_similarity(unmasked_tokens, targets, dim=-1) / self.temperature
         if negative_in_target.any():
             logits[:, :, 1:][negative_in_target] = float("-inf")
 

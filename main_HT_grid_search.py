@@ -51,14 +51,14 @@ grid_search_params = {
     "dim_head": [128],
     "attn_dropout": [0.3],
     "emb_dropout": [0.5],
-    "lr": [1e-4, 2e-5],
+    "lr": [1e-4],
     "l2_weight": [1e-5],
 
     # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
     'temperature' : [0.1],
-    'n_neg': [20]
+    'n_neg': [1]
 }
 bids_root = 'D:/Dataset/auditory_oddball'
 eeg_resample_rate = 200
@@ -133,10 +133,17 @@ locking_name_filters_constrained = {
                                     } #nyamu <3
 
 
-locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, n_folds, picks, reject, eeg_resample_rate, colors, test_name=TestName.OddBallPreTrain, is_pca_ica=is_pca_ica, is_by_channel=is_by_channel, is_plot_conf=is_plot_conf, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate, viz_rebalance=viz_rebalance, model_name=model_name)
-pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
-pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
-pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, n_folds, picks, reject, eeg_resample_rate, colors, test_name=TestName.OddBallPreTrain.value, is_pca_ica=is_pca_ica, is_by_channel=is_by_channel, is_plot_conf=is_plot_conf, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate, viz_rebalance=viz_rebalance, model_name=model_name)
+if model_name == 'HT-sesup':
+    pickle.dump(training_histories,
+                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
+    pickle.dump(locking_performance,
+                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
+else:
+    pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+    pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
 
 
 

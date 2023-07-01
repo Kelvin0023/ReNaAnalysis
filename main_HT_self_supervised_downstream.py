@@ -12,6 +12,7 @@ from renaanalysis.learning.train import eval_model, preprocess_model_data, fine_
 from renaanalysis.params.params import *
 from renaanalysis.utils.data_utils import z_norm_by_trial
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
+from renaanalysis.learning.HT import HierarchicalTransformer
 
 # test domain
 
@@ -29,8 +30,8 @@ colors = {
 picks = 'eeg'
 # models = ['HT', 'HDCA', 'EEGCNN']
 models = ['HT-sesup']
-model_path = 'renaanalysis/learning/saved_models/oddball-pretrain'
-n_folds = 6
+model_path = 'renaanalysis/learning/saved_models/oddball-pretrainbendr_lr_0.0001_dimhead_128_feeddim_128_numheads_8_patchdim_128_fold_0_pca_False.pt'
+n_folds = 1
 ht_lr = 1e-3
 ht_l2 = 1e-5
 
@@ -81,6 +82,15 @@ assert np.all(np.unique(y_test) == np.unique(y_train)), "train and test labels a
 assert len(np.unique(y_test)) == len(event_names), "number of unique labels"
 
 #load model
+# model_dict = torch.load(model_path)
+# pretrained_model = HierarchicalTransformer(180, 64, 200, num_classes=2, extraction_layers=None,
+#                                         depth=4, num_heads=8, feedforward_mlp_dim=128,
+#                                         pool='cls', patch_embed_dim=128,
+#                                         dim_head=128, emb_dropout=0.5, attn_dropout=0.3, output='multi', training_mode='self-sup pretrain')
+# pretrained_model.load_state_dict(model_dict)
+# pretrained_model.training_mode = 'classification'
 pretrained_model = torch.load(model_path)
-models, training_histories_folds, criterion, last_activation, _encoder = cv_train_test_model(x_eeg_train, y_train, pretrained_model, n_folds=n_folds, lr=lr, l2_weight=l2_weight, test_name=TestName.DownStream,
+pretrained_model.training_mode = 'classification'
+
+models, training_histories_folds, criterion, last_activation, _encoder = cv_train_test_model(x_eeg_train, y_train, pretrained_model, n_folds=n_folds, lr=ht_lr, l2_weight=ht_l2, test_name=TestName.FineTune.value,
             X_test=x_eeg_test, Y_test=y_test, is_by_channel=is_by_channel, is_plot_conf_matrix=is_plot_conf_matrix)
