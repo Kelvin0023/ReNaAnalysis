@@ -15,7 +15,7 @@ result_path = 'results/model_performances_auditory_oddball'
 # analysis parameters ######################################################################################
 eeg_resample_rate = 200
 reject = 'auto'
-bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
+bids_root = 'D:/Dataset/auditory_oddball'
 event_names = ["standard", "oddball_with_reponse"]
 colors = {
     "standard": "red",
@@ -28,7 +28,7 @@ n_folds = 6
 ht_lr = 1e-3
 ht_l2 = 1e-5
 
-reload_saved_samples = True
+reload_saved_samples = False
 viz_rebalance = False
 # start of the main block ######################################################
 
