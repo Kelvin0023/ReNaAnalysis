@@ -5,6 +5,7 @@ import mne
 import numpy as np
 from matplotlib import pyplot as plt
 from einops import rearrange, repeat
+from matplotlib.colors import LinearSegmentedColormap
 from torch import nn
 import torch
 
@@ -70,6 +71,14 @@ for params, model_list in models.items():
         x, att_matrix = model_list[i].transformer(x)
         x = model_list[i].to_latent(x[:, 1:].transpose(1, 2).view(original_x.shape))
         sim = F.cosine_similarity(x.permute(0, 2, 3, 1), original_x.permute(0, 2, 3, 1), dim=-1)
+        sim_array = sim.cpu().detach().numpy()
+        for idx, epoch in enumerate(sim_array):
+            cmap_colors = [(0.0, 'blue'), (1.0, 'red')]
+            custom_cmap = LinearSegmentedColormap.from_list('CustomColormap', cmap_colors)
+            plt.imshow(epoch, cmap=custom_cmap)
+            plt.colorbar()
+            plt.title(f'Predicted Simularity of epoch {idx}')
+            plt.show()
         # loss._calculate_similarity(original_x, x)
 # find the model with best test auc
 best_auc = 0

@@ -61,7 +61,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
         model_path = model  # save the model path
         model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2)
         model.load_state_dict(torch.load(model_path))
-        model.to(device)
+    model.to(device)
     window_size = model.patch_length
     eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
     info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))

@@ -13,6 +13,7 @@ from renaanalysis.utils.utils import remove_value
 from renaanalysis.learning.train import eval
 from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_epoch
 from renaanalysis.params.params import *
+from renaanalysis.learning.HT import HierarchicalTransformer
 
 search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_head"]
 metric = 'folds val auc'
@@ -21,7 +22,7 @@ is_pca_ica = True
 is_plot_train_history = False
 is_plot_ROC = False
 is_plot_topomap = False
-is_compare_epochs = True
+is_plot_epochs = True
 
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
@@ -40,7 +41,7 @@ criterion = nn.CrossEntropyLoss()
 last_activation = nn.Sigmoid()
 _encoder = lambda y: label_encoder.transform(y.reshape(-1, 1)).toarray()
 exg_resample_rate = 200
-event_names = ["Distractor", "Target"]
+event_names =  ["Distractor", "Target"]
 head_fusion = 'mean'
 channel_fusion = 'sum'  # TODO when plotting the cross window actiavtion
 sample_fusion = 'sum'  # TODO
@@ -57,16 +58,43 @@ for params, model_performance in locking_performance.items():
             best_auc = model_performance['folds test auc'][i]
 
 # plot epoch
-if is_compare_epochs:
+if is_plot_epochs:
+    num_samp = 2
+    viz_all_epoch = False
+    viz_both = False
     rollout_data_root = f'HT_viz'
     eeg_montage = mne.channels.make_standard_montage('biosemi64')
     eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
     num_channels, num_timesteps = x_eeg_pca_ica_test.shape[1:]
     best_model = models[model_idx[0]][model_idx[1]]
-    ht_viz(best_model, x_eeg_test[0:10], y_test[0: 10], _encoder, event_names, rollout_data_root, best_model.window_duration,
-           exg_resample_rate,
-           eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
-           discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
+    non_target_indc = np.where(y_test == 0)[0]
+    target_indc = np.where(y_test == 6)[0]
+    viz_indc = np.concatenate((non_target_indc[0:num_samp], target_indc[0:num_samp]))
+    colors = {0: 'red', 6: 'blue'}
+    eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
+    this_picks = ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz']
+    if viz_all_epoch:
+        visualize_eeg_epoch(x_eeg_test, y_test, colors, this_picks)
+        model = HierarchicalTransformer(180, 20, 200, 2, None, depth=4, num_heads=8, feedforward_mlp_dim=64,
+                                        window_duration=0.1, pool='cls',
+                                        patch_embed_dim=64, dim_head=64, attn_dropout=0.5, emb_dropout=0.5,
+                                        output='multi', training_mode='classification')
+        model.load_state_dict(best_model.state_dict())
+        ht_viz(model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root,
+               best_model.window_duration,
+               exg_resample_rate,
+               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+               discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
+    else:
+        visualize_eeg_epoch(x_eeg_test[viz_indc if viz_both else target_indc[1:num_samp]], y_test[viz_indc if viz_both else target_indc[1:num_samp]], colors, this_picks)
+        model = HierarchicalTransformer(180, 20 , 200, 2, None, depth=4, num_heads=8, feedforward_mlp_dim=64, window_duration=0.1, pool='cls',
+                     patch_embed_dim=64, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi', training_mode='classification')
+        model.load_state_dict(best_model.state_dict())
+        # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else target_indc[0:num_samp]].astype('float32')))
+        ht_viz(model, x_eeg_test[viz_indc if viz_both else target_indc[1:num_samp]], y_test[viz_indc if viz_both else target_indc[1:num_samp]], _encoder, event_names, rollout_data_root, best_model.window_duration,
+               exg_resample_rate,
+               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+               discard_ratio=0.1, batch_size=64, X_pca_ica=x_eeg_pca_ica_test[viz_indc if viz_both else target_indc[1:num_samp]], pca=pca, ica=ica)
 
 
 # plot training history

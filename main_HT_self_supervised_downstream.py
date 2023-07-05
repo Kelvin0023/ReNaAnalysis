@@ -8,7 +8,7 @@ import torch
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch import nn
 
-from renaanalysis.learning.train import eval_model, preprocess_model_data, fine_tuning, cv_train_test_model
+from renaanalysis.learning.train import eval_model, preprocess_model_data, cv_train_test_model
 from renaanalysis.params.params import *
 from renaanalysis.utils.data_utils import z_norm_by_trial
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples

@@ -13,6 +13,7 @@ from RenaAnalysis import get_rdf
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.train import eval_lockings, grid_search_ht
 from renaanalysis.params.params import *
+from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
 
@@ -41,7 +42,7 @@ grid_search_params = {
 '''
 grid_search_params = {
     "depth": [4],
-    "num_heads": [8],
+    "num_heads": [16, 24],
     "pool": ['cls'],
     "feedforward_mlp_dim": [128],
 
@@ -49,9 +50,9 @@ grid_search_params = {
     "patch_embed_dim": [128],
 
     "dim_head": [128],
-    "attn_dropout": [0.3],
+    "attn_dropout": [0.5],
     "emb_dropout": [0.5],
-    "lr": [1e-4],
+    "lr": [1e-3],
     "l2_weight": [1e-5],
 
     # "lr_scheduler_type": ['cosine'],
@@ -60,7 +61,7 @@ grid_search_params = {
     'temperature' : [0.1],
     'n_neg': [1]
 }
-bids_root = 'D:/Dataset/auditory_oddball'
+data_root = 'D:/Dataset/auditory_oddball'
 eeg_resample_rate = 200
 reject = 'auto'
 event_names = ["standard", "oddball_with_reponse"]
@@ -88,14 +89,12 @@ print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 
 
 plt.rcParams.update({'font.size': 22})
-colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
-event_names = ["Distractor", "Target"]
-n_folds = 1
-is_pca_ica = False
-is_by_channel = False
-is_plot_conf = False
-viz_rebalance = False
-model_name = 'HT-sesup'
+n_folds = 3
+is_pca_ica = True # apply pca and ica on data or not
+is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
+is_plot_conf = False # plot confusion matrix of training and validation during training or not
+viz_rebalance = False # viz training data after rebalance or not
+model_name = 'HT-pca-ica' # HT-sesup, HT, HT-pca-ica
 # locking_name_filters_vs = {
 #                         'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
 #                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
@@ -109,31 +108,34 @@ model_name = 'HT-sesup'
 locking_name_filters_constrained = {
                         'RSVP-Item-Onset': [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                                             lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]],
+}
+reload_saved_samples = True
+regenerate_epochs = False
+if regenerate_epochs:
+    x, y, start_time, metadata = get_auditory_oddball_samples(data_root, export_data_root, reload_saved_samples, event_names, picks, reject,
+                                        eeg_resample_rate, colors)
+    pickle.dump(x, open(os.path.join(export_data_root, f'x_auditory_oddball.p'), 'wb'))
+    pickle.dump(y, open(os.path.join(export_data_root, f'y_auditory_oddball.p'), 'wb'))
+else:
+    try:
+        x = pickle.load(open(os.path.join(export_data_root, f'x_auditory_oddball.p'), 'rb'))
+        y = pickle.load(open(os.path.join(export_data_root, f'y_auditory_oddball.p'), 'rb'))
+    except FileNotFoundError:
+        raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}")
+x_eeg = z_norm_by_trial(x)
+if reload_saved_samples == False:
+    x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, num_top_components)
+    pickle.dump(x_eeg_pca_ica, open(os.path.join(export_data_root, f'x_pca_ica.p'), 'wb'))
+    if is_pca_ica:
+        with open(f'{export_data_root}/pca_object.p', 'wb') as f:
+            pickle.dump(pca, f)
+        with open(f'{export_data_root}/ica_object.p', 'wb') as f:
+            pickle.dump(ica, f)
+else:
+    x_eeg_pca_ica = pickle.load(open(os.path.join(export_data_root, f'x_pca_ica.p'), 'rb'))
 
-                       #  'Carousel-Item-Onset': [lambda x: x.block_condition == conditions['Carousel'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                       #                          lambda x: x.block_condition == conditions['Carousel'] and x.dtn_onffset and x.dtn==dtnn_types["Target"]],
-                       #
-                       #  'RSVP-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
-                       #          lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
-                       #  'RSVP-FLGI': [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.dtn==dtnn_types["Distractor"],
-                       #          lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['RSVP']  and x.dtn==dtnn_types["Target"]],
-                       #  'RSVP-I-DT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Distractor"],
-                       #          lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"]],
-                       # 'RSVP-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['RSVP'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
-                       #           lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['RSVP'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]],
-                       #
-                       #  'Carousel-I-VT-Head': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-VT-Head' and x.dtn == dtnn_types["Distractor"],
-                       #                          lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-VT-Head' and x.dtn == dtnn_types["Target"]],
-                       #  'Carousel-FLGI': [lambda x: type(x) == GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.dtn == dtnn_types["Distractor"],
-                       #                  lambda x: type(x) == GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.dtn == dtnn_types["Target"]],
-                       #  'Carousel-I-DT-Head': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-DT-Head' and x.dtn == dtnn_types["Distractor"],
-                       #                  lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-DT-Head' and x.dtn == dtnn_types["Target"]],
-                       #  'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
-                       #                          lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]
-                                    } #nyamu <3
 
-
-locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, n_folds, picks, reject, eeg_resample_rate, colors, test_name=TestName.OddBallPreTrain.value, is_pca_ica=is_pca_ica, is_by_channel=is_by_channel, is_plot_conf=is_plot_conf, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, exg_resample_rate=exg_resample_rate, viz_rebalance=viz_rebalance, model_name=model_name)
+locking_performance, training_histories, models = grid_search_ht(grid_search_params, x_eeg, x_eeg_pca_ica, y, event_names, n_folds, test_name=TestName.Normal.value, is_pca_ica=is_pca_ica, is_by_channel=is_by_channel, is_plot_conf=is_plot_conf, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=True, exg_resample_rate=exg_resample_rate, viz_rebalance=viz_rebalance, model_name=model_name)
 if model_name == 'HT-sesup':
     pickle.dump(training_histories,
                 open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
@@ -141,9 +143,9 @@ if model_name == 'HT-sesup':
                 open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
     pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
 else:
-    pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
-    pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+    pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_numhead.p', 'wb'))
+    pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_numhead.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_numhead.p', 'wb'))
 
 
 

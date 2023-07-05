@@ -309,7 +309,8 @@ class HierarchicalTransformer(nn.Module):
         self.pool = pool
         self.to_latent = nn.Identity()
         self.training_mode = training_mode
-        self.mask_layer = MaskLayer(p_t=0.2, p_c= 0.1, c_span=False, mask_t_span=2, mask_c_span=5,
+        if training_mode == 'self-sup pretrain':
+            self.mask_layer = MaskLayer(p_t=0.2, p_c= 0.1, c_span=False, mask_t_span=2, mask_c_span=5,
                                     t_mask_replacement=torch.nn.Parameter(torch.zeros(self.num_channels, self.path_embed_dim), requires_grad=True),
                                     c_mask_replacement=torch.nn.Parameter(torch.zeros(self.num_windows, self.path_embed_dim), requires_grad=True))
 
@@ -416,48 +417,20 @@ class ContrastiveLoss(nn.Module):
         contextual_output = contextual_output.unsqueeze(-2)
         unmasked_tokens = unmasked_tokens.unsqueeze(-2)
 
-        # In case the contextualizer matches exactly, need to avoid divide by zero errors
-        negative_in_target = (contextual_output == negatives).all(-1)
-        targets = torch.cat([contextual_output, negatives], dim=-2)
+        negative_in_target = (unmasked_tokens == negatives).all(-1)
+        targets = torch.cat([unmasked_tokens, negatives], dim=-2)
 
-        logits = F.cosine_similarity(unmasked_tokens, targets, dim=-1) / self.temperature
+        logits = F.cosine_similarity(contextual_output, targets, dim=-1) / self.temperature
         if negative_in_target.any():
             logits[:, :, 1:][negative_in_target] = float("-inf")
 
         return logits.view(-1, logits.shape[-1])
 
-    def forward(self, pred_tokens, original_tokens, masks):
+    def forward(self, pred_tokens, original_tokens):
         batch_size, token_dim, num_channels, num_windows = pred_tokens.shape
-        # batch_losses = []
-        # for samp_idx, mask in enumerate(masks):
-        #     masked_indices = torch.unique(torch.nonzero(mask)[:, 1:], dim=0)
-        #     loss = 0
-        #     for row in masked_indices:
-        #         pred_token = pred_tokens[samp_idx, :, row[0], row[1]].view(1, -1)
-        #         orig_token = original_tokens[samp_idx, :, row[0], row[1]].view(1, -1)
-        #         negt_indices = [(i, j) for i in range(num_channels) for j in range(num_windows) if (i, j) != tuple(row.tolist())]
-        #         selected_indices = torch.randperm(len(negt_indices))[:self.n_neg]
-        #         negt_tokens = []
-        #         for idx in selected_indices:
-        #             i, j = negt_indices[idx]
-        #             negt_tokens.append(original_tokens[samp_idx, :, i, j])
-        #         negt_tokens = torch.stack(negt_tokens)
-        #         numerator = torch.exp(F.cosine_similarity(F.normalize(pred_token), F.normalize(orig_token), dim=1) / self.temperature)
-        #         denominator = torch.exp(F.cosine_similarity(F.normalize(negt_tokens), F.normalize(pred_token), dim=1) / self.temperature).sum()
-        #         loss += -torch.log(numerator / denominator)
-        #     batch_losses.append(loss)
         negt_tokens = self._generate_negatives(original_tokens)
         pred_tokens = pred_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)
         original_tokens = original_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)
         logits = self._calculate_similarity(original_tokens, pred_tokens, negt_tokens)
         labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
-
-        # masks = masks.view(batch_size, -1)  # Shape: (32, 576, 128)
-        #
-        # pred_tokens_masked = pred_tokens[masks.unsqueeze(-1)].view(batch_size, -1, token_dim)
-        # original_tokens_masked = original_tokens[masks.unsqueeze(-1)].view(batch_size, -1, token_dim)
-        # numerator = torch.matmul(F.normalize(pred_tokens_masked, dim=-1), F.normalize(original_tokens_masked, dim=-1).transpose(1, 2))
-
-
-        # return torch.stack(batch_losses).mean()
         return self.loss_fn(logits, labels)

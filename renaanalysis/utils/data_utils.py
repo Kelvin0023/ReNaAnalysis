@@ -164,7 +164,7 @@ def _epochs_to_samples_eeg_pupil(epochs_pupil, epochs_eeg, event_ids, picks_eeg=
 
     return x_eeg, x_pupil, y
 
-def _epoch_to_samples(epochs, event_ids, picks=None, perserve_order=True, event_marker_to_label=True):
+def _epoch_to_samples(epochs, event_ids, picks=None, perserve_order=True, event_marker_to_label=True, require_metainfo=False):
     y = []
 
     if not perserve_order:
@@ -179,8 +179,14 @@ def _epoch_to_samples(epochs, event_ids, picks=None, perserve_order=True, event_
         y = epochs.events[:, 2]
         if event_marker_to_label: y = y - 1
         x = epochs.get_data(picks=picks)
+        if require_metainfo:
+            start_time = epochs.events[:, 0]
+            metadata = epochs.metadata
+        else:
+            start_time = None
+            metadata = None
 
-    return x, y
+    return x, y, start_time, metadata
 
 def force_square_epochs(epochs, tmin, tmax):
     # get the number of events overall, so we know what the number of time points should be to make the data matrix square
@@ -301,11 +307,11 @@ def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rat
     else:
         epochs_clean = epochs
     event_ids = {event_name: i for i, event_name in enumerate(event_names)}
-    x, y = _epoch_to_samples(epochs_clean, event_ids)
+    x, y, start_time, metadata = _epoch_to_samples(epochs_clean, event_ids, require_metainfo=True)
 
     visualize_eeg_epochs(epochs_clean, event_ids, colors, title='EEG Epochs ' + title)
 
-    return x, y
+    return x, y, start_time, metadata
 
 
 

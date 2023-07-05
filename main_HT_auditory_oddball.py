@@ -35,7 +35,7 @@ viz_rebalance = False
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
 
-x, y = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
+x, y, start_time, metadata = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
 
 
 # lockings test  ####################################################################################################

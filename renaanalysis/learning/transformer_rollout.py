@@ -14,6 +14,8 @@ def rollout(depth, attentions, discard_ratio, head_fusion, token_shape):
                 attention_heads_fused = attention.max(axis=1)[0]
             elif head_fusion == "min":
                 attention_heads_fused = attention.min(axis=1)[0]
+            elif head_fusion == "None":
+                pass
             else:
                 raise "Attention head fusion type Not supported"
 
@@ -67,6 +69,7 @@ class VITAttentionRollout:
         if depth > self.attention_layer_count:
             raise ValueError(f"Given depth ({depth}) is greater than the number of attenion layers in the model ({self.attention_layer_count})")
         self.attentions = []
+        self.model.eval()
 
         output = self.model(input_tensor.to(self.device))
 

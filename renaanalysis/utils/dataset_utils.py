@@ -95,6 +95,16 @@ def visualize_eeg_epochs(epochs, event_groups, colors, eeg_picks, title='', out_
 #     "oddball_with_reponse": "black",
 #     "standard_with_reponse": "gray"}
 
+class DataSet():
+    def __init__(self, hierarchy_list, epochs):
+        self.orged_epochs = hierarchy_list
+
+    def organize_epochs(self, hierarchy_list, epochs):
+        for hierarchy_key in hierarchy_list:
+            pass
+
+
+
 
 def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_width, datatype, task, suffix, extension, event_label_dict, epoch_tmin, epoch_tmax, baseline_tuple):
     """
@@ -141,13 +151,17 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
 
             eventID_mat = np.zeros((epochs_info.shape[0], 3))
             event_dict_this_run = {}
+            metadata_dict = {'subject_id': [], 'run': []}
             for k in range(epochs_info.shape[0]):
                 eventID_mat[k, 0] = epochs_info['sample'][k]
                 eventID_mat[k, 2] = event_label_dict[epochs_info['value'][k]]
                 if epochs_info['value'][k] not in event_dict_this_run:
                     event_dict_this_run[epochs_info['value'][k]] = int(eventID_mat[k, 2])
+                metadata_dict['subject_id'].append(subject)
+                metadata_dict['run'].append(str(j))
             eventID_mat = eventID_mat.astype(int)
-            data = mne.Epochs(raw, eventID_mat, event_id=event_dict_this_run, tmin=epoch_tmin, tmax=epoch_tmax, baseline=baseline_tuple,
+            metadata = pd.DataFrame(metadata_dict)
+            data = mne.Epochs(raw, eventID_mat, event_id=event_dict_this_run, metadata=metadata, tmin=epoch_tmin, tmax=epoch_tmax, baseline=baseline_tuple,
                               preload=True)
             runs['run-' + str(j + 1)] = data
     return subjects
@@ -189,6 +203,76 @@ def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tm
     # pickle.dump(subjects, open(os.path.join('./3rd_party_data/audio_oddball', f'subjects.p'), 'wb'))
     return subjects
 
+def get_TUHG_samples(data_root, export_data_root, epoch_length, subject_picks=None):
+
+    def parse_file_tree(directory):
+        result = {}
+        for entry in os.scandir(directory):
+            if entry.is_file():
+                result[entry.name] = None
+            elif entry.is_dir():
+                result[entry.name] = parse_file_tree(entry.path)
+        return result
+
+    # Specify the root directory of the file tree
+    root_directory = data_root
+
+    # Parse the file tree and obtain the dictionary representation
+    file_tree_dict = parse_file_tree(root_directory)
+    subjects = {}
+    for subject_group_id, subject_group in file_tree_dict.items():
+        subjects[subject_group_id] = {}
+        for subject_name, subject in subject_group.items():
+            subjects[subject_group_id][subject_name] = {}
+            if subject_picks is None:
+                for session_name, session in subject.items():
+                    subjects[subject_group_id][subject_name][session_name] = {}
+                    for montage_type_name, montage_type in session.items():
+                        subjects[subject_group_id][subject_name][session_name][montage_type_name] = {}
+                        for data_file_name, _ in montage_type.items():
+                            metadata_dict = {'subject_group_id': [], 'subject_name': [], 'session_name': [], 'montage_type_name': []}
+                            raw = mne.io.read_raw_edf(os.path.join(data_root,
+                                                                   f'{subject_group_id}/{subject_name}/{session_name}/{montage_type_name}/{data_file_name}'),
+                                                      preload=True)
+                            num_epochs = math.ceil(raw.__len__()/(epoch_length*raw.info['sfreq']))
+                            eventID_mat = np.zeros((num_epochs, 3))
+                            for k in range(num_epochs):
+                                eventID_mat[k, 0] = k * epoch_length
+                                eventID_mat[k, 2] = 0
+                                metadata_dict['subject_group_id'].append(subject_group_id)
+                                metadata_dict['subject_name'].append(subject_name)
+                                metadata_dict['session_name'].append(session_name)
+                                metadata_dict['montage_type_name'].append(montage_type_name)
+                            metadata = pd.DataFrame(metadata_dict)
+                            data = mne.Epochs(raw, eventID_mat, {0: 'standard'}, metadata=metadata, tmin=0, tmax=epoch_length*raw.info['sfreq'], preload=True)
+                            subjects[subject_group_id][subject_name][session_name][montage_type_name][data_file_name] = data
+            elif subject_name in subject_picks:
+                for session_name, session in subject.items():
+                    subjects[subject_group_id][subject_name][session_name] = {}
+                    for montage_type_name, montage_type in session.items():
+                        subjects[subject_group_id][subject_name][session_name][montage_type_name] = {}
+                        for data_file_name, _ in montage_type.items():
+                            metadata_dict = {'subject_group_id': [], 'subject_name': [], 'session_name': [],
+                                             'montage_type_name': []}
+                            raw = mne.io.read_raw_edf(os.path.join(data_root,
+                                                                   f'{subject_group_id}/{subject_name}/{session_name}/{montage_type_name}/{data_file_name}'),
+                                                      preload=True)
+                            num_epochs = math.ceil(raw.__len__() / (epoch_length * raw.info['sfreq']))
+                            eventID_mat = np.zeros((num_epochs, 3), dtype='int')
+                            for k in range(num_epochs):
+                                eventID_mat[k, 0] = int(k * epoch_length * raw.info['sfreq'])
+                                eventID_mat[k, 2] = 0
+                                metadata_dict['subject_group_id'].append(subject_group_id)
+                                metadata_dict['subject_name'].append(subject_name)
+                                metadata_dict['session_name'].append(session_name)
+                                metadata_dict['montage_type_name'].append(montage_type_name)
+                            metadata = pd.DataFrame(metadata_dict)
+                            data = mne.Epochs(raw, eventID_mat, {'standard': 0}, metadata=metadata, tmin=0,
+                                              tmax=epoch_length, preload=True, baseline=(0, 0))
+                            subjects[subject_group_id][subject_name][session_name][montage_type_name][data_file_name] = data
+    pickle.dump(subjects, open(export_data_root, 'wb'))
+    return subjects
+
 def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors):
     start_time = time.time()  # record the start time of the analysis
     if not reload_saved_samples:
@@ -198,11 +282,13 @@ def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_sampl
             for run_key, run in run_values.items():
                 all_epochs.append(run)
         all_epochs = mne.concatenate_epochs(all_epochs)
-        x, y = epochs_to_class_samples(all_epochs, event_names, picks=picks, reject=reject, n_jobs=16,
+        x, y, start_time, metadata = epochs_to_class_samples(all_epochs, event_names, picks=picks, reject=reject, n_jobs=16,
                                        eeg_resample_rate=eeg_resample_rate, colors=colors)
 
         pickle.dump(x, open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'wb'))
         pickle.dump(y, open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'wb'))
+        pickle.dump(start_time, open(os.path.join(export_data_root, 'start_time_auditory_oddball.p'), 'wb'))
+        pickle.dump(metadata, open(os.path.join(export_data_root, 'metadata_auditory_oddball.p'), 'wb'))
     else:
         x = pickle.load(open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'rb'))
         y = pickle.load(open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'rb'))
@@ -211,4 +297,4 @@ def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_sampl
     # Y_encoded = le.fit_transform(y)
 
     print(f"Load data took {time.time() - start_time} seconds")
-    return x, y
+    return x, y, start_time, metadata

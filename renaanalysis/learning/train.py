@@ -154,7 +154,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
                 os.mkdir(rollout_data_root)
             for i in range(n_folds):
                 ht_viz(models[i], x_eeg_test, y_test, _encoder, event_names, rollout_data_root, models[i].window_duration, exg_resample_rate,
-                       eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=False, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
+                       eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=True, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
         elif model_name == 'HT-sesup' or 'HT-pca-ica-sesup':
             num_timesteps = x_eeg_train.shape[2]
             num_channels = x_eeg_pca_ica_train.shape[1] if model_name == 'HT-pca-ica-sesup' else x_eeg_train.shape[1]
@@ -193,43 +193,9 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     print("#" * 100)
     return performance, training_histories
 
-def grid_search_ht(grid_search_params, data_root, event_names, n_folds, picks, reject, eeg_resample_rate, colors, test_name='', exg_resample_rate=128, is_plot_conf=False, is_pca_ica=True, is_by_channel=False, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True, viz_rebalance=False, model_name='HT-sesup'):
+def grid_search_ht(grid_search_params, x_eeg, x_eeg_pca_ica, y, event_names, n_folds, test_name='', exg_resample_rate=128, is_plot_conf=False, is_pca_ica=True, is_by_channel=False, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True, viz_rebalance=False, model_name='HT-sesup'):
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
     locking_performance = {}
-    if regenerate_epochs:
-        x, y = get_auditory_oddball_samples(data_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
-        pickle.dump(x, open(os.path.join(export_data_root, f'x_auditory_oddball.p'), 'wb'))
-        pickle.dump(y, open(os.path.join(export_data_root, f'y_auditory_oddball.p'), 'wb'))
-    else:
-        try:
-            x = pickle.load(open(os.path.join(export_data_root, f'x_auditory_oddball.p'), 'rb'))
-            y = pickle.load(open(os.path.join(export_data_root, f'y_auditory_oddball.p'), 'rb'))
-        except FileNotFoundError:
-            raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}")
-    x_eeg = z_norm_by_trial(x)
-    if reload_saved_samples:
-        x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, num_top_components)
-        pickle.dump(x_eeg_pca_ica, open(os.path.join(export_data_root, f'x_pca_ica.p'), 'wb'))
-        if is_pca_ica:
-            with open(f'{export_data_root}/pca_object.p', 'wb') as f:
-                pickle.dump(pca, f)
-            with open(f'{export_data_root}/ica_object.p', 'wb') as f:
-                pickle.dump(ica, f)
-    else:
-        x_eeg_pca_ica = pickle.load(open(os.path.join(export_data_root, f'x_pca_ica.p'), 'rb'))
-
-    # if os.path.exists('data/x_pca_ica.p') and os.path.exists('data/x_znormed.p'):
-    #     with open('data/x_pca_ica.p', "rb") as file:
-    #         x_eeg_pca_ica = pickle.load(file)
-    #     with open('data/x_znormed.p', "rb") as file:
-    #         x_eeg = pickle.load(file)
-    #     x_pupil_znormed = None
-    # else:
-    #     x_eeg, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x, None)
-    #     with open('data/x_pca_ica.p', "wb") as file:
-    #         pickle.dump(x_eeg_pca_ica, file)
-    #     with open('data/x_znormed.p', "wb") as file:
-    #         pickle.dump(x_eeg, file)
 
     skf = StratifiedShuffleSplit(n_splits=1, random_state=random_seed)
     train, test = [(train, test) for train, test in skf.split(x_eeg, y)][0]
@@ -319,220 +285,6 @@ def eval(model, X, Y, criterion, last_activation, _encoder, test_name='', verbos
     elif test_name == TestName.Normal.value or test_name == TestName.FineTune.value:
         return _run_one_epoch_classification(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, test_name=test_name, verbose=verbose)
 
-def fine_tuning(X, Y, model, n_folds=10, lr=2e-5, l2_weight=1e-6, test_name='', X_test=None, Y_test=None, verbose=1, rebalance_method='SMOT', is_by_channel=False, viz_rebalance=False, is_plot_conf_matrix=False, plot_histories=True):
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda:0" if use_cuda else "cpu")
-    # model = model.to(device)
-
-    if isinstance(X, list):
-        # create dummy random input for each input
-        rand_input = []
-        for x in X:
-            input_shape = x.shape[1:]
-            rand_input.append(torch.randn(1, *input_shape).to(device))
-        dataset_class = MultiInputDataset
-    else:
-        # check the model's output shape
-        input_shape = X.shape[1:]
-        rand_input = torch.randn(1, *input_shape)
-        dataset_class = TensorDataset
-    if rebalance_method == 'class weight':
-        # compute class proportion
-        unique_classes, counts = np.unique(Y, return_counts=True)
-        num_unique_classes = len(unique_classes)
-        class_proportions = counts / len(Y)
-        class_weights = 1 / class_proportions
-        class_weights = torch.tensor(class_weights).to(device)
-
-    with torch.no_grad():
-        model.eval()
-        output_shape = model(rand_input).shape[1]
-
-    if output_shape == 1:
-        assert len(np.unique(
-            Y)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
-        label_encoder = LabelEncoder()
-        label_encoder.fit(Y)
-        _encoder = lambda y: label_encoder.transform(y).reshape(-1, 1)
-        # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
-        criterion = nn.BCELoss(reduction='mean')
-        last_activation = nn.Sigmoid()
-    else:
-        label_encoder = preprocessing.OneHotEncoder()
-        label_encoder.fit(Y.reshape(-1, 1))
-        _encoder = lambda y: label_encoder.transform(y.reshape(-1, 1)).toarray()
-        # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
-        if rebalance_method == 'SMOT':
-            criterion = nn.CrossEntropyLoss()
-        else:
-            criterion = nn.CrossEntropyLoss(weight=class_weights)
-        last_activation = nn.Softmax(dim=1)
-    with open(os.path.join(export_data_root, 'label_encoder.p'), 'wb') as f:
-        pickle.dump(label_encoder, f)
-
-    X = model.prepare_data(X)
-
-    skf = StratifiedShuffleSplit(n_splits=n_folds, random_state=random_seed)
-    train_losses_folds = []
-    train_accs_folds = []
-    val_losses_folds = []
-    val_accs_folds = []
-    val_aucs_folds = []
-    models = []
-
-    model_copy = None
-    test_auc = []
-    test_acc = []
-    test_loss = []
-    for f_index, (train, val) in enumerate(skf.split(X[0] if isinstance(X, list) else X, Y)):
-        model_copy = copy.deepcopy(model)
-        # model_copy = HierarchicalTransformer(180, 20, 200, num_classes=2,
-        #                                 output='multi')
-        model_copy = model_copy.to(device)
-        # model = model.to(device)
-        # rollout = VITAttentionRollout(model_copy, device, attention_layer_class=Attention,
-        #                               token_shape=model_copy.grid_dims,
-        #                               discard_ratio=0.9, head_fusion='max')
-
-        if isinstance(X, list):
-            x_train = []
-            x_val = []
-            y_train, y_val = Y[train], Y[val]
-
-            rebalanced_labels = []
-            for this_x in X:
-                this_x_train, this_y_train = rebalance_classes(this_x[train], y_train,
-                                                               by_channel=is_by_channel) if rebalance_method == 'SMOT' else zip(
-                    this_x[train], y_train)
-                x_train.append(torch.Tensor(this_x_train).to(device))
-                rebalanced_labels.append(this_y_train)
-                x_val.append(torch.Tensor(this_x[val]).to(device))
-            assert np.all([label_set == rebalanced_labels[0] for label_set in rebalanced_labels])
-            y_train = rebalanced_labels[0]
-        else:
-            x_train, x_val, y_train, y_val = X[train], X[val], Y[train], Y[val]
-            if rebalance_method == 'SMOT':
-                x_train, y_train = rebalance_classes(x_train, y_train, by_channel=is_by_channel)  # rebalance by class
-            if viz_rebalance:
-                colors = {0: 'red', 6: 'blue'}
-                eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
-                visualize_eeg_epoch(x_train, y_train, colors, eeg_picks,
-                                    out_dir=f'renaanalysis/learning/saved_images/by_channel_{is_by_channel}')
-            x_train = torch.Tensor(x_train).to(device)
-            x_val = torch.Tensor(x_val).to(device)
-
-        y_train_encoded = _encoder(y_train)
-        y_val_encoded = _encoder(y_val)
-
-        y_train_encoded = torch.Tensor(y_train_encoded)
-        y_val_encoded = torch.Tensor(y_val_encoded)
-
-        train_dataset = dataset_class(x_train, y_train_encoded)
-        val_dataset = dataset_class(x_val, y_val_encoded)
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
-        optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
-        # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
-        scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-
-        patience_counter = 0
-
-        num_train_standard_errors = []
-        num_train_target_errors = []
-        num_val_standard_errors = []
-        num_val_target_errors = []
-        best_auc = 0
-        train_losses = []
-        train_accs = []
-        val_losses = []
-        val_accs = []
-        val_aucs = []
-        for epoch in range(epochs):
-            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(
-                model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device,
-                l2_weight=l2_weight, test_name=test_name, verbose=verbose)
-            if is_plot_conf_matrix:
-                train_predicted_labels_all = np.argmax(train_y_all_pred, axis=1)
-                train_true_label_all = np.argmax(train_y_all, axis=1)
-                num_train_standard_errors.append(num_train_standard_error)
-                num_train_target_errors.append(num_train_target_error)
-                viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
-            scheduler.step()
-            # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
-            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(
-                model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device,
-                l2_weight=l2_weight, test_name=test_name, verbose=verbose)
-            if is_plot_conf_matrix:
-                val_predicted_labels_all = np.argmax(val_y_all_pred, axis=1)
-                val_true_label_all = np.argmax(val_y_all, axis=1)
-                num_val_standard_errors.append(num_val_standard_error)
-                num_val_target_errors.append(num_val_target_error)
-                viz_confusion_matrix(val_true_label_all, val_predicted_labels_all, epoch, f_index, 'val')
-            train_losses.append(train_loss)
-            train_accs.append(train_accuracy)
-            val_aucs.append(val_auc)
-            val_losses.append(val_loss)
-            val_accs.append(val_accuracy)
-            if verbose >= 1:
-                print(
-                    "Fold {}, Epoch {}: val auc = {:.16f}, train accuracy = {:.16f}, train loss={:.16f}; val accuracy = {:.16f}, val loss={:.16f}, patience left {}".format(
-                        f_index, epoch, np.max(val_aucs), train_accs[-1], train_losses[-1], val_accs[-1],
-                        val_losses[-1], patience - patience_counter))
-            # Save training histories after every epoch
-            training_histories = {'loss_train': train_losses, 'acc_train': train_accs, 'loss_val': val_losses,
-                                  'acc_val': val_accs, 'auc_val': val_aucs}
-            pickle.dump(training_histories,
-                        open(os.path.join(model_save_dir, test_name + f'training_histories_{f_index}.pickle'),
-                             'wb'))
-            if val_auc > best_auc:
-                torch.save(model_copy.state_dict(), os.path.join(model_save_dir, test_name + f'_{f_index}.pt'))
-                if verbose >= 1: print(
-                    'Best validation auc improved from {} to {}, saved best model to {}'.format(best_auc, val_auc,
-                                                                                                model_save_dir))
-                # best_loss = val_losses[-1]
-                best_auc = val_auc
-                patience_counter = 0
-                best_model = copy.deepcopy(model_copy)
-            else:
-                patience_counter += 1
-                if patience_counter > patience:
-                    if verbose >= 1: print(
-                        f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
-                    break
-        # viz_class_error(num_train_standard_errors, num_train_target_errors, 'train')
-        # viz_class_error(num_val_standard_errors, num_val_target_errors, 'validation')
-        train_accs_folds.append(train_accs)
-        train_losses_folds.append(train_losses)
-        val_accs_folds.append(val_accs)
-        val_losses_folds.append(val_losses)
-        val_aucs_folds.append(val_aucs)
-        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval(
-            best_model, X_test, Y_test, criterion, last_activation, _encoder,
-            test_name='', verbose=1)
-        if verbose >= 1:
-            print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index,
-                                                                                                    test_auc_model,
-                                                                                                    test_loss_model,
-                                                                                                    test_acc_model))
-        test_auc.append(test_auc_model)
-        test_loss.append(test_loss_model)
-        test_acc.append(test_acc_model)
-        models.append(best_model)
-
-    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds,
-                                'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds,
-                                'auc_test': test_auc, 'acc_test': test_acc, 'loss_test': test_loss}
-    if plot_histories:
-        for i in range(n_folds):
-            history = {'loss_train': training_histories_folds['loss_train'][i], 'acc_train': training_histories_folds['acc_train'][i],
-                   'loss_val': training_histories_folds['loss_val'][i], 'acc_val': training_histories_folds['acc_val'][i],
-                   'auc_val': training_histories_folds['auc_val'][i], 'auc_test': training_histories_folds['auc_test'][i],
-                   'acc_test': training_histories_folds['acc_test'][i], 'loss_test': training_histories_folds['loss_test'][i]}
-            seached_params = None
-            plot_training_history(history, seached_params, i)
-
-    return models, training_histories_folds, criterion, last_activation, _encoder
-
 def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', temperature=1, n_neg=20, is_plot_conf_matrix=False, is_by_channel=False, rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=True, viz_rebalance=False):
     """
 
@@ -578,7 +330,7 @@ def cv_train_test_model(X, Y, model, test_name="CNN", n_folds=10, lr=1e-4, verbo
     if training_mode == 'classification':
         with torch.no_grad():
             model.eval()
-            output_shape = model(rand_input).shape[1]
+            output_shape = model.to(device)(rand_input).shape[1]
 
         if output_shape == 1:
             assert len(np.unique(Y)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
@@ -954,7 +706,7 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
         with context_manager:
             pred_tokens, orig_tokens, mask_t, mask_c = model(x[0])
             # y_tensor = y.to(device)
-            classification_loss = criterion(pred_tokens, orig_tokens, mask_t)
+            classification_loss = criterion(pred_tokens, orig_tokens)
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
