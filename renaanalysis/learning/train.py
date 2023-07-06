@@ -68,7 +68,7 @@ def preprocess_model_data(x_eeg, x_pupil, n_top_components=20):
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
                test_name='eval_model', n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
-               x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20, viz_rebalance=False):
+               x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20, viz_rebalance=False, pca=None, ica=None):
     if x_pupil is None:
         if x_eeg_znormed is None or x_eeg_pca_ica is None:
             x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x_eeg, x_pupil, n_top_components)
@@ -154,7 +154,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
                 os.mkdir(rollout_data_root)
             for i in range(n_folds):
                 ht_viz(models[i], x_eeg_test, y_test, _encoder, event_names, rollout_data_root, models[i].window_duration, exg_resample_rate,
-                       eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=True, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None)
+                       eeg_montage, num_timesteps, num_channels, note='', head_fusion='max', discard_ratio=0.9, load_saved_rollout=True, batch_size=64, X_pca_ica=test_data if model_name == 'HT-pca-ica' else None, pca=pca, ica=ica)
         elif model_name == 'HT-sesup' or 'HT-pca-ica-sesup':
             num_timesteps = x_eeg_train.shape[2]
             num_channels = x_eeg_pca_ica_train.shape[1] if model_name == 'HT-pca-ica-sesup' else x_eeg_train.shape[1]
@@ -164,8 +164,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             test_data = x_eeg_pca_ica_test if model_name == 'HT-pca-ica-sesup' else x_eeg_test
             models, training_histories, criterion, last_activation, _encoder = cv_train_test_model(
                 training_data, y_train, model, is_plot_conf_matrix=True, X_test=test_data, Y_test=y_test,
-                test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds,
-                is_test=True)  # use un-dimension reduced EEG data
+                test_name=test_name, verbose=1, lr=ht_lr, l2_weight=ht_l2, n_folds=n_folds)  # use un-dimension reduced EEG data
             rollout_data_root = f'HT_{note}'
             if not os.path.exists(rollout_data_root):
                 os.mkdir(rollout_data_root)

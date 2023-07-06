@@ -257,7 +257,7 @@ class MaskLayer(nn.Module):
 
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, extraction_layers, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
                  patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', training_mode='classification'):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
@@ -285,7 +285,6 @@ class HierarchicalTransformer(nn.Module):
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
-        self.extraction_layers = extraction_layers
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
         # self.to_patch_embedding = nn.Sequential(
