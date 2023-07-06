@@ -474,6 +474,32 @@ def plot_training_history(history, param_list, fold):
         plt.savefig(f'renaanalysis/learning/saved_images/training_history/{param_list}_{fold}.png')
     plt.show()
 
+def plot_training_loss_history(history, param_list, fold):
+    # Extract the training history
+    train_loss = history['loss_train']
+    val_loss = history['loss_val']
+    test_loss = history['loss_test']
+
+    # Plot the training and validation loss
+    fig, axs = plt.subplots(1, 1, figsize=(9, 6))
+    if param_list is not None:
+        fig.suptitle(f'Training history of param {param_list} in fold {fold}, test loss = {test_loss}')
+    else:
+        fig.suptitle(f'Training history of fold {fold}, test loss = {test_loss}')
+    axs.plot(range(1, len(train_loss) + 1), train_loss, label='Training Loss')
+    axs.plot(range(1, len(val_loss) + 1), val_loss, label='Validation Loss')
+    axs.set_xlabel('Epochs')
+    axs.set_ylabel('Loss')
+    axs.set_title(f'Training and Validation Loss')
+    axs.legend()
+
+    # Display the plot
+    plt.tight_layout()
+    if param_list is not None:
+        plt.savefig(f'renaanalysis/learning/saved_images/training_history/{param_list}_{fold}.png')
+    plt.show()
+
+
 def compare_epochs():
     pass
 
@@ -492,7 +518,7 @@ def visualize_eeg_epoch(x, y, colors, eeg_picks, title='', out_dir=None, verbose
                 x_mean = np.mean(x[idx][event_idx], axis=0)
                 x1 = x_mean + scipy.stats.sem(x[idx][event_idx], axis=0)  # this is the upper envelope
                 x2 = x_mean - scipy.stats.sem(x[idx][event_idx], axis=0)
-                time_vector = np.linspace(0, x[idx][event_idx].shape[-1], x[idx][event_idx].shape[-1])
+                time_vector = np.linspace(-0.1, 0.8, x[idx][event_idx].shape[-1])
                 # Plot the EEG data as a shaded area
                 plt.fill_between(time_vector, x1, x2, where=x2 <= x1, facecolor=colors[event], interpolate=True,
                                  alpha=0.5)

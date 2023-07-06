@@ -203,7 +203,7 @@ def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tm
     # pickle.dump(subjects, open(os.path.join('./3rd_party_data/audio_oddball', f'subjects.p'), 'wb'))
     return subjects
 
-def get_TUHG_samples(data_root, export_data_root, epoch_length, subject_picks=None):
+def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, picks, colors, eeg_resample_rate, subject_picks=None):
 
     def parse_file_tree(directory):
         result = {}
@@ -270,8 +270,18 @@ def get_TUHG_samples(data_root, export_data_root, epoch_length, subject_picks=No
                             data = mne.Epochs(raw, eventID_mat, {'standard': 0}, metadata=metadata, tmin=0,
                                               tmax=epoch_length, preload=True, baseline=(0, 0))
                             subjects[subject_group_id][subject_name][session_name][montage_type_name][data_file_name] = data
-    pickle.dump(subjects, open(export_data_root, 'wb'))
-    return subjects
+    # pickle.dump(subjects, open(export_data_root, 'wb'))
+    all_epochs = []
+    for subject_group_id, subject_group in subjects.items():
+        for subject_name, subject in subject_group.items():
+            for session_name, session in subject.items():
+                for montage_type_name, montage_type in session.items():
+                    for _, data in montage_type.items():
+                        all_epochs.append(data)
+    all_epochs = mne.concatenate_epochs(all_epochs)
+    x, y, start_time, metadata = epochs_to_class_samples(all_epochs, event_names, picks=picks, reject='auto', n_jobs=16,
+                                                         eeg_resample_rate=eeg_resample_rate, colors=colors)
+    return x, y, start_time, metadata
 
 def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors):
     start_time = time.time()  # record the start time of the analysis

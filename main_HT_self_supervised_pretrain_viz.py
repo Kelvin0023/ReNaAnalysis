@@ -13,18 +13,20 @@ from renaanalysis.learning.HT import ContrastiveLoss
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
 from renaanalysis.learning.train import eval
-from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_epoch
+from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_epoch, \
+    plot_training_loss_history
 from renaanalysis.params.params import *
 import torch.nn.functional as F
 
-search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_head"]
+search_params = ["lr"]
 metric = 'folds val loss'
 is_by_channel = False
 is_pca_ica = False
-is_plot_train_history = False
+is_plot_train_history = True
 is_plot_ROC = False
 is_plot_topomap = False
-is_compare_epochs = True
+is_compare_epochs = False
+viz_sim = True
 
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr.p', 'rb'))
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr.p', 'rb'))
@@ -52,41 +54,42 @@ sample_fusion = 'sum'  # TODO
 print('\n'.join([f"{str(x)}, {y[metric]}" for x, y in locking_performance.items()]))
 
 # viz each layer
-loss = ContrastiveLoss(0.1, 20)
-for params, model_list in models.items():
-    for i in range(len(model_list)):
-        device = 'cuda:0' if model_list[i].to_patch_embedding[1].bias.is_cuda else 'cpu'
-        x = model_list[i].to_patch_embedding(torch.from_numpy(x_eeg_test[0:10]).to(device))
-        if model_list[i].training_mode == 'self-sup pretrain':
-            x, original_x, mask_t, mask_c = model_list[i].mask_layer(x)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+if viz_sim:
+    loss = ContrastiveLoss(0.1, 20)
+    for params, model_list in models.items():
+        for i in range(len(model_list)):
+            device = 'cuda:0' if model_list[i].to_patch_embedding[1].bias.is_cuda else 'cpu'
+            x = model_list[i].to_patch_embedding(torch.from_numpy(x_eeg_test[0:10]).to(device))
+            if model_list[i].training_mode == 'self-sup pretrain':
+                x, original_x, mask_t, mask_c = model_list[i].mask_layer(x)
+            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
-        b, n, _ = x.shape
+            b, n, _ = x.shape
 
-        cls_tokens = repeat(model_list[i].cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x += model_list[i].pos_embedding[:, :(n + 1)]
-        x = model_list[i].dropout(x)
+            cls_tokens = repeat(model_list[i].cls_token, '1 1 d -> b 1 d', b=b)
+            x = torch.cat((cls_tokens, x), dim=1)
+            x += model_list[i].pos_embedding[:, :(n + 1)]
+            x = model_list[i].dropout(x)
 
-        x, att_matrix = model_list[i].transformer(x)
-        x = model_list[i].to_latent(x[:, 1:].transpose(1, 2).view(original_x.shape))
-        sim = F.cosine_similarity(x.permute(0, 2, 3, 1), original_x.permute(0, 2, 3, 1), dim=-1)
-        sim_array = sim.cpu().detach().numpy()
-        for idx, epoch in enumerate(sim_array):
-            cmap_colors = [(0.0, 'blue'), (1.0, 'red')]
-            custom_cmap = LinearSegmentedColormap.from_list('CustomColormap', cmap_colors)
-            plt.imshow(epoch, cmap=custom_cmap)
-            plt.colorbar()
-            plt.title(f'Predicted Simularity of epoch {idx}')
-            plt.show()
-        # loss._calculate_similarity(original_x, x)
+            x, att_matrix = model_list[i].transformer(x)
+            x = model_list[i].to_latent(x[:, 1:].transpose(1, 2).view(original_x.shape))
+            sim = F.cosine_similarity(x.permute(0, 2, 3, 1), original_x.permute(0, 2, 3, 1), dim=-1)
+            sim_array = sim.cpu().detach().numpy()
+            for idx, epoch in enumerate(sim_array):
+                cmap_colors = [(0.0, 'blue'), (1.0, 'red')]
+                custom_cmap = LinearSegmentedColormap.from_list('CustomColormap', cmap_colors)
+                plt.imshow(epoch, cmap=custom_cmap)
+                plt.colorbar()
+                plt.title(f'Predicted Simularity of epoch {idx}')
+                plt.show()
+            # loss._calculate_similarity(original_x, x)
 # find the model with best test auc
-best_auc = 0
-for params, model_performance in locking_performance.items():
-    for i in range(nfolds):
-        if model_performance['folds test auc'][i] > best_auc:
-            model_idx = [params, i]
-            best_auc = model_performance['folds test auc'][i]
+# best_auc = 0
+# for params, model_performance in locking_performance.items():
+#     for i in range(nfolds):
+#         if model_performance['folds test auc'][i] > best_auc:
+#             model_idx = [params, i]
+#             best_auc = model_performance['folds test auc'][i]
 
 # plot epoch
 if is_compare_epochs:
@@ -107,8 +110,8 @@ if is_plot_train_history:
         params_dict = dict(params)
         seached_params = [params_dict[key] for key in search_params]
         for i in range(nfolds):
-            history = {'loss_train': history_folds['loss_train'][i], 'acc_train': history_folds['acc_train'][i], 'loss_val': history_folds['loss_val'][i], 'acc_val': history_folds['acc_val'][i], 'auc_val': history_folds['auc_val'][i], 'auc_test': history_folds['auc_test'][i], 'acc_test': history_folds['acc_test'][i], 'loss_test': history_folds['loss_test'][i]}
-            plot_training_history(history, seached_params, i)
+            history = {'loss_train': history_folds['loss_train'][i], 'loss_val': history_folds['loss_val'][i], 'loss_test': history_folds['loss_test'][i]}
+            plot_training_loss_history(history, seached_params, i)
 
 
 # plot ROC curve for each stored model

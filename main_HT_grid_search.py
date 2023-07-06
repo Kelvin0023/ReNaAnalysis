@@ -42,12 +42,12 @@ grid_search_params = {
 '''
 grid_search_params = {
     "depth": [4],
-    "num_heads": [16, 24],
+    "num_heads": [8],
     "pool": ['cls'],
-    "feedforward_mlp_dim": [128],
+    "feedforward_mlp_dim": [32],
 
     # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [128],
+    "patch_embed_dim": [64],
 
     "dim_head": [128],
     "attn_dropout": [0.5],
@@ -70,7 +70,7 @@ colors = {
     "oddball_with_reponse": "green"
 }
 picks = 'eeg'
-locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Distractor"],
                   lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]]
 
 is_regenerate_epochs = False

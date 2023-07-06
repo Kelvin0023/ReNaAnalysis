@@ -16,16 +16,17 @@ from renaanalysis.params.params import *
 from renaanalysis.learning.HT import HierarchicalTransformer
 
 search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_head"]
-metric = 'folds val auc'
+metric = 'folds test auc'
 is_by_channel = False
 is_pca_ica = True
 is_plot_train_history = False
-is_plot_ROC = False
+is_plot_ROC = True
 is_plot_topomap = False
 is_plot_epochs = True
 
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+locking_performance_1 = pickle.load(open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 nfolds = 3
 model_dir = 'C:/Users/ixiic/PycharmProjects/ReNaAnalysis/HT_grid'
@@ -86,15 +87,15 @@ if is_plot_epochs:
                eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
                discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
     else:
-        visualize_eeg_epoch(x_eeg_test[viz_indc if viz_both else target_indc[1:num_samp]], y_test[viz_indc if viz_both else target_indc[1:num_samp]], colors, this_picks)
+        visualize_eeg_epoch(x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
         model = HierarchicalTransformer(180, 20 , 200, 2, None, depth=4, num_heads=8, feedforward_mlp_dim=64, window_duration=0.1, pool='cls',
                      patch_embed_dim=64, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi', training_mode='classification')
         model.load_state_dict(best_model.state_dict())
-        # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else target_indc[0:num_samp]].astype('float32')))
-        ht_viz(model, x_eeg_test[viz_indc if viz_both else target_indc[1:num_samp]], y_test[viz_indc if viz_both else target_indc[1:num_samp]], _encoder, event_names, rollout_data_root, best_model.window_duration,
+        # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
+        ht_viz(model, x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], _encoder, event_names, rollout_data_root, best_model.window_duration,
                exg_resample_rate,
                eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
-               discard_ratio=0.1, batch_size=64, X_pca_ica=x_eeg_pca_ica_test[viz_indc if viz_both else target_indc[1:num_samp]], pca=pca, ica=ica)
+               discard_ratio=0.1, batch_size=64, X_pca_ica=x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc], pca=pca, ica=ica)
 
 
 # plot training history
@@ -112,9 +113,18 @@ if is_plot_ROC:
     for params, model_list in models.items():
         for i in range(len(model_list)):
             model = model_list[i]
+            new_model = HierarchicalTransformer(180, 20, 200, num_classes=2,
+                                    extraction_layers=None,
+                                    depth=params['depth'], num_heads=params['num_heads'],
+                                    feedforward_mlp_dim=params['feedforward_mlp_dim'],
+                                    pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
+                                    dim_head=params['dim_head'], emb_dropout=params['emb_dropout'],
+                                    attn_dropout=params['attn_dropout'], output=params['output'],
+                                    training_mode='classification')
+            model = new_model.load_state_dict(model.state_dict())
             test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval(
                 model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder,
-                test_name='', verbose=1)
+                test_name=TestName.Normal.value, verbose=1)
             params_dict = dict(params)
             seached_params = [params_dict[key] for key in search_params]
             viz_binary_roc(y_all, y_all_pred, seached_params, fold=i)
@@ -134,7 +144,7 @@ if is_plot_topomap:
 grouped_results = {}
 for key, value in locking_performance.items():
     params = [dict(key)[x] for x in search_params]
-    grouped_results[tuple(params)] = value[metric]
+    grouped_results[tuple(params)] = sum(value[metric]) / len(value[metric])
 
 unique_params = dict([(param_name, np.unique([key[i] for key in grouped_results.keys()])) for i, param_name in enumerate(search_params)])
 
