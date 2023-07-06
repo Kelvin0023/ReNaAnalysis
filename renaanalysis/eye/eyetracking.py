@@ -11,6 +11,8 @@ from renaanalysis.params.params import dtnn_types, SACCADE_CODE, \
 from renaanalysis.utils.Event import Event, add_event_meta_info, get_events_between, is_event_in_block, copy_item_info, get_overlapping_events
 from copy import copy
 
+from renaanalysis.utils.interpolation import interpolate_array_nan
+
 
 class Saccade(Event):
     def __init__(self, amplitude, duration, peak_velocity, average_velocity, onset, offset, onset_time, offset_time,
@@ -54,11 +56,70 @@ def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0))
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
+def consecutive_zeros_lengths(arr):
+    # Find the indices where the array transitions from non-zero to zero
+    transitions = np.where(np.diff(np.concatenate(([0], arr != 0, [0]))))[0]
+    # Split the array based on the transitions and calculate the lengths
+    lengths = np.diff(transitions)
+    return lengths.tolist()
+
+def fill_gap(gaze_xyz, gaze_timestamps, gaze_valid_array, max_gap_time=0.075, invalid_value=0):
+    """
+    notes that the invalid value must
+    @param gaze_xyz:
+    @param gaze_timestamps:
+    @param gaze_valid_array:
+    @param max_gap_time:
+    @param invalid_value:
+    @return:
+    """
+    gaze_xyz = np.copy(gaze_xyz)
+    gaze_valid_array_valid_values = np.unique(gaze_valid_array)[np.unique(gaze_valid_array) != invalid_value]
+    assert len(gaze_valid_array_valid_values) != 0, f'all values in gaze_valid_array are invalid: {invalid_value}'
+    valid_value = gaze_valid_array_valid_values[0]
+
+    valid_diff = np.diff(np.concatenate([[valid_value], gaze_valid_array, [valid_value]]))
+    gap_start_indices = np.where(valid_diff < 0)[0]
+    gap_end_indices = np.where(valid_diff > 0)[0]
+    gaze_timestamps_extended = np.append(gaze_timestamps, gaze_timestamps[-1])
+
+    interpolated_gap_count = 0
+    interpolated_gap_durations = []
+    ignored_gap_durations = []
+    ignored_gap_start_end_indices = []
+
+    for start, end in zip(gap_start_indices, gap_end_indices):
+        if (gap_duration := gaze_timestamps_extended[end] - gaze_timestamps_extended[start]) > max_gap_time:
+            ignored_gap_durations.append(gap_duration)
+            ignored_gap_start_end_indices.append((start, end))
+            continue
+        else:
+            interpolated_gap_count += 1
+            gaze_xyz[:, start: end] = np.nan
+            interpolated_gap_durations.append(gap_duration)
+    plt.hist(interpolated_gap_durations + ignored_gap_durations, bins=100)
+    plt.show()
+    print(f"{interpolated_gap_count} gaps are interpolated among {len(gap_start_indices)} gaps, \n with interpolated gap with mean:median duration {np.mean(interpolated_gap_durations) *1e3}ms:{np.median(interpolated_gap_durations) *1e3}ms, \n and ignored gap with mean:median duration {np.mean(ignored_gap_durations) *1e3}ms:{np.median(ignored_gap_durations) *1e3}ms ")
+    # interpolate the gaps
+    gaze_xyz = interpolate_array_nan(gaze_xyz)
+
+    # change the ignored gaps to nan
+    for start, end in ignored_gap_start_end_indices:
+        gaze_xyz[:, start: end] = np.nan
+    return gaze_xyz
+
 def _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timestamps=None):
     eyetracking_data, eyetracking_timestamps = eyetracking_data_timestamps
     assert eyetracking_data.shape[0] == len(varjoEyetracking_chs)
-    gaze_xyz = eyetracking_data[[varjoEyetracking_chs.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y', 'z']]]
-    gaze_status = eyetracking_data[varjoEyetracking_chs.index('status')]
+    gaze_xyz = np.copy(eyetracking_data[[varjoEyetracking_chs.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y', 'z']]])
+    status = eyetracking_data[varjoEyetracking_chs.index('status')]
+    gaze_xyz = fill_gap(gaze_xyz, eyetracking_timestamps, status)
+
+    # plt.plot(gaze_xyz[0, : 200], label='x')
+    # plt.plot(gaze_xyz[1, : 200], label='y')
+    # plt.plot(gaze_xyz[2, : 200], label='z')
+    # plt.legend()
+    # plt.show()
 
     head_rotation_xy_degree_eyesampled = None
     if headtracking_data_timestamps is not None:
@@ -69,12 +130,13 @@ def _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timesta
         # find the closest head tracking data point for each eyetracking point
         head_rotation_xy_degree_eyesampled = scipy.signal.resample(head_rotation_xy, len(eyetracking_timestamps),axis=1)
 
-    return eyetracking_timestamps, gaze_xyz, gaze_status, head_rotation_xy_degree_eyesampled
+    return eyetracking_timestamps, gaze_xyz, status, head_rotation_xy_degree_eyesampled
+
 def gaze_event_detection_I_DT(eyetracking_data_timestamps, events, headtracking_data_timestamps=None):
     eyetracking_timestamps, gaze_xyz, gaze_status, head_rotation_xy_eyesampled = _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timestamps)
     gaze_behavior_events, fixations, saccades, velocity = fixation_detection_i_dt(gaze_xyz,
                                                                                   gaze_timestamps=eyetracking_timestamps,
-                                                                                  gaze_status=gaze_status,
+                                                                                  # gaze_status=gaze_status,  no need to add gaze status as we are gap filling, which already accounts for gaze status
                                                                                   head_rotation_xy_degree=head_rotation_xy_eyesampled)
     fixations, saccades = add_event_info_to_gaze(fixations, events)
     print(', {} fixations are first long on objects. Targets: {}, Distractors {}'.format(len([f for f in fixations if f.is_first_long_gaze]), len([f for f in fixations if f.dtn==1]), len([f for f in fixations if f.dtn==2])))
@@ -85,7 +147,7 @@ def gaze_event_detection_I_VT(eyetracking_data_timestamps, events, headtracking_
 
     gaze_behavior_events, fixations, saccades, velocity = fixation_detection_i_vt(gaze_xyz,
                                                                                   gaze_timestamps=eyetracking_timestamps,
-                                                                                  gaze_status=gaze_status,
+                                                                                  # gaze_status=gaze_status,  no need to add gaze status as we are gap filling, which already accounts for gaze status
                                                                                   head_rotation_xy_degree=head_rotation_xy_eyesampled)
     fixations, saccades = add_event_info_to_gaze(fixations, events)
     print(', {} fixations are first long on objects. Targets: {}, Distractors {}'.format(len([f for f in fixations if f.is_first_long_gaze]), len([f for f in fixations if f.dtn==1]), len([f for f in fixations if f.dtn==2])))

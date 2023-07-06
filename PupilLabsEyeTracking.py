@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 from renaanalysis.eye.eyetracking import fixation_detection_i_vt
-from renaanalysis.utils.utils import interpolate_array_nan
+from renaanalysis.utils.interpolation import interpolate_array_nan
 
 data_path = '/Users/Leo/Desktop/02_26_23_gaze_positions_on_surface_Surface 1.csv'
 # data_path = '/Users/Leo/Desktop/gaze_positions.csv'
