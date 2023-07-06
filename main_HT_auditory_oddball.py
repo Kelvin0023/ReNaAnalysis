@@ -15,7 +15,10 @@ result_path = 'results/model_performances_auditory_oddball'
 # analysis parameters ######################################################################################
 eeg_resample_rate = 200
 reject = 'auto'
-bids_root = 'D:/Dataset/auditory_oddball'
+
+bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
+# bids_root = 'D:/Dataset/auditory_oddball'
+
 event_names = ["standard", "oddball_with_reponse"]
 colors = {
     "standard": "red",
@@ -39,20 +42,28 @@ x, y, start_time, metadata = get_auditory_oddball_samples(bids_root, export_data
 
 
 # lockings test  ####################################################################################################
-
 results = dict()
 if os.path.exists(f'{export_data_root}/x_pca_ica.p') and os.path.exists(f'{export_data_root}/x_znormed.p'):
     with open(f'{export_data_root}/x_pca_ica.p', "rb") as file:
         x_eeg_pca_ica = pickle.load(file)
     with open(f'{export_data_root}/x_znormed.p', "rb") as file:
         x_eeg_znormed = pickle.load(file)
+    with open(f'{export_data_root}/pca.p', "rb") as file:
+        pca = pickle.load(file)
+    with open(f'{export_data_root}/ica.p', "rb") as file:
+        ica = pickle.load(file)
     x_pupil_znormed = None
 else:
-    x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed = preprocess_model_data(x, None)
+    x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica  = preprocess_model_data(x, None)
     with open(f'{export_data_root}/x_pca_ica.p', "wb") as file:
         pickle.dump(x_eeg_pca_ica, file)
     with open(f'{export_data_root}/x_znormed.p', "wb") as file:
         pickle.dump(x_eeg_znormed, file)
+    with open(f'{export_data_root}/pca.p', "wb") as file:
+        pickle.dump(pca, file)
+    with open(f'{export_data_root}/ica.p', "wb") as file:
+        pickle.dump(ica, file)
+
 now = datetime.datetime.now()
 datetime_string = now.strftime("%Y-%m-%d_%H-%M-%S")
 result_path = result_path + datetime_string
@@ -62,7 +73,7 @@ pickle.dump(results, open(result_path, 'wb'))
 for m in models:
     m_results, training_histories = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2, eeg_montage=eeg_montage,
                            x_eeg_znormed=x_eeg_znormed, x_eeg_pca_ica=x_eeg_pca_ica, x_pupil_znormed=x_pupil_znormed,
-                           test_name=f"auditory_oddball_{m}_{datetime_string}", viz_rebalance=viz_rebalance)
+                           test_name=f"auditory_oddball_{m}_{datetime_string}", viz_rebalance=viz_rebalance, pca=pca, ica=ica)
     results = {**m_results, **results}
     pickle.dump(results, open(result_path, 'wb'))
     pickle.dump(training_histories, open(result_path + f'{m}_training_history', 'wb'))

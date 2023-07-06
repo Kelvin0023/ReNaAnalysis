@@ -302,7 +302,8 @@ def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_sampl
     else:
         x = pickle.load(open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'rb'))
         y = pickle.load(open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'rb'))
-
+        start_time = pickle.load(open(os.path.join(export_data_root, 'start_time_auditory_oddball.p'), 'rb'))
+        metadata = pickle.load(open(os.path.join(export_data_root, 'metadata_auditory_oddball.p'), 'rb'))
     # le = LabelEncoder()
     # Y_encoded = le.fit_transform(y)
 

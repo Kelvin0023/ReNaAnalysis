@@ -302,7 +302,7 @@ def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rat
         epochs.resample(eeg_resample_rate, n_jobs=n_jobs)
     if reject == 'auto':
         print("Auto rejecting epochs")
-        ar = AutoReject(n_jobs=n_jobs, verbose=False)
+        ar = AutoReject(n_jobs=n_jobs, verbose=False, random_state=random_seed)
         epochs_clean, log = ar.fit_transform(epochs, return_log=True)
     else:
         epochs_clean = epochs
