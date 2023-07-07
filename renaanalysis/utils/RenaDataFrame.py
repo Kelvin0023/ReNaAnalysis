@@ -9,8 +9,8 @@ from renaanalysis.params.params import varjoEyetracking_chs, varjoEyetracking_st
     ecg_ch_name, proxy_eog_ch_names, eeg_montage, random_seed
 from renaanalysis.utils.Event import add_events_to_data
 from renaanalysis.utils.utils import generate_pupil_event_epochs, generate_eeg_event_epochs, preprocess_session_eeg, \
-    validate_get_epoch_args, \
-    interpolate_zeros
+    validate_get_epoch_args
+from renaanalysis.utils.interpolation import interpolate_zeros
 
 
 class RenaDataFrame:

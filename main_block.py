@@ -26,9 +26,9 @@ pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
 # discriminant test  ####################################################################################################
 
-visualize_block_gaze_event(rdf, participant='1', session=2, block_id=7, generate_video=False, video_fix_alg=None)
-visualize_block_gaze_event(rdf, participant='1', session=2, block_id=1, generate_video=False, video_fix_alg=None)
-visualize_block_gaze_event(rdf, participant='1', session=2, block_id=2, generate_video=False, video_fix_alg=None)
+visualize_block_gaze_event(rdf, participant='0', session=0, block_id=7, generate_video=False, video_fix_alg=None)
+visualize_block_gaze_event(rdf, participant='0', session=0, block_id=1, generate_video=False, video_fix_alg=None)
+visualize_block_gaze_event(rdf, participant='0', session=0, block_id=2, generate_video=False, video_fix_alg=None)
 
 # visualize_block_gaze_event(rdf, participant='1', session=2, block_id=7, generate_video=True, video_fix_alg=None)
 # visualize_block_gaze_event(rdf, participant='1', session=2, block_id=7, generate_video=True, video_fix_alg='I-VT')
