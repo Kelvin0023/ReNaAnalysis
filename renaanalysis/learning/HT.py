@@ -258,7 +258,7 @@ class MaskLayer(nn.Module):
 
 class HierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', training_mode='classification'):
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """
@@ -307,11 +307,6 @@ class HierarchicalTransformer(nn.Module):
 
         self.pool = pool
         self.to_latent = nn.Identity()
-        self.training_mode = training_mode
-        if training_mode == 'self-sup pretrain':
-            self.mask_layer = MaskLayer(p_t=0.2, p_c= 0.1, c_span=False, mask_t_span=2, mask_c_span=5,
-                                    t_mask_replacement=torch.nn.Parameter(torch.zeros(self.num_channels, self.path_embed_dim), requires_grad=True),
-                                    c_mask_replacement=torch.nn.Parameter(torch.zeros(self.num_windows, self.path_embed_dim), requires_grad=True))
 
         if output == 'single':
             self.mlp_head = nn.Sequential(
@@ -323,16 +318,11 @@ class HierarchicalTransformer(nn.Module):
                 nn.Linear(patch_embed_dim, num_classes))
 
     def forward(self, x_eeg):
-        if self.training_mode == 'classification':
             x = self.encode(x_eeg)
             return self.mlp_head(x)
-        elif self.training_mode == 'self-sup pretrain':
-            return self.encode(x_eeg)
 
     def encode(self, x_eeg):
         x = self.to_patch_embedding(x_eeg)
-        if self.training_mode == 'self-sup pretrain':
-            x, original_x, mask_t, mask_c = self.mask_layer(x)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
         b, n, _ = x.shape
@@ -347,13 +337,9 @@ class HierarchicalTransformer(nn.Module):
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
         # att_matrix = torch.sum(att_matrix, dim=2)
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
-        if self.training_mode == 'classification':
-            x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-            x = self.to_latent(x)
-            return x
-        elif self.training_mode == 'self-sup pretrain':
-            x = self.to_latent(x[:,1:].transpose(1,2).view(original_x.shape)) # exclude cls
-            return x, original_x, mask_t, mask_c
+        x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
+        x = self.to_latent(x)
+        return x
 
     def prepare_data(self, x):
         return x
@@ -378,6 +364,55 @@ class HierarchicalTransformer(nn.Module):
 
     # def get_grid_size(self):
     #     return self.grid_size
+
+class HierarchicalTransformerContrastivePretrain(nn.Module):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', p_t=0.1, p_c=0.2, mask_t_span=2, mask_c_span=5):
+        if output == 'single':
+            assert num_classes == 2, 'output can only be single when num_classes is 2'
+        super().__init__()
+        self.depth = depth
+        self.num_heads = num_heads
+        self.window_duration = window_duration
+
+        self.num_channels = num_channels
+        self.num_timesteps = num_timesteps
+        self.path_embed_dim = patch_embed_dim
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
+
+        self.grid_dims = self.num_channels, self.num_windows
+        self.num_patches = self.num_channels * self.num_windows
+        self.HierarchicalTransformer = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, window_duration=window_duration, pool=pool,
+                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output)
+        self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
+                                    t_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(self.num_channels, self.path_embed_dim), requires_grad=True),
+                                    c_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(self.num_windows, self.path_embed_dim), requires_grad=True))
+    def forward(self, x_eeg):
+        x = self.HierarchicalTransformer.to_patch_embedding(x_eeg)
+        x, original_x, mask_t, mask_c = self.mask_layer(x)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        b, n, _ = x.shape
+
+        cls_tokens = repeat(self.HierarchicalTransformer.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
+        x += self.HierarchicalTransformer.pos_embedding[:, :(n + 1)]
+        x = self.HierarchicalTransformer.dropout(x)
+
+        x, att_matrix = self.HierarchicalTransformer.transformer(x)
+        # att_matrix = att_matrix[:, :, 1:, 1:]
+        # att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
+        # att_matrix = torch.sum(att_matrix, dim=2)
+        # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
+        x = self.HierarchicalTransformer.to_latent(x[:, 1:].transpose(1, 2).view(original_x.shape))  # exclude cls
+        return x, original_x, mask_t, mask_c
+
+    def prepare_data(self, x):
+        return x
+
 
 def viz_ht(model: HierarchicalTransformer, x_eeg, y, label_encoder):
     pass

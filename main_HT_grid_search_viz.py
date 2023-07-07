@@ -76,10 +76,10 @@ if is_plot_epochs:
     this_picks = ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz']
     if viz_all_epoch:
         visualize_eeg_epoch(x_eeg_test, y_test, colors, this_picks)
-        model = HierarchicalTransformer(180, 20, 200, 2, None, depth=4, num_heads=8, feedforward_mlp_dim=64,
+        model = HierarchicalTransformer(180, 20, 200, 2, depth=4, num_heads=8, feedforward_mlp_dim=64,
                                         window_duration=0.1, pool='cls',
                                         patch_embed_dim=64, dim_head=64, attn_dropout=0.5, emb_dropout=0.5,
-                                        output='multi', training_mode='classification')
+                                        output='multi')
         model.load_state_dict(best_model.state_dict())
         ht_viz(model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root,
                best_model.window_duration,
@@ -88,8 +88,8 @@ if is_plot_epochs:
                discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
     else:
         visualize_eeg_epoch(x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
-        model = HierarchicalTransformer(180, 20 , 200, 2, None, depth=4, num_heads=8, feedforward_mlp_dim=64, window_duration=0.1, pool='cls',
-                     patch_embed_dim=64, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi', training_mode='classification')
+        model = HierarchicalTransformer(180, 20 , 200, 2, depth=4, num_heads=8, feedforward_mlp_dim=64, window_duration=0.1, pool='cls',
+                     patch_embed_dim=64, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi')
         model.load_state_dict(best_model.state_dict())
         # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
         ht_viz(model, x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], _encoder, event_names, rollout_data_root, best_model.window_duration,
@@ -124,7 +124,7 @@ if is_plot_ROC:
             model = new_model.load_state_dict(model.state_dict())
             test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval(
                 model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder,
-                test_name=TestName.Normal.value, verbose=1)
+                test_name=TaskName.Normal.value, verbose=1)
             params_dict = dict(params)
             seached_params = [params_dict[key] for key in search_params]
             viz_binary_roc(y_all, y_all_pred, seached_params, fold=i)

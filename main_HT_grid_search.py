@@ -59,9 +59,14 @@ grid_search_params = {
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
     'temperature' : [0.1],
-    'n_neg': [1]
+    'n_neg': [1],
+    'p_t': [0.1],
+    'p_c': [0.2],
+    'mask_t_span': [2],
+    'mask_c_span': [5]
 }
 data_root = 'D:/Dataset/auditory_oddball'
+Dataset_name = 'auditory_oddball'
 eeg_resample_rate = 200
 reject = 'auto'
 event_names = ["standard", "oddball_with_reponse"]
@@ -70,10 +75,14 @@ colors = {
     "oddball_with_reponse": "green"
 }
 picks = 'eeg'
+searched_params = []
+for key, value in grid_search_params.items():
+    if len(value) > 1:
+        searched_params.append(key)
+model_name = 'HT-pca-ica' # HT-sesup, HT, HT-pca-ica
+test_name = f'Grid_Search-{searched_params}-{Dataset_name}-{model_name}'
 locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Distractor"],
                   lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]]
-
-is_regenerate_epochs = False
 
 # start of the main block ######################################################
 
@@ -94,7 +103,9 @@ is_pca_ica = True # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_conf = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-model_name = 'HT-pca-ica' # HT-sesup, HT, HT-pca-ica
+is_regenerate_epochs = False
+reload_saved_samples = True
+
 # locking_name_filters_vs = {
 #                         'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
 #                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
@@ -135,7 +146,7 @@ else:
     x_eeg_pca_ica = pickle.load(open(os.path.join(export_data_root, f'x_pca_ica.p'), 'rb'))
 
 
-locking_performance, training_histories, models = grid_search_ht(grid_search_params, x_eeg, x_eeg_pca_ica, y, event_names, n_folds, test_name=TestName.Normal.value, is_pca_ica=is_pca_ica, is_by_channel=is_by_channel, is_plot_conf=is_plot_conf, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=True, exg_resample_rate=exg_resample_rate, viz_rebalance=viz_rebalance, model_name=model_name)
+locking_performance, training_histories, models = grid_search_ht(grid_search_params, x_eeg, x_eeg_pca_ica, y, event_names, n_folds, test_name=test_name, task_name=TaskName.PreTrain, is_pca_ica=is_pca_ica, is_by_channel=is_by_channel, is_plot_conf=is_plot_conf, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=reload_saved_samples, exg_resample_rate=exg_resample_rate, viz_rebalance=viz_rebalance)
 if model_name == 'HT-sesup':
     pickle.dump(training_histories,
                 open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))

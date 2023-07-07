@@ -182,7 +182,7 @@ random_seed = 13
 num_folds = 10
 num_top_components = 20
 
-class TestName(Enum):
-    OddBallPreTrain = 'oddball-pretrain'
+class TaskName(Enum):
+    PreTrain = 'pretrain'
     FineTune = 'finetune'
-    Normal = 'normal'
+    BasicClassification = 'basic'

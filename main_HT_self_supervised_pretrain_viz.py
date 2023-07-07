@@ -84,12 +84,12 @@ if viz_sim:
                 plt.show()
             # loss._calculate_similarity(original_x, x)
 # find the model with best test auc
-# best_auc = 0
-# for params, model_performance in locking_performance.items():
-#     for i in range(nfolds):
-#         if model_performance['folds test auc'][i] > best_auc:
-#             model_idx = [params, i]
-#             best_auc = model_performance['folds test auc'][i]
+best_loss = 0
+for params, model_performance in locking_performance.items():
+    for i in range(nfolds):
+        if model_performance['folds test loss'][i] > best_loss:
+            model_idx = [params, i]
+            best_loss = model_performance['folds test loss'][i]
 
 # plot epoch
 if is_compare_epochs:
