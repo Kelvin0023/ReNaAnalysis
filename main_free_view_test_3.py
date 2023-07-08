@@ -8,7 +8,7 @@ from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet, EEGCNN
 from renaanalysis.learning.train import eval, train_model
-from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf
+from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np
@@ -64,7 +64,7 @@ else:
 # viz_pupil_epochs(rdf, event_names, event_filters, colors, title='Grid visual search, locked to long fixations', participant='1', session=2)
 # r_square_test(rdf, event_names, event_filters, title='Grid visual search, locked to long fixations', participant='1', session=2)
 
-x, y, _, _, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
+x, y, _, _, _ = rena_epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type='eeg', rebalance=True, participant='1', session=2)
 
 pickle.dump(x, open(f'x_p1_s2_{event_locking}.p', 'wb'))
 pickle.dump(y, open(f'y_p1_s2_{event_locking}.p', 'wb'))

@@ -11,13 +11,19 @@ import math
 import matplotlib.pyplot as plt
 import scipy
 import pickle
+from RenaAnalysis import get_rdf
 
-from mne.datasets import sample
 from mne_bids import (BIDSPath, read_raw_bids, print_dir_tree, make_report,
                       find_matching_paths, get_entity_vals)
 from sklearn.preprocessing import LabelEncoder
 
+from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
+from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil, preprocess_samples_and_save
+from renaanalysis.params.params import eeg_name, pupil_name
+from renaanalysis.utils.Bidict import Bidict
 from renaanalysis.utils.data_utils import epochs_to_class_samples
+from renaanalysis.utils.multimodal import PhysioArray, MultiModalArrays
+from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.utils import preprocess_standard_eeg
 
 
@@ -92,7 +98,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, eeg_picks, title='', out_
 #     "noise": "green",
 #     "condition_5": "purple",
 #     "noise_with_reponse": "pink",
-#     "oddball_with_reponse": "black",
+#     "oddball_with_response": "black",
 #     "standard_with_reponse": "gray"}
 
 class DataSet():
@@ -169,12 +175,12 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
 def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tmax = 0.8, include_last=False):
     colors = {
         "standard": "red",
-        "oddball_with_reponse": "green"
+        "oddball_with_response": "green"
     }
 
     event_plot = {
         "standard": 1,
-        "oddball_with_reponse": 7
+        "oddball_with_response": 7
     }
     datatype = 'eeg'
     task = 'P300'
@@ -283,17 +289,20 @@ def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, pic
                                                          eeg_resample_rate=eeg_resample_rate, colors=colors)
     return x, y, start_time, metadata
 
-def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors):
-    start_time = time.time()  # record the start time of the analysis
-    if not reload_saved_samples:
+def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epochs, reject, eeg_resample_rate, picks='eeg'):
+    event_viz_colors = {
+        "standard": "red",
+        "oddball_with_response": "green"
+    }
+    if is_regenerate_epochs:
         subjects = load_auditory_oddball_data(bids_root=bids_root)
         all_epochs = []
         for subject_key, run_values in subjects.items():
             for run_key, run in run_values.items():
                 all_epochs.append(run)
         all_epochs = mne.concatenate_epochs(all_epochs)
-        x, y, start_time, metadata = epochs_to_class_samples(all_epochs, event_names, picks=picks, reject=reject, n_jobs=16,
-                                       eeg_resample_rate=eeg_resample_rate, colors=colors)
+        x, y, start_time, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=picks, reject=reject, n_jobs=16,
+                                       eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
 
         pickle.dump(x, open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'wb'))
         pickle.dump(y, open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'wb'))
@@ -308,4 +317,105 @@ def get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_sampl
     # Y_encoded = le.fit_transform(y)
 
     print(f"Load data took {time.time() - start_time} seconds")
-    return x, y, start_time, metadata
+    return x, y, start_time, metadata, event_viz_colors
+
+def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, exg_resample_rate, eyetracking_resample_srate, locking_name='VS-I-VT-Head', participant=None, session=None):
+    """
+
+    @param base_root:
+    @param export_data_root:
+    @param is_regenerate_epochs:
+    @param event_names:
+    @param reject:
+    @param exg_resample_rate:
+    @param colors:
+    @param picks:
+    @param locking_name: locking_name can be any keys in locking_name_filters
+    @return:
+    """
+    conditions = Bidict({'RSVP': 1., 'Carousel': 2., 'VS': 3., 'TS': 4., 'TSgnd': 8, 'TSid': 9})
+    dtnn_types = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
+    event_viz_colors = {'Distractor': 'blue', 'Target': 'red'}
+
+    locking_name_filters_dict = {
+                            'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
+                                    lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
+                            'VS-FLGI': [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
+                                    lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]],
+                            'VS-I-DT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Distractor"],
+                                    lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"]],
+                            'VS-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
+                                     lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]],
+                            'RSVP-Item-Onset': [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                                                lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]],
+
+                            'Carousel-Item-Onset': [lambda x: x.block_condition == conditions['Carousel'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+                                                    lambda x: x.block_condition == conditions['Carousel'] and x.dtn_onffset and x.dtn==dtnn_types["Target"]],
+
+                            'RSVP-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
+                                    lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
+                            'RSVP-FLGI': [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.dtn==dtnn_types["Distractor"],
+                                    lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['RSVP']  and x.dtn==dtnn_types["Target"]],
+                            'RSVP-I-DT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Distractor"],
+                                    lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['RSVP'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"]],
+                            'RSVP-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['RSVP'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
+                                     lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['RSVP'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]],
+
+                            'Carousel-I-VT-Head': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-VT-Head' and x.dtn == dtnn_types["Distractor"],
+                                                    lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-VT-Head' and x.dtn == dtnn_types["Target"]],
+                            'Carousel-FLGI': [lambda x: type(x) == GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.dtn == dtnn_types["Distractor"],
+                                            lambda x: type(x) == GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.dtn == dtnn_types["Target"]],
+                            'Carousel-I-DT-Head': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-DT-Head' and x.dtn == dtnn_types["Distractor"],
+                                            lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-DT-Head' and x.dtn == dtnn_types["Target"]],
+                            'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
+                                                    lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]
+                                        } #nyamu <3
+    if is_regenerate_epochs:
+        rdf = get_rdf(base_root=base_root, exg_resample_rate=exg_resample_rate, ocular_artifact_mode='proxy')
+        pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
+        x, y, _, _ = rena_epochs_to_class_samples_rdf(rdf, event_names, locking_name_filters_dict[locking_name], data_type='both', rebalance=False, participant=participant, session=session, plots='full', exg_resample_rate=exg_resample_rate, eyetracking_resample_srate=eyetracking_resample_srate, reject=reject)
+        pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
+        pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
+
+    else:
+        # rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
+        try:
+            x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+            y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
+        except FileNotFoundError:
+            raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model_name == 'EEGPupil' else "")
+    return x, y, event_viz_colors
+
+
+def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_epochs=False, reject='auto',
+                eeg_resample_rate=200, is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
+                eyetracking_resample_srate=20):
+    """
+
+    @param is_regenerate_epochs: whether to regenerate epochs or not, if set to False, the function will attempt
+    to read original data from data_root. If set to True, the function will attempt to read epochs from epochs_root.
+    The latter is usually faster because it loads preprocessed epochs directly.
+    It is also recommended to use an SSD for both data_root and epochs_root because it is much faster than HDD.
+    @param dataset_name: can be 'auditory_oddball', 'rena', TODO 'TUH', 'DEAP', and more
+
+    @return:
+    """
+    if not is_regenerate_epochs:
+        assert data_root is not None, "data_root must be specified if is_regenerate_epochs is False"
+    else:
+        assert epochs_root is not None, "epochs_root must be specified if is_regenerate_epochs is True"
+
+    if dataset_name == 'auditory_oddball':
+
+        x, y, start_time, metadata, event_viz_colors = get_auditory_oddball_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, colors)
+        physio_arrays = [PhysioArray(x, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
+    elif dataset_name == "rena":
+        x, y, event_viz_colors = get_rena_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, eyetracking_resample_srate)
+        physio_arrays = [PhysioArray(x[0], sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name),
+              PhysioArray(x[1], sampling_rate=eyetracking_resample_srate, physio_type=pupil_name, dataset_name=dataset_name)]
+    else:
+        raise ValueError(f"Unknown dataset name {dataset_name}")
+
+    physio_arrays = preprocess_samples_and_save(physio_arrays, epochs_root, is_apply_pca_ica_eeg, pca_ica_eeg_n_components)
+
+    return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors)

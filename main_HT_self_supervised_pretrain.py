@@ -7,7 +7,8 @@ import numpy as np
 import torch
 from torch import nn
 
-from renaanalysis.learning.train import eval_model, preprocess_model_data
+from renaanalysis.learning.train import eval_model
+from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
@@ -18,10 +19,10 @@ result_path = 'results/model_performances_self_sup'
 eeg_resample_rate = 200
 reject = 'auto'
 bids_root = 'D:/Dataset/auditory_oddball'
-event_names = ["standard", "oddball_with_reponse"]
+event_names = ["standard", "oddball_with_response"]
 colors = {
     "standard": "red",
-    "oddball_with_reponse": "green"
+    "oddball_with_response": "green"
 }
 picks = 'eeg'
 # models = ['HT', 'HDCA', 'EEGCNN']
@@ -48,14 +49,14 @@ else:
     with open(os.path.join(f'{export_data_root}','y_auditory_oddball.p'), 'rb') as f:
         y = pickle.load(f)
 
-event_ids = {'standard': 1, 'oddball_with_reponse': 7}
+event_ids = {'standard': 1, 'oddball_with_response': 7}
 baseline = (-0.1, 0.0)
 ch_names = ['Fp1', 'AF7', 'AF3', 'F1', 'F3', 'F5', 'F7', 'FT7', 'FC5', 'FC3', 'FC1', 'C1', 'C3', 'C5', 'T7', 'TP7', 'CP5', 'CP3', 'CP1', 'P1', 'P3', 'P5', 'P7', 'P9', 'PO7', 'PO3', 'O1', 'Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'Fp2', 'AF8', 'AF4', 'AFz', 'Fz', 'F2', 'F4', 'F6', 'F8', 'FT8', 'FC6', 'FC4', 'FC2', 'FCz', 'Cz', 'C2', 'C4', 'C6', 'T8', 'TP8', 'CP6', 'CP4', 'CP2', 'P2', 'P4', 'P6', 'P8', 'P10', 'PO8', 'PO4', 'O2', 'EOG00', 'EOG01']
 eeg_picks = ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz']
 info = mne.create_info(ch_names=ch_names, sfreq=256)
 # epochs = mne.EpochsArray(data, info)
 
-x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x, None)
+x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_samples_eeg_pupil(x, None)
 
 results = dict()
 now = datetime.datetime.now()

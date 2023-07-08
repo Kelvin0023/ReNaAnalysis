@@ -23,17 +23,17 @@ from mne_bids import (BIDSPath, read_raw_bids, print_dir_tree, make_report,
 #     "noise": "green",
 #     "condition_5": "purple",
 #     "noise_with_reponse": "pink",
-#     "oddball_with_reponse": "black",
+#     "oddball_with_response": "black",
 #     "standard_with_reponse": "gray"}
 
 colors = {
     "standard": "red",
-    "oddball_with_reponse": "green"
+    "oddball_with_response": "green"
 }
 
 event_plot = {
     "standard": 1,
-    "oddball_with_reponse": 7
+    "oddball_with_response": 7
 }
 
 

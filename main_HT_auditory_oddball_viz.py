@@ -24,10 +24,10 @@ data_root = 'HT/auditory_oddball'
 exg_resample_rate = 200
 reject = 'auto'
 bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
-event_names = ["standard", "oddball_with_reponse"]
+event_names = ["standard", "oddball_with_response"]
 colors = {
     "standard": "red",
-    "oddball_with_reponse": "green"
+    "oddball_with_response": "green"
 }
 picks = 'eeg'
 

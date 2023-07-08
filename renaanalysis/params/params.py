@@ -186,3 +186,6 @@ class TaskName(Enum):
     PreTrain = 'pretrain'
     FineTune = 'finetune'
     BasicClassification = 'basic'
+
+eeg_name = 'eeg'
+pupil_name = 'pupil'

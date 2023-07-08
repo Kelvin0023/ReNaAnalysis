@@ -8,62 +8,29 @@ import mne
 import numpy as np
 import torch
 from sklearn import preprocessing, metrics
-from sklearn.model_selection import StratifiedShuffleSplit, ParameterGrid, train_test_split, KFold, ShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit, ShuffleSplit
 from sklearn.preprocessing import LabelEncoder
 from torch import nn
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
-from renaanalysis.learning.HT import Attention, ContrastiveLoss, HierarchicalTransformerContrastivePretrain
+from renaanalysis.learning.HT import ContrastiveLoss
 
 from tqdm import tqdm
 
-from renaanalysis.learning.HDCA import hdca, hdca_eeg, HDCA
+from renaanalysis.learning.HDCA import HDCA
 from renaanalysis.learning.HT import HierarchicalTransformer
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.learning.MutiInputDataset import MultiInputDataset
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
+from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
-    export_data_root, num_top_components, TaskName
+    export_data_root, TaskName
 from renaanalysis.utils.training_utils import count_standard_error, count_target_error
-from renaanalysis.utils.data_utils import compute_pca_ica, rebalance_classes, mean_max_sublists, \
-    mean_min_sublists, epochs_to_class_samples_rdf, z_norm_by_trial
-from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
+from renaanalysis.utils.data_utils import rebalance_classes, mean_max_sublists, \
+    mean_min_sublists
+from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.viz_utils import viz_confusion_matrix, visualize_eeg_epoch, plot_training_history
-
-def eval_lockings(rdf, event_names, locking_name_filters, model_name, exg_resample_rate=200, participant=None, session=None, regenerate_epochs=True, n_folds=10, ht_lr=1e-3, ht_l2=1e-6, ht_output_mode='single'):
-    # verify number of event types
-    eeg_montage = mne.channels.make_standard_montage('biosemi64')
-    assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))
-    locking_performance = {}
-    if participant is None:
-        participant = 'all'
-    if session is None:
-        session = 'all'
-
-    for locking_name, locking_filter in locking_name_filters.items():
-        test_name = f'Locking-{locking_name}_P-{participant}_S-{session}'
-        if regenerate_epochs:
-            x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, locking_filter, data_type='both', rebalance=False, participant=participant, session=session, plots='full', exg_resample_rate=exg_resample_rate)
-            pickle.dump(x, open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
-            pickle.dump(y, open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'wb'))
-        else:
-            try:
-                x = pickle.load(open(os.path.join(export_data_root, f'x_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
-                y = pickle.load(open(os.path.join(export_data_root, f'y_P{participant}_S{session}_L{locking_name}.p'), 'rb'))
-            except FileNotFoundError:
-                raise Exception(f"Unable to find saved epochs for participant {participant}, session {session}, locking {locking_name}" + ", EEGPupil" if model_name == 'EEGPupil' else "")
-        model_performance, training_histories = eval_model(x[0], x[1], y, event_names, model_name, eeg_montage, test_name=test_name, n_folds=n_folds, exg_resample_rate=exg_resample_rate, ht_lr=ht_lr, ht_l2=ht_l2, ht_output_mode=ht_output_mode)
-        for _m_name, _performance in model_performance.items():  # HDCA expands into three models, thus having three performance results
-            locking_performance[locking_name, _m_name] = _performance
-    return locking_performance
-
-
-def preprocess_model_data(x_eeg, x_pupil, n_top_components=20):
-    x_eeg_znormed = z_norm_by_trial(x_eeg)
-    x_pupil_znormed = z_norm_by_trial(x_pupil) if x_pupil is not None else None
-    x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, n_top_components)
-    return x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica
 
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
@@ -71,10 +38,10 @@ def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
                x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20, viz_rebalance=False, pca=None, ica=None, is_plot_conf_matrix=False):
     if x_pupil is None:
         if x_eeg_znormed is None or x_eeg_pca_ica is None:
-            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_samples_eeg_pupil(x_eeg, x_pupil, n_top_components)
     else:
         if x_eeg_znormed is None or x_eeg_pca_ica is None or x_pupil_znormed is None:
-            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x_eeg, x_pupil, n_top_components)
+            x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_samples_eeg_pupil(x_eeg, x_pupil, n_top_components)
         else:
             assert pca is not None and ica is not None, Exception("pca and ica must not be None if x_eeg_znormed and x_eeg_pca_ica are given")
 
@@ -192,95 +159,6 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     print("#" * 100)
     return performance, training_histories
 
-def grid_search_ht(grid_search_params, x_eeg, x_eeg_pca_ica, y, event_names, n_folds, test_name='', task_name=TaskName.PreTrain, exg_resample_rate=128, is_plot_conf=False, is_pca_ica=True, is_by_channel=False, reload_saved_samples=True, participant=None, session=None, regenerate_epochs=True, viz_rebalance=False):
-    # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
-    locking_performance = {}
-
-    if task_name == TaskName.BasicClassification or task_name == TaskName.FineTune:
-        skf = StratifiedShuffleSplit(n_splits=1, random_state=random_seed)
-        train, test = [(train, test) for train, test in skf.split(x_eeg, y)][0]
-        x_eeg_train, x_eeg_pca_ica_train = x_eeg[train], x_eeg_pca_ica[train]
-        x_eeg_test, x_eeg_pca_ica_test = x_eeg[test], x_eeg_pca_ica[test]
-        y_train, y_test = y[train], y[test]
-        assert np.all(np.unique(y_test) == np.unique(y_train)), "train and test labels are not the same"
-        assert len(np.unique(y_test)) == len(event_names), "number of unique labels is not the same as number of event names"
-
-    # if not os.path.exists('HT_grid/RSVP-itemonset-locked'):
-    #     os.mkdir('HT_grid/RSVP-itemonset-locked')
-    # with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb') as f:
-    #     pickle.dump(x_eeg_pca_ica, f)
-    # with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
-    #     pickle.dump(y, f)
-        if not reload_saved_samples:
-            with open(os.path.join(export_data_root, 'y_train.p'), 'wb') as f:
-                pickle.dump(y_train, f)
-            with open(os.path.join(export_data_root, 'y_test.p'), 'wb') as f:
-                pickle.dump(y_test, f)
-            with open(os.path.join(export_data_root, 'x_eeg_pca_ica_test.p'), 'wb') as f:
-                pickle.dump(x_eeg_pca_ica_test, f)
-            with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
-                pickle.dump(x_eeg_test, f)
-    elif task_name == TaskName.PreTrain:
-        x_eeg_train, x_eeg_test = train_test_split(x_eeg, test_size=0.1, random_state=random_seed)
-        x_eeg_pca_ica_train, x_eeg_pca_ica_test = train_test_split(x_eeg_pca_ica, test_size=0.1, random_state=random_seed)
-        if not reload_saved_samples:
-            with open(os.path.join(export_data_root, 'x_eeg_pca_ica_test.p'), 'wb') as f:
-                pickle.dump(x_eeg_pca_ica_test, f)
-            with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
-                pickle.dump(x_eeg_test, f)
-    num_channels, num_timesteps = x_eeg_pca_ica.shape[1:] if is_pca_ica else x_eeg.shape[1:]
-
-    param_grid = ParameterGrid(grid_search_params)
-    total_training_histories = {}
-    models_param = {}
-    for params in param_grid:
-        print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
-        if task_name == TaskName.BasicClassification or task_name == TaskName.FineTune:
-            model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
-                                        depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
-                                        pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
-                                        dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
-            models, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(
-                x_eeg_pca_ica_train if is_pca_ica else x_eeg_train, y_train, model,
-                is_plot_conf_matrix=is_plot_conf, is_by_channel=is_by_channel,
-                X_test=x_eeg_pca_ica_test if is_pca_ica else x_eeg_test, Y_test=y_test, n_folds=n_folds,
-                test_name=test_name, task_name=task_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'],
-                viz_rebalance=viz_rebalance)  # use un-dimension reduced EEG data
-
-        elif task_name == TaskName.PreTrain:
-            model = HierarchicalTransformerContrastivePretrain(num_timesteps, num_channels, exg_resample_rate, num_classes=2,
-                                        depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
-                                        pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
-                                        dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'],
-                                                               p_t=params['p_t'], p_c=params['p_c'], mask_t_span=params['mask_t_span'], mask_c_span=params['mask_c_span'])
-            models, training_histories, criterion, last_activation, _encoder = self_supervised_pretrain(x_eeg_pca_ica_train if is_pca_ica else x_eeg_train, model, temperature=params['temperature'], n_neg=params['n_neg'], is_plot_conf_matrix=is_plot_conf, X_test=x_eeg_pca_ica_test if is_pca_ica else x_eeg_test, n_folds=n_folds, test_name=test_name, task_name=task_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'])  # use un-dimension reduced EEG data
-        if task_name == TaskName.PreTrain:
-            folds_train_loss, folds_val_loss =  mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
-            print(f'{test_name} with param {params}: folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss} ')
-
-            hashable_params = tuple(params.items())
-            locking_performance[hashable_params] = {'folds val loss': folds_val_loss,
-                                                    'folds trian loss': folds_train_loss}
-            total_training_histories[hashable_params] = training_histories
-            models_param[hashable_params] = models
-            if not os.path.exists('HT_grid_pretrain'):
-                os.mkdir('HT_grid_pretrain')
-            for i in range(n_folds):
-                torch.save(models[i], os.path.join(model_save_dir, test_name + f"_lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt"))
-        else:
-            folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
-            folds_val_auc = mean_max_sublists(training_histories['auc_val'])
-            print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}, ')
-
-            hashable_params = tuple(params.items())
-            locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss, 'folds test auc': training_histories['auc_test']}
-            total_training_histories[hashable_params] = training_histories
-            models_param[hashable_params] = models
-            if not os.path.exists('HT_grid'):
-                os.mkdir('HT_grid')
-            for i in range(n_folds):
-                torch.save(models[i], f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt")
-    return locking_performance, total_training_histories, models_param
 
 def eval(model, X, Y, criterion, last_activation, _encoder, task_name=TaskName.BasicClassification, verbose=1):
     use_cuda = torch.cuda.is_available()
@@ -914,5 +792,5 @@ def train_model_pupil_eeg_no_folds(X, Y, model, num_epochs=5000, test_name="CNN-
 
 def prepare_sample_label(rdf, event_names, event_filters, data_type='eeg', picks=None, tmin_eeg=-0.1, tmax_eeg=1.0, participant=None, session=None ):
     assert len(event_names) == len(event_filters) == 2
-    x, y, _, _ = epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type=data_type, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
+    x, y, _, _ = rena_epochs_to_class_samples_rdf(rdf, event_names, event_filters, data_type=data_type, picks=picks, tmin_eeg=tmin_eeg, tmax_eeg=tmax_eeg, participant=participant, session=session)
     return x, y

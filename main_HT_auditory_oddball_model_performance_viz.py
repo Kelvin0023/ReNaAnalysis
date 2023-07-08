@@ -6,7 +6,8 @@ import numpy as np
 import torch
 
 from renaanalysis.learning.result_viz import viz_model_performance
-from renaanalysis.learning.train import eval_model, preprocess_model_data
+from renaanalysis.learning.train import eval_model
+from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 

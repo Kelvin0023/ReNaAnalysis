@@ -12,7 +12,7 @@ import torch
 from RenaAnalysis import get_rdf
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.multilock import eval_multi_locking_model
-from renaanalysis.learning.train import eval_lockings
+from renaanalysis.learning.train_rena import eval_lockings
 from renaanalysis.params.params import *
 
 

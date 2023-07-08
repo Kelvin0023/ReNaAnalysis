@@ -1,109 +1,15 @@
-# analysis parameters ######################################################################################
-import copy
-import os
-import pickle
-import time
-
-# analysis parameters ######################################################################################
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
-
-from RenaAnalysis import get_rdf
-from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
-from renaanalysis.learning.grid_search import grid_search_ht
-from renaanalysis.learning.train_rena import eval_lockings
-from renaanalysis.params.params import *
-from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
-
-
-# user parameters
-exg_resample_rate = 200
-'''
-grid_search_params = {
-    "depth": [2, 4, 6],
-    "num_heads": [4, 8, 12],
-    "pool": ['cls', 'mean'],
-    "feedforward_mlp_dim": [64, 128, 256],
-
-    # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [128, 256, 512],
-
-    "dim_head": [64, 128, 256],
-    "attn_dropout": [0.0, 0.2, 0.2],
-    "emb_dropout": [0.0, 0.2, 0.2],
-    "lr": [1e-4, 1e-3, 1e-2],
-    "l2_weight": [1e-6, 1e-5, 1e-4],
-
-    # "lr_scheduler_type": ['cosine'],
-    "lr_scheduler_type": ['cosine', 'exponential'],
-    "output": ['single', 'multi'],
-}
-'''
-grid_search_params = {
-    "depth": [4],
-    "num_heads": [4, 8],
-    "pool": ['cls'],
-    "feedforward_mlp_dim": [32, 64],
-
-    # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [32, 64],
-
-    "dim_head": [32, 64],
-    "attn_dropout": [0.5],
-    "emb_dropout": [0.5],
-    "lr": [1e-3, 1e-4],
-    "l2_weight": [1e-5],
-
-    # "lr_scheduler_type": ['cosine'],
-    "lr_scheduler_type": ['cosine'],
-    "output": ['multi'],
-}
-bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
-eeg_resample_rate = 200
-reject = 'auto'
-event_names = ["standard", "oddball_with_response"]
-colors = {
-    "standard": "red",
-    "oddball_with_response": "green"
-}
-picks = 'eeg'
-locking_name = 'RSVP-Item-Onset'
-locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                  lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]]
-
-is_regenerate_epochs = False
-
-# start of the main block ######################################################
-
-torch.manual_seed(random_seed)
-np.random.seed(random_seed)
-
-start_time = time.time()  # record the start time of the analysis
-
 # rdf = get_rdf(exg_resample_rate=exg_resample_rate, ocular_artifact_mode='proxy')
 # rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 # pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))
-print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
+# locking_filter = [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Distractor"],
+#                   lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]]
 
-
-plt.rcParams.update({'font.size': 22})
-colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
-event_names = ["Distractor", "Target"]
-n_folds = 3
 # locking_name_filters_vs = {
 #                         'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
 #                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
-#                         'VS-FLGI': [lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.dtn==dtnn_types["Distractor"],
-#                                 lambda x: type(x)==GazeRayIntersect and x.is_first_long_gaze and x.block_condition == conditions['VS']  and x.dtn==dtnn_types["Target"]],
-#                         'VS-I-DT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Distractor"],
-#                                 lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-DT-Head' and x.dtn==dtnn_types["Target"]],
-#                        'VS-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
-#                                  lambda x: type(x) == Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]}
-
-locking_name_filters_constrained = {
-                        'RSVP-Item-Onset': [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
-                                            lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]],
+# locking_name_filters_constrained = {
+#                         'RSVP-Item-Onset': [lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
+#                                             lambda x: x.block_condition == conditions['RSVP'] and x.dtn_onffset and x.dtn == dtnn_types["Target"]],
 
                        #  'Carousel-Item-Onset': [lambda x: x.block_condition == conditions['Carousel'] and x.dtn_onffset and x.dtn==dtnn_types["Distractor"],
                        #                          lambda x: x.block_condition == conditions['Carousel'] and x.dtn_onffset and x.dtn==dtnn_types["Target"]],
@@ -125,12 +31,7 @@ locking_name_filters_constrained = {
                        #                  lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'I-DT-Head' and x.dtn == dtnn_types["Target"]],
                        #  'Carousel-Patch-Sim': [lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Distractor"],
                        #                          lambda x: type(x) == Fixation and x.is_first_long_gaze and x.block_condition == conditions['Carousel'] and x.detection_alg == 'Patch-Sim' and x.dtn == dtnn_types["Target"]]
-                                    } #nyamu <3
-
-
-locking_performance, training_histories, models = grid_search_ht(grid_search_params, bids_root, event_names, locking_name, n_folds, picks, reject, eeg_resample_rate, colors, regenerate_epochs=is_regenerate_epochs, reload_saved_samples=False, eeg_fs=exg_resample_rate)
-pickle.dump(training_histories, open('model_training_histories.p', 'wb'))
-pickle.dump(locking_performance, open('model_locking_performances.p', 'wb'))
+                       #              } #nyamu <3
 
 
 

@@ -8,7 +8,8 @@ from RenaAnalysis import get_rdf, r_square_test
 from eye.eyetracking import Fixation
 from learning.models import EEGInceptionNet, EEGCNN
 from renaanalysis.learning.train import eval, train_model
-from renaanalysis.utils.data_utils import epochs_to_class_samples_rdf, compute_pca_ica
+from renaanalysis.utils.data_utils import compute_pca_ica
+from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.params.params import *
 import matplotlib.pyplot as plt
 import numpy as np

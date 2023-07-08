@@ -9,10 +9,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from RenaAnalysis import get_rdf
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.result_viz import viz_performances_rena
-from renaanalysis.learning.train import eval_lockings
+from renaanalysis.learning.train_rena import eval_lockings
 from renaanalysis.params.params import *
 
 

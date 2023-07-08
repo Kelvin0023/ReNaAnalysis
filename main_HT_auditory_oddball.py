@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from renaanalysis.learning.train import eval_model, preprocess_model_data
+from renaanalysis.learning.train import eval_model
+from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
 
@@ -19,12 +20,7 @@ reject = 'auto'
 # bids_root = 'D:/Dropbox/Dropbox/ReNa/EEGDatasets/auditory_oddball_openneuro'
 bids_root = 'D:/Dataset/auditory_oddball'
 
-event_names = ["standard", "oddball_with_reponse"]
-colors = {
-    "standard": "red",
-    "oddball_with_reponse": "green"
-}
-picks = 'eeg'
+
 # models = ['HT', 'HDCA', 'EEGCNN']
 models = ['HT-pca-ica']
 n_folds = 1
@@ -57,7 +53,7 @@ if os.path.exists(f'{export_data_root}/x_pca_ica.p') and os.path.exists(f'{expor
         ica = pickle.load(file)
     x_pupil_znormed = None
 else:
-    x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica  = preprocess_model_data(x, None)
+    x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica  = preprocess_samples_eeg_pupil(x, None)
     with open(f'{export_data_root}/x_pca_ica.p', "wb") as file:
         pickle.dump(x_eeg_pca_ica, file)
     with open(f'{export_data_root}/x_znormed.p', "wb") as file:

@@ -8,7 +8,8 @@ import torch
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch import nn
 
-from renaanalysis.learning.train import eval_model, preprocess_model_data, cv_train_test_model
+from renaanalysis.learning.train import eval_model, cv_train_test_model
+from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil
 from renaanalysis.params.params import *
 from renaanalysis.utils.data_utils import z_norm_by_trial
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples
@@ -22,10 +23,10 @@ task_name = 'oddball'
 eeg_resample_rate = 200
 reject = 'auto'
 bids_root = 'D:/Dataset/auditory_oddball'
-event_names = ["standard", "oddball_with_reponse"]
+event_names = ["standard", "oddball_with_response"]
 colors = {
     "standard": "red",
-    "oddball_with_reponse": "green"
+    "oddball_with_response": "green"
 }
 picks = 'eeg'
 # models = ['HT', 'HDCA', 'EEGCNN']
@@ -46,7 +47,7 @@ np.random.seed(random_seed)
 
 if reload_saved_samples:
     x, y = get_auditory_oddball_samples(bids_root, export_data_root, reload_saved_samples, event_names, picks, reject, eeg_resample_rate, colors)
-    x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_model_data(x, None)
+    x_eeg_znormed, x_eeg_pca_ica, x_pupil_znormed, pca, ica = preprocess_samples_eeg_pupil(x, None)
     pickle.dump(x_eeg_pca_ica, open(os.path.join(export_data_root, f'x_pca_ica.p'), 'wb'))
     if is_pca_ica:
         with open(f'{export_data_root}/pca_object.p', 'wb') as f:
@@ -65,7 +66,7 @@ else:
     x_eeg_znormed = z_norm_by_trial(x)
 
 
-event_ids = {'standard': 1, 'oddball_with_reponse': 7}
+event_ids = {'standard': 1, 'oddball_with_response': 7}
 baseline = (-0.1, 0.0)
 ch_names = ['Fp1', 'AF7', 'AF3', 'F1', 'F3', 'F5', 'F7', 'FT7', 'FC5', 'FC3', 'FC1', 'C1', 'C3', 'C5', 'T7', 'TP7', 'CP5', 'CP3', 'CP1', 'P1', 'P3', 'P5', 'P7', 'P9', 'PO7', 'PO3', 'O1', 'Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'Fp2', 'AF8', 'AF4', 'AFz', 'Fz', 'F2', 'F4', 'F6', 'F8', 'FT8', 'FC6', 'FC4', 'FC2', 'FCz', 'Cz', 'C2', 'C4', 'C6', 'T8', 'TP8', 'CP6', 'CP4', 'CP2', 'P2', 'P4', 'P6', 'P8', 'P10', 'PO8', 'PO4', 'O2', 'EOG00', 'EOG01']
 eeg_picks = ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz']

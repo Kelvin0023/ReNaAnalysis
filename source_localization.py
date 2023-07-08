@@ -54,7 +54,7 @@ stc, residual = apply_inverse(evoked, inverse_operator, lambda2,
                               return_residual=True, verbose=True)
 
 fig, ax = plt.subplots()
-ax.plot(1e3 * stc.times, stc.data[::100, :].T)
+ax.plot(1e3 * stc.times, stc.array[::100, :].T)
 ax.set(xlabel='time (ms)', ylabel='%s value' % method)
 plt.show()
 
