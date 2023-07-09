@@ -19,11 +19,11 @@ from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples, get_d
 
 # user parameters
 n_folds = 3
-is_pca_ica = True # apply pca and ica on data or not
+is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-reload_saved_samples = True
+is_regenerate_epochs = True
 
 eeg_resample_rate = 200
 
@@ -53,7 +53,7 @@ grid_search_params = {
 }
 '''
 grid_search_params = {
-    "depth": [4],
+    "depth": [4, 6],
     "num_heads": [8],
     "pool": ['cls'],
     "feedforward_mlp_dim": [32],
@@ -64,7 +64,7 @@ grid_search_params = {
     "dim_head": [128],
     "attn_dropout": [0.5],
     "emb_dropout": [0.5],
-    "lr": [1e-3],
+    "lr": [1e-4],
     "l2_weight": [1e-5],
 
     # "lr_scheduler_type": ['cosine'],
@@ -73,8 +73,8 @@ grid_search_params = {
     'temperature' : [0.1],
     'n_neg': [1],
     'p_t': [0.1],
-    'p_c': [0.2],
-    'mask_t_span': [2],
+    'p_c': [0.25],
+    'mask_t_span': [1],
     'mask_c_span': [5]
 }
 
@@ -89,10 +89,10 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 
-mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, data_root=data_root, reject=False, is_apply_pca_ica_eeg=True)
+mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs)
 
 
-locking_performance, training_histories, models = grid_search_ht(grid_search_params, mmarray, n_folds, task_name=TaskName.PreTrain, is_plot_confusion_matrix=is_plot_confusion_matrix, is_plot_rebalanced_eeg=viz_rebalance)
+locking_performance, training_histories, models = grid_search_ht(grid_search_params, mmarray, mmarray.event_viz_colors.keys(), n_folds, task_name=TaskName.PreTrain, is_plot_confusion_matrix=is_plot_confusion_matrix, is_plot_rebalanced_eeg=viz_rebalance)
 if model_name == 'HT-sesup':
     pickle.dump(training_histories,
                 open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))

@@ -98,7 +98,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, eeg_picks, title='', out_
 #     "noise": "green",
 #     "condition_5": "purple",
 #     "noise_with_reponse": "pink",
-#     "oddball_with_response": "black",
+#     "oddball_with_reponse": "black",
 #     "standard_with_reponse": "gray"}
 
 class DataSet():
@@ -172,15 +172,10 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
             runs['run-' + str(j + 1)] = data
     return subjects
 
-def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tmax = 0.8, include_last=False):
-    colors = {
-        "standard": "red",
-        "oddball_with_response": "green"
-    }
-
+def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tmax = 0.8, include_last=False, colors=None):
     event_plot = {
         "standard": 1,
-        "oddball_with_response": 7
+        "oddball_with_reponse": 7
     }
     datatype = 'eeg'
     task = 'P300'
@@ -209,16 +204,43 @@ def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tm
     # pickle.dump(subjects, open(os.path.join('./3rd_party_data/audio_oddball', f'subjects.p'), 'wb'))
     return subjects
 
-def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, picks, colors, eeg_resample_rate, subject_picks=None):
+def parse_file_tree(directory):
+    result = {}
+    for entry in os.scandir(directory):
+        if entry.is_file():
+            result[entry.name] = None
+        elif entry.is_dir():
+            result[entry.name] = parse_file_tree(entry.path)
+    return result
 
-    def parse_file_tree(directory):
-        result = {}
-        for entry in os.scandir(directory):
-            if entry.is_file():
-                result[entry.name] = None
-            elif entry.is_dir():
-                result[entry.name] = parse_file_tree(entry.path)
-        return result
+def get_DEAP_samples(data_root, event_names=None, picks=None, colors=None, eeg_resample_rate=200, subject_picks=None):
+
+    # Read metadata participant rating
+    ratings = pd.read_csv(os.path.join(data_root,'metadata_csv/participant_ratings.csv'))
+
+    # Specify the root directory of the file tree
+    data_directory = os.path.join(data_root, 'data_original')
+
+    # Parse the file tree and obtain the dictionary representation
+    file_tree_dict = parse_file_tree(data_directory)
+    idx = 1
+    metadata_dict = {}
+    for file_name, _ in file_tree_dict.items():
+        raw = mne.io.read_raw_bdf(os.path.join(data_directory, file_name),preload=True)
+        subject_ratings = ratings[ratings['Participant_id'] == idx]
+        eventID_mat = np.zeros((len(subject_ratings), 3))
+        for k in range(len(subject_ratings)):
+            eventID_mat[k, 0] = subject_ratings['Start_time'][k]
+            eventID_mat[k, 2] = None #TODO define events
+            metadata_dict['Start_time'].append(subject_ratings['Start_time'][k])
+            metadata_dict['subject_name'].append(subject_name)
+            metadata_dict['session_name'].append(session_name)
+            metadata_dict['montage_type_name'].append(montage_type_name)
+        metadata = pd.DataFrame(metadata_dict)
+        idx += 1
+        data = mne.Epochs(raw, eventID_mat, )
+
+def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, picks, colors, eeg_resample_rate, subject_picks=None):
 
     # Specify the root directory of the file tree
     root_directory = data_root
@@ -292,10 +314,10 @@ def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, pic
 def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epochs, reject, eeg_resample_rate, picks='eeg'):
     event_viz_colors = {
         "standard": "red",
-        "oddball_with_response": "green"
+        "oddball_with_reponse": "green"
     }
     if is_regenerate_epochs:
-        subjects = load_auditory_oddball_data(bids_root=bids_root)
+        subjects = load_auditory_oddball_data(bids_root=bids_root, colors=event_viz_colors)
         all_epochs = []
         for subject_key, run_values in subjects.items():
             for run_key, run in run_values.items():
@@ -407,7 +429,7 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
 
     if dataset_name == 'auditory_oddball':
 
-        x, y, start_time, metadata, event_viz_colors = get_auditory_oddball_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, colors)
+        x, y, start_time, metadata, event_viz_colors = get_auditory_oddball_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate)
         physio_arrays = [PhysioArray(x, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == "rena":
         x, y, event_viz_colors = get_rena_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, eyetracking_resample_srate)

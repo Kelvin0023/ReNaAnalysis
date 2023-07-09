@@ -21,7 +21,7 @@ def get_grid_search_test_name(grid_search_params):
             test_name += f"{key}={value}_"
     return test_name
 
-def grid_search_ht(grid_search_params, mmarray: MultiModalArrays, y, event_names, n_folds,
+def grid_search_ht(grid_search_params, mmarray: MultiModalArrays, event_names, n_folds,
                    task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, is_plot_rebalanced_eeg=False):
     """
 
@@ -45,13 +45,23 @@ def grid_search_ht(grid_search_params, mmarray: MultiModalArrays, y, event_names
 
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
     locking_performance = {}
-
+    # for physio_array in mmarray.physio_arrays:
+    #     if physio_array.physio_type == 'eeg':
+    #         x_eeg = physio_array.array
+    #     elif physio_array.physio_type == 'pupil':
+    #         x_pupil = physio_array.array
+    x_eeg = mmarray
     if task_name == TaskName.BasicClassification or task_name == TaskName.FineTune:
         skf = StratifiedShuffleSplit(n_splits=1, random_state=random_seed)
         train, test = [(train, test) for train, test in skf.split(x_eeg, y)][0]
-        x_eeg_train, x_eeg_pca_ica_train = x_eeg[train], x_eeg_pca_ica[train]
-        x_eeg_test, x_eeg_pca_ica_test = x_eeg[test], x_eeg_pca_ica[test]
-        y_train, y_test = y[train], y[test]
+        for physio_array in mmarray.physio_arrays:
+            if physio_array.physio_type == 'eeg':
+                x_eeg_train = physio_array.array[train]
+                x_eeg_test = physio_array.array[test]
+            elif physio_array.physio_type == 'pupil':
+                x_pupil_train = physio_array.array[train]
+                x_pupil_test = physio_array.array[test]
+        y_train, y_test = mmarray.labels_array[train], mmarray.labels_array[test]
         assert np.all(np.unique(y_test) == np.unique(y_train)), "train and test labels are not the same"
         assert len(np.unique(y_test)) == len(event_names), "number of unique labels is not the same as number of event names"
 
@@ -61,15 +71,14 @@ def grid_search_ht(grid_search_params, mmarray: MultiModalArrays, y, event_names
     #     pickle.dump(x_eeg_pca_ica, f)
     # with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
     #     pickle.dump(y, f)
-        if not reload_saved_samples:
-            with open(os.path.join(export_data_root, 'y_train.p'), 'wb') as f:
-                pickle.dump(y_train, f)
-            with open(os.path.join(export_data_root, 'y_test.p'), 'wb') as f:
-                pickle.dump(y_test, f)
-            with open(os.path.join(export_data_root, 'x_eeg_pca_ica_test.p'), 'wb') as f:
-                pickle.dump(x_eeg_pca_ica_test, f)
-            with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
-                pickle.dump(x_eeg_test, f)
+        with open(os.path.join(export_data_root, 'y_train.p'), 'wb') as f:
+            pickle.dump(y_train, f)
+        with open(os.path.join(export_data_root, 'y_test.p'), 'wb') as f:
+            pickle.dump(y_test, f)
+        with open(os.path.join(export_data_root, 'x_eeg_train.p'), 'wb') as f:
+            pickle.dump(x_eeg_train, f)
+        with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
+            pickle.dump(x_eeg_test, f)
     elif task_name == TaskName.PreTrain:
         x_eeg_train, x_eeg_test = train_test_split(x_eeg, test_size=0.1, random_state=random_seed)
         x_eeg_pca_ica_train, x_eeg_pca_ica_test = train_test_split(x_eeg_pca_ica, test_size=0.1, random_state=random_seed)
