@@ -5,12 +5,14 @@ import numpy as np
 import torch
 from torch.optim import lr_scheduler
 
+from renaanalysis.learning.train import _run_one_epoch_classification, eval_test
+from renaanalysis.params.params import batch_size, epochs, patience, TaskName
+from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_history
 
-def cv_train_test_model_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
-                                   n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size = 0.1,
-                                   lr_scheduler_type='exponential', is_plot_conf_matrix=False, is_by_channel=False,
-                                   rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=True, viz_rebalance=False, random_seed=None,
-                                   batch_size=32):
+
+def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
+                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size = 0.1,
+                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, X_test=None, Y_test=None, plot_histories=True, random_seed=None):
     """
 
     """
@@ -102,8 +104,8 @@ def cv_train_test_model_multimodal(mmarray, model, test_name="", task_name=TaskN
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
-        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval(best_model, X_test, Y_test, criterion, last_activation, _encoder,
-                                         task_name=task_name, verbose=1)
+        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval_test(best_model, X_test, Y_test, criterion, last_activation,
+                                         _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
         test_auc.append(test_auc_model)
@@ -126,4 +128,4 @@ def cv_train_test_model_multimodal(mmarray, model, test_name="", task_name=TaskN
             plot_training_history(history, seached_params, i)
 
 
-    return models, training_histories_folds, criterion, last_activation, _encoder, test_auc, test_loss, test_acc
+    return models, training_histories_folds, criterion, last_activation, test_auc, test_loss, test_acc

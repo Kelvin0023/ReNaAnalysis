@@ -250,3 +250,6 @@ class MultiModalArrays:
             last_activation = nn.Softmax(dim=1)
 
         return criterion, last_activation
+
+    def get_encoder_function(self):
+        return self._encoder
