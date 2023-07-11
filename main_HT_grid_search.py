@@ -23,7 +23,7 @@ is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 
 eeg_resample_rate = 200
 

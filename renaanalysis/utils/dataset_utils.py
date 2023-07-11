@@ -224,21 +224,33 @@ def get_DEAP_samples(data_root, event_names=None, picks=None, colors=None, eeg_r
     # Parse the file tree and obtain the dictionary representation
     file_tree_dict = parse_file_tree(data_directory)
     idx = 1
-    metadata_dict = {}
+    metadata_dict = {'Subject_id': [], }
     for file_name, _ in file_tree_dict.items():
         raw = mne.io.read_raw_bdf(os.path.join(data_directory, file_name),preload=True)
+        raw = preprocess_standard_eeg(raw, ica_path=os.path.join(os.path.dirname(data_root),
+                                                                 'sub-' + idx + '_ica.fif'),
+                                      is_running_ica=False,
+                                      ocular_artifact_mode='proxy', blink_ica_threshold=np.linspace(10, 7, 5),
+                                      eyemovement_ica_threshold=np.linspace(2.5, 2.0, 5))
         subject_ratings = ratings[ratings['Participant_id'] == idx]
         eventID_mat = np.zeros((len(subject_ratings), 3))
         for k in range(len(subject_ratings)):
             eventID_mat[k, 0] = subject_ratings['Start_time'][k]
-            eventID_mat[k, 2] = None #TODO define events
+            eventID_mat[k, 2] = get_DEAP_epoch_label(subject_ratings, k)
             metadata_dict['Start_time'].append(subject_ratings['Start_time'][k])
-            metadata_dict['subject_name'].append(subject_name)
-            metadata_dict['session_name'].append(session_name)
-            metadata_dict['montage_type_name'].append(montage_type_name)
         metadata = pd.DataFrame(metadata_dict)
         idx += 1
-        data = mne.Epochs(raw, eventID_mat, )
+        data = mne.Epochs(raw, eventID_mat, {0: 'standard'}, tmin=-0.1, tmax=0.8, preload=True, baseline=(-0.1, 0))
+
+def get_DEAP_epoch_label(ratings_data, k):
+    if ratings_data['Valence'][k] >= 5 and ratings_data['Arousal'][k] >= 5:
+        return 0
+    elif ratings_data['Valence'][k] >= 5 and ratings_data['Arousal'][k] < 5:
+        return 1
+    elif ratings_data['Valence'][k] < 5 and ratings_data['Arousal'][k] >= 5:
+        return 2
+    elif ratings_data['Valence'][k] < 5 and ratings_data['Arousal'][k] >= 5:
+        return 3
 
 def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, picks, colors, eeg_resample_rate, subject_picks=None):
 
