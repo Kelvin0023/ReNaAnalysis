@@ -211,6 +211,26 @@ class MultiModalArrays:
         else:
             self.train_indices, self.test_indices = train_test_split(list(range(self.physio_arrays[0].array.shape[0])), test_size=test_size, random_state=random_seed)
 
+    def get_test_set(self, encode_y=False, convert_to_tensor=False, device=None):
+        """
+        get the test set
+        @return:
+        """
+        assert self.test_indices is not None, 'test indices have not been set, please call train_test_split first'
+        x_test = []
+        y_test = self.labels_array[self.test_indices]
+        for parray in self.physio_arrays:
+            if convert_to_tensor:
+                x_test.append(torch.Tensor(parray[self.test_indices]).to(device))
+            else:
+                x_test.append(parray[self.test_indices])
+        if encode_y:
+            y_test = self._encoder(y_test)
+        if convert_to_tensor:
+            y_test = torch.Tensor(y_test).to(device)
+        if len(x_test) == 1:
+            x_test = x_test[0]
+        return x_test, y_test
 
     def get_random_sample(self, preprocessed=False, convert_to_tensor=False, device=None):
         """

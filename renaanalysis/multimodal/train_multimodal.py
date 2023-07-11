@@ -12,7 +12,7 @@ from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_his
 
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size = 0.1,
-                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, X_test=None, Y_test=None, plot_histories=True, random_seed=None):
+                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None):
     """
 
     """
@@ -22,6 +22,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device)
+    X_test, Y_test = mmarray.get_test_set()
     # X = model.prepare_data(X)
 
     train_losses_folds = []
