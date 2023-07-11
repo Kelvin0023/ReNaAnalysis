@@ -213,7 +213,7 @@ def parse_file_tree(directory):
             result[entry.name] = parse_file_tree(entry.path)
     return result
 
-def get_DEAP_samples(data_root, event_names=None, picks=None, colors=None, eeg_resample_rate=200, subject_picks=None):
+def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=None, eeg_resample_rate=200, subject_picks=None):
 
     # Read metadata participant rating
     ratings = pd.read_csv(os.path.join(data_root,'metadata_csv/participant_ratings.csv'))
@@ -224,23 +224,38 @@ def get_DEAP_samples(data_root, event_names=None, picks=None, colors=None, eeg_r
     # Parse the file tree and obtain the dictionary representation
     file_tree_dict = parse_file_tree(data_directory)
     idx = 1
-    metadata_dict = {'Subject_id': [], }
+    subjects = []
+    event_name_map = {'HighValanceHighArousal': 0, 'HighValanceLowArousal': 1, 'LowValanceHighArousal': 2, 'LowValanceLowArousal': 3}
     for file_name, _ in file_tree_dict.items():
+        metadata_dict = {'subject_id': [], }
         raw = mne.io.read_raw_bdf(os.path.join(data_directory, file_name),preload=True)
-        raw = preprocess_standard_eeg(raw, ica_path=os.path.join(os.path.dirname(data_root),
-                                                                 'sub-' + idx + '_ica.fif'),
-                                      is_running_ica=False,
-                                      ocular_artifact_mode='proxy', blink_ica_threshold=np.linspace(10, 7, 5),
-                                      eyemovement_ica_threshold=np.linspace(2.5, 2.0, 5))
+        # raw = preprocess_standard_eeg(raw, ica_path=os.path.join(os.path.dirname(data_root),
+        #                                                          'sub-' + str(idx) + '_ica.fif'),
+        #                               is_running_ica=False,
+        #                               ocular_artifact_mode='proxy', blink_ica_threshold=np.linspace(10, 7, 5),
+        #                               eyemovement_ica_threshold=np.linspace(2.5, 2.0, 5))
         subject_ratings = ratings[ratings['Participant_id'] == idx]
-        eventID_mat = np.zeros((len(subject_ratings), 3))
+        eventID_mat = np.zeros((len(subject_ratings), 3), dtype=int)
+        event_dict_this_run = {}
         for k in range(len(subject_ratings)):
-            eventID_mat[k, 0] = subject_ratings['Start_time'][k]
-            eventID_mat[k, 2] = get_DEAP_epoch_label(subject_ratings, k)
-            metadata_dict['Start_time'].append(subject_ratings['Start_time'][k])
+            eventID_mat[k, 0] = int(subject_ratings['Start_time'][k + (idx-1)*40]/1e6*raw.info['sfreq'])
+            eventID_mat[k, 2] = get_DEAP_epoch_label(subject_ratings, k + (idx-1)*40)
+            if eventID_mat[k, 2] == 0:
+                event_dict_this_run['HighValanceHighArousal'] = 0
+            elif eventID_mat[k, 2] == 1:
+                event_dict_this_run['HighValanceLowArousal'] = 1
+            elif eventID_mat[k, 2] == 2:
+                event_dict_this_run['LowValanceHighArousal'] = 2
+            else:
+                event_dict_this_run['LowValanceLowArousal'] = 3
+            metadata_dict['subject_id'].append(idx)
         metadata = pd.DataFrame(metadata_dict)
         idx += 1
-        data = mne.Epochs(raw, eventID_mat, {0: 'standard'}, tmin=-0.1, tmax=0.8, preload=True, baseline=(-0.1, 0))
+        data = mne.Epochs(raw, eventID_mat, event_id=event_dict_this_run, metadata=metadata, tmin=-0.1, tmax=5, preload=True, baseline=(-0.1, 0))
+        subjects.append(data)
+    x, y, start_time, metadata = epochs_to_class_samples(subjects, list(event_viz_colors.keys()), picks=picks,
+                                                         reject='auto', n_jobs=16,
+                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
 
 def get_DEAP_epoch_label(ratings_data, k):
     if ratings_data['Valence'][k] >= 5 and ratings_data['Arousal'][k] >= 5:
@@ -249,8 +264,9 @@ def get_DEAP_epoch_label(ratings_data, k):
         return 1
     elif ratings_data['Valence'][k] < 5 and ratings_data['Arousal'][k] >= 5:
         return 2
-    elif ratings_data['Valence'][k] < 5 and ratings_data['Arousal'][k] >= 5:
+    else:
         return 3
+
 
 def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, picks, colors, eeg_resample_rate, subject_picks=None):
 
