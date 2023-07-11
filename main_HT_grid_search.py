@@ -1,21 +1,15 @@
 # analysis parameters ######################################################################################
-import copy
 import os
 import pickle
 import time
 
 # analysis parameters ######################################################################################
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
 
-from RenaAnalysis import get_rdf
-from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.grid_search import grid_search_ht_eeg
-from renaanalysis.learning.train_rena import eval_lockings
 from renaanalysis.params.params import *
-from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica
-from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples, get_dataset
+from renaanalysis.utils.dataset_utils import get_dataset
 
 # user parameters
 n_folds = 3
@@ -23,12 +17,13 @@ is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 
 eeg_resample_rate = 200
 
 reject = 'auto'  # whether to apply auto rejection
-data_root = 'D:/Dataset/auditory_oddball'
+# data_root = 'D:/Dataset/auditory_oddball'
+data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray.p'
 '''
@@ -95,7 +90,8 @@ if not os.path.exists(mmarray_path):
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
 
-locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=TaskName.PreTrain, is_plot_confusion_matrix=is_plot_confusion_matrix, is_plot_rebalanced_eeg=viz_rebalance)
+locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=TaskName.TrainClassifier,
+                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 if model_name == 'HT-sesup':
     pickle.dump(training_histories,
                 open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))

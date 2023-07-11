@@ -16,6 +16,9 @@ from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, reba
 class PhysioArray:
     """
     when rebalance is applied, is this array rebalanced by channel or not
+    @attribute array: the raw array as was initially given at class's instantiation
+    @attribute meta_info:
+
     @atttribute array: the raw array as was initially given at class's instantiation
     @atttribute array_preprocessed: the array after preprocessing, e.g. znorm, pca, ica
     @attribute sampling_rate
@@ -23,8 +26,10 @@ class PhysioArray:
     @attribute is_rebalance_by_channel: when supersampling method such as SMOTE is applied as part of rebalancing,
     whether to apply it by channel or not
     """
-    def __init__(self, array: np.ndarray, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name=''):
+    def __init__(self, array: np.ndarray, * meta_info, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name=''):
+        assert np.all(array.shape[0] == np.array([len(m) for m in meta_info])), 'all metainfo in a physio array must have the same number of trials/epochs'
         self.array = array
+        self.meta_info = meta_info
         self.sampling_rate = sampling_rate
         self.physio_type = physio_type
         self.is_rebalance_by_channel = is_rebalance_by_channel
@@ -37,11 +42,14 @@ class PhysioArray:
         return self.array[item]
 
     def __len__(self):
-        return len(self.array)
+        return len(self.array[0])
 
     def __str__(self):
         data_preprocessor_str = '-'.join(self.data_processor.keys())
         return f'{self.dataset_name}_{self.physio_type}_{data_preprocessor_str}'
+
+    def get_meta_info(self, index):
+        return [m[index] for m in self.meta_info]
 
     def apply_znorm_by_trial(self):
         self.array_preprocessed = z_norm_by_trial(self.array)
@@ -79,7 +87,7 @@ class MultiModalArrays:
         @param rebalance_method: can be SMOTE or class_weight
         """
         assert len(physio_arrays) > 0, 'physio_arrays must be a non-empty list of PhysioArray'
-        assert np.all(physio_arrays[0].array.shape[0] == [parray.array.shape[0] for parray in physio_arrays]), 'all physio arrays must have the same number of trials/epochs'
+        assert np.all(len(physio_arrays[0]) == np.array([len(parray) for parray in physio_arrays])), 'all physio arrays must have the same number of trials/epochs'
 
         self.physio_arrays = physio_arrays
         self.labels_array = labels_array
@@ -154,6 +162,8 @@ class MultiModalArrays:
 
         if len(x_train) == 1:
             dataset_class = TensorDataset
+            x_train = x_train[0]
+            x_val = x_val[0]
         else:
             dataset_class = MultiInputDataset
         train_dataset = dataset_class(x_train, y_train_encoded)
@@ -172,6 +182,7 @@ class MultiModalArrays:
         @return:
         """
         assert self.train_indices is not None, 'train indices have not been set, please call train_test_split first'
+        self.training_val_split_indices = []
         if self.labels_array is not None:
             skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
             for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array, self.labels_array)):
@@ -203,10 +214,10 @@ class MultiModalArrays:
 
     def get_random_sample(self, preprocessed=False, convert_to_tensor=False, device=None):
         """
-        @return: a random sample from the array
+        @return: a random sample from each of the physio arrays
         """
         random_sample_index = np.random.randint(0, len(self.physio_arrays[0]))
-        rtn = [(parray.array[random_sample_index] if not preprocessed else parray.array_preprocessed[random_sample_index]) for parray in self.physio_arrays]
+        rtn = [(parray.array[random_sample_index][None, :] if not preprocessed else parray.array_preprocessed[random_sample_index]) for parray in self.physio_arrays]
         if convert_to_tensor:
             rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn]
         return rtn if len(rtn) > 1 else rtn[0]

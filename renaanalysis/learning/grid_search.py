@@ -6,7 +6,7 @@ from sklearn.model_selection import ParameterGrid
 from renaanalysis.learning.HT import HierarchicalTransformer, HierarchicalTransformerContrastivePretrain
 from renaanalysis.learning.train import cv_train_test_model, self_supervised_pretrain
 from renaanalysis.multimodal.train_multimodal import train_test_classifier_multimodal
-from renaanalysis.params.params import TaskName, eeg_name, random_seed, model_save_dir
+from renaanalysis.params.params import TaskName, eeg_name, model_save_dir
 from renaanalysis.utils.data_utils import mean_min_sublists, mean_max_sublists
 from renaanalysis.multimodal.multimodal import MultiModalArrays
 
@@ -23,7 +23,7 @@ def get_grid_search_test_name(grid_search_params):
 def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int,
                        test_size=0.1,
                        is_pca_ica=False,
-                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, is_plot_rebalanced_eeg=False):
+                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None):
     """
 
     @param grid_search_params:
@@ -92,7 +92,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
             models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix,
-                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'])
+                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
 
         elif task_name == TaskName.PreTrain:
             model = HierarchicalTransformerContrastivePretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,

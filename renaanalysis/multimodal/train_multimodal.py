@@ -17,7 +17,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
 
     """
     if random_seed is None:
-        warnings.warn("random_seed is None, which means the results are not reproducible.")
+        warnings.warn("train_test_classifier_multimodal: random_seed is None, which means the results are not reproducible.")
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
