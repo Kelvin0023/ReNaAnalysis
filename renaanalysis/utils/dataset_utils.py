@@ -452,7 +452,6 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
         assert epochs_root is not None, "epochs_root must be specified if is_regenerate_epochs is True"
 
     if dataset_name == 'auditory_oddball':
-
         x, y, start_time, metadata, event_viz_colors = get_auditory_oddball_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate)
         physio_arrays = [PhysioArray(x, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == "rena":

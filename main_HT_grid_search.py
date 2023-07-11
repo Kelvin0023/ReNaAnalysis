@@ -30,7 +30,7 @@ eeg_resample_rate = 200
 reject = 'auto'  # whether to apply auto rejection
 data_root = 'D:/Dataset/auditory_oddball'
 dataset_name = 'auditory_oddball'
-
+mmarray_fn = f'{dataset_name}_mmarray.p'
 '''
 grid_search_params = {
     "depth": [2, 4, 6],
@@ -88,9 +88,12 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-
-mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs)
-
+mmarray_path = os.path.join(export_data_root, mmarray_fn)
+if not os.path.exists(mmarray_path):
+    mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs)
+    mmarray.save(mmarray_path)
+else:
+    mmarray = pickle.load(open(mmarray_path, 'rb'))
 
 locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=TaskName.PreTrain, is_plot_confusion_matrix=is_plot_confusion_matrix, is_plot_rebalanced_eeg=viz_rebalance)
 if model_name == 'HT-sesup':

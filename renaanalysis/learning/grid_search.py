@@ -77,6 +77,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
     eeg_num_channels, eeg_num_timesteps = mmarray['eeg'].get_pca_ica_array().shape[1:] if is_pca_ica else mmarray['eeg'].array.shape[1:]
     eeg_fs = mmarray['eeg'].sampling_rate
     param_grid = ParameterGrid(grid_search_params)
+
     total_training_histories = {}
     models_param = {}
     locking_performance = {}

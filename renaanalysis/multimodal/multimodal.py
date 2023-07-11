@@ -1,3 +1,4 @@
+import pickle
 from typing import List
 
 import numpy as np
@@ -117,7 +118,7 @@ class MultiModalArrays:
         return iter(self.physio_arrays)
 
     def __str__(self):
-        return '|'.join([str(parray) for parray in self.physio_arrays])
+        return '-'.join([str(parray) for parray in self.physio_arrays])
 
     def get_rebalanced_dataloader_fold(self, fold_index, batch_size, random_seed=None, device=None):
         """
@@ -253,3 +254,21 @@ class MultiModalArrays:
 
     def get_encoder_function(self):
         return self._encoder
+
+    def save(self, path):
+        """
+        save the dataset to a path
+        @param path:
+        @return:
+        """
+        self._encoder = None
+        pickle.dump(self, open(path, 'wb'))
+
+def load_mmarray(path):
+    """
+    load a mmarray from a path
+    @param path:
+    @return:
+    """
+    mmarray = pickle.load(open(path, 'rb'))
+    return mmarray
