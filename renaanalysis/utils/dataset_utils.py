@@ -1,8 +1,6 @@
 import os
-import os.path as op
 import time
 
-import openneuro
 import json
 import numpy as np
 import pandas as pd
@@ -13,16 +11,14 @@ import scipy
 import pickle
 from RenaAnalysis import get_rdf
 
-from mne_bids import (BIDSPath, read_raw_bids, print_dir_tree, make_report,
-                      find_matching_paths, get_entity_vals)
-from sklearn.preprocessing import LabelEncoder
+from mne_bids import (BIDSPath, read_raw_bids)
 
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
-from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil, preprocess_samples_and_save
+from renaanalysis.learning.preprocess import preprocess_samples_and_save
 from renaanalysis.params.params import eeg_name, pupil_name
 from renaanalysis.utils.Bidict import Bidict
 from renaanalysis.utils.data_utils import epochs_to_class_samples
-from renaanalysis.utils.multimodal import PhysioArray, MultiModalArrays
+from renaanalysis.multimodal.multimodal import PhysioArray, MultiModalArrays
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.utils import preprocess_standard_eeg
 
@@ -439,7 +435,7 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
 
 def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_epochs=False, reject='auto',
                 eeg_resample_rate=200, is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
-                eyetracking_resample_srate=20):
+                eyetracking_resample_srate=20, rebalance_method='SMOTE'):
     """
 
     @param is_regenerate_epochs: whether to regenerate epochs or not, if set to False, the function will attempt
@@ -468,4 +464,4 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
 
     physio_arrays = preprocess_samples_and_save(physio_arrays, epochs_root, is_apply_pca_ica_eeg, pca_ica_eeg_n_components)
 
-    return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors)
+    return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors, rebalance_method=rebalance_method)

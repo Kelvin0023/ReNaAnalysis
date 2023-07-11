@@ -184,8 +184,8 @@ num_top_components = 20
 
 class TaskName(Enum):
     PreTrain = 'pretrain'
-    FineTune = 'finetune'
-    BasicClassification = 'basic'
+    PretrainedClassifierFineTune = 'finetune'
+    TrainClassifier = 'basic'
 
 eeg_name = 'eeg'
 pupil_name = 'pupil'

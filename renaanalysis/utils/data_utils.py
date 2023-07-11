@@ -6,7 +6,6 @@ from mne.decoding import UnsupervisedSpatialFilter
 from sklearn.decomposition import PCA, FastICA
 from sklearn.metrics import confusion_matrix
 
-from renaanalysis.params.params import *
 from renaanalysis.params.params import eeg_montage
 from renaanalysis.utils.utils import rescale_merge_exg, visualize_eeg_epochs
 
@@ -80,7 +79,7 @@ def z_norm_hdca(x, _mean=None, _std=None):
         _std = np.std(x, axis=0, keepdims=True)
     return (x - _mean) / _std
 
-def rebalance_classes(x, y, by_channel=False):
+def rebalance_classes(x, y, by_channel=False, random_seed=None):
     """
     Resamples the data to balance the classes using SMOTE algorithm.
 
@@ -195,7 +194,7 @@ def force_square_epochs(epochs, tmin, tmax):
     return square_epochs
 
 
-def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rate=128, n_jobs=1, reject='auto', lots='sanity-check', colors=None, title=''):
+def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rate=128, n_jobs=1, reject='auto', lots='sanity-check', colors=None, title='', random_seed=None):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
