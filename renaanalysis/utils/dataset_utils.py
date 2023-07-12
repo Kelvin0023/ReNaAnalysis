@@ -1,8 +1,6 @@
 import os
-import os.path as op
 import time
 
-import openneuro
 import json
 import numpy as np
 import pandas as pd
@@ -13,16 +11,14 @@ import scipy
 import pickle
 from RenaAnalysis import get_rdf
 
-from mne_bids import (BIDSPath, read_raw_bids, print_dir_tree, make_report,
-                      find_matching_paths, get_entity_vals)
-from sklearn.preprocessing import LabelEncoder
+from mne_bids import (BIDSPath, read_raw_bids)
 
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
-from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil, preprocess_samples_and_save
+from renaanalysis.learning.preprocess import preprocess_samples_and_save
 from renaanalysis.params.params import eeg_name, pupil_name
 from renaanalysis.utils.Bidict import Bidict
 from renaanalysis.utils.data_utils import epochs_to_class_samples
-from renaanalysis.utils.multimodal import PhysioArray, MultiModalArrays
+from renaanalysis.multimodal.multimodal import PhysioArray, MultiModalArrays
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.utils import preprocess_standard_eeg
 
@@ -411,6 +407,7 @@ def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, pic
     return x, y, start_time, metadata
 
 def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epochs, reject, eeg_resample_rate, picks='eeg'):
+    loading_start_time = time.perf_counter()
     event_viz_colors = {
         "standard": "red",
         "oddball_with_reponse": "green"
@@ -422,23 +419,23 @@ def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epoc
             for run_key, run in run_values.items():
                 all_epochs.append(run)
         all_epochs = mne.concatenate_epochs(all_epochs)
-        x, y, start_time, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=picks, reject=reject, n_jobs=16,
+        x, y, start_times, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=picks, reject=reject, n_jobs=16,
                                        eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
 
         pickle.dump(x, open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'wb'))
         pickle.dump(y, open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'wb'))
-        pickle.dump(start_time, open(os.path.join(export_data_root, 'start_time_auditory_oddball.p'), 'wb'))
+        pickle.dump(start_times, open(os.path.join(export_data_root, 'start_time_auditory_oddball.p'), 'wb'))
         pickle.dump(metadata, open(os.path.join(export_data_root, 'metadata_auditory_oddball.p'), 'wb'))
     else:
         x = pickle.load(open(os.path.join(export_data_root, 'x_auditory_oddball.p'), 'rb'))
         y = pickle.load(open(os.path.join(export_data_root, 'y_auditory_oddball.p'), 'rb'))
-        start_time = pickle.load(open(os.path.join(export_data_root, 'start_time_auditory_oddball.p'), 'rb'))
+        start_times = pickle.load(open(os.path.join(export_data_root, 'start_time_auditory_oddball.p'), 'rb'))
         metadata = pickle.load(open(os.path.join(export_data_root, 'metadata_auditory_oddball.p'), 'rb'))
     # le = LabelEncoder()
     # Y_encoded = le.fit_transform(y)
 
-    print(f"Load data took {time.time() - start_time} seconds")
-    return x, y, start_time, metadata, event_viz_colors
+    print(f"Load data took {time.perf_counter() - loading_start_time} seconds")
+    return x, y, start_times, metadata, event_viz_colors
 
 
 
@@ -459,7 +456,7 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
     conditions = Bidict({'RSVP': 1., 'Carousel': 2., 'VS': 3., 'TS': 4., 'TSgnd': 8, 'TSid': 9})
     dtnn_types = Bidict({'Distractor': 1, 'Target': 2, 'Novelty': 3, 'Null': 4})
     event_viz_colors = {'Distractor': 'blue', 'Target': 'red'}
-
+    event_names = list(event_viz_colors.keys())
     locking_name_filters_dict = {
                             'VS-I-VT-Head': [lambda x: type(x)==Fixation and x.is_first_long_gaze  and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Distractor"],
                                     lambda x: type(x)==Fixation and x.is_first_long_gaze and x.block_condition == conditions['VS'] and x.detection_alg == 'I-VT-Head' and x.dtn==dtnn_types["Target"]],
@@ -512,7 +509,7 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
 
 def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_epochs=False, reject='auto',
                 eeg_resample_rate=200, is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
-                eyetracking_resample_srate=20):
+                eyetracking_resample_srate=20, rebalance_method='SMOTE'):
     """
 
     @param is_regenerate_epochs: whether to regenerate epochs or not, if set to False, the function will attempt
@@ -529,9 +526,8 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
         assert epochs_root is not None, "epochs_root must be specified if is_regenerate_epochs is True"
 
     if dataset_name == 'auditory_oddball':
-
         x, y, start_time, metadata, event_viz_colors = get_auditory_oddball_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate)
-        physio_arrays = [PhysioArray(x, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
+        physio_arrays = [PhysioArray(x, start_time, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == "rena":
         x, y, event_viz_colors = get_rena_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, eyetracking_resample_srate)
         physio_arrays = [PhysioArray(x[0], sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name),
@@ -541,4 +537,4 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
 
     physio_arrays = preprocess_samples_and_save(physio_arrays, epochs_root, is_apply_pca_ica_eeg, pca_ica_eeg_n_components)
 
-    return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors)
+    return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors, rebalance_method=rebalance_method)

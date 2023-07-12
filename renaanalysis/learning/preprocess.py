@@ -4,7 +4,7 @@ from typing import List
 
 from renaanalysis.params.params import pupil_name, eeg_name
 from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica
-from renaanalysis.utils.multimodal import PhysioArray
+from renaanalysis.multimodal.multimodal import PhysioArray
 
 
 def preprocess_samples_eeg_pupil(x_eeg, x_pupil, n_top_components=20):

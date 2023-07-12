@@ -68,7 +68,7 @@ else:
 for m in models:
     m_results, training_histories = eval_model(x, None, y, event_names, model_name=m, exg_resample_rate=eeg_resample_rate, n_folds=n_folds, ht_lr=ht_lr, ht_l2=ht_l2, eeg_montage=eeg_montage,
                                                x_eeg_znormed=x_eeg_znormed, x_eeg_pca_ica=x_eeg_pca_ica, x_pupil_znormed=x_pupil_znormed,
-                                               test_name=f'BasicTrain-{Dataset_name}-{m}', task_name=TaskName.BasicClassification, viz_rebalance=viz_rebalance, pca=pca, ica=ica, is_plot_conf_matrix=is_plot_conf_matrix)
+                                               test_name=f'BasicTrain-{Dataset_name}-{m}', task_name=TaskName.TrainClassifier, viz_rebalance=viz_rebalance, pca=pca, ica=ica, is_plot_conf_matrix=is_plot_conf_matrix)
     results = {**m_results, **results}
     result_path = result_path + f'/BasicTrain-{Dataset_name}-{m}'
     pickle.dump(results, open(result_path, 'wb'))

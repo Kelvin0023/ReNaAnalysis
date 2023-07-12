@@ -1,15 +1,14 @@
 import os
-import pickle
 
-import numpy as np
 import torch
-from sklearn.model_selection import StratifiedShuffleSplit, train_test_split, ParameterGrid
+from sklearn.model_selection import ParameterGrid
 
 from renaanalysis.learning.HT import HierarchicalTransformer, HierarchicalTransformerContrastivePretrain
 from renaanalysis.learning.train import cv_train_test_model, self_supervised_pretrain
-from renaanalysis.params.params import TaskName, eeg_name, random_seed, export_data_root, model_save_dir
+from renaanalysis.multimodal.train_multimodal import train_test_classifier_multimodal
+from renaanalysis.params.params import TaskName, eeg_name, model_save_dir
 from renaanalysis.utils.data_utils import mean_min_sublists, mean_max_sublists
-from renaanalysis.utils.multimodal import MultiModalArrays
+from renaanalysis.multimodal.multimodal import MultiModalArrays
 
 def get_grid_search_test_name(grid_search_params):
     """
@@ -21,8 +20,10 @@ def get_grid_search_test_name(grid_search_params):
             test_name += f"{key}={value}_"
     return test_name
 
-def grid_search_ht(grid_search_params, mmarray: MultiModalArrays, event_names, n_folds,
-                   task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, is_plot_rebalanced_eeg=False):
+def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int,
+                       test_size=0.1,
+                       is_pca_ica=False,
+                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None):
     """
 
     @param grid_search_params:
@@ -39,75 +40,62 @@ def grid_search_ht(grid_search_params, mmarray: MultiModalArrays, event_names, n
     @param is_plot_rebalanced_eeg: if true,
     @return:
     """
+    assert eeg_name in mmarray.keys(), f"grid_search_ht_eeg: {eeg_name} is not in x {mmarray.keys()} , please check the input dataset has EEG data"
     test_name = get_grid_search_test_name(grid_search_params)
-    if is_plot_rebalanced_eeg:
-        assert eeg_name in mmarray.keys(), f"{eeg_name} is not in x {mmarray.keys()} , please check the input dataset has EEG data"
 
     # assert np.all(len(event_names) == np.array([len(x) for x in locking_name_filters.values()]))  # verify number of event types
-    locking_performance = {}
     # for physio_array in mmarray.physio_arrays:
     #     if physio_array.physio_type == 'eeg':
     #         x_eeg = physio_array.array
     #     elif physio_array.physio_type == 'pupil':
     #         x_pupil = physio_array.array
-    x_eeg = mmarray
-    if task_name == TaskName.BasicClassification or task_name == TaskName.FineTune:
-        skf = StratifiedShuffleSplit(n_splits=1, random_state=random_seed)
-        train, test = [(train, test) for train, test in skf.split(x_eeg, y)][0]
-        for physio_array in mmarray.physio_arrays:
-            if physio_array.physio_type == 'eeg':
-                x_eeg_train = physio_array.array[train]
-                x_eeg_test = physio_array.array[test]
-            elif physio_array.physio_type == 'pupil':
-                x_pupil_train = physio_array.array[train]
-                x_pupil_test = physio_array.array[test]
-        y_train, y_test = mmarray.labels_array[train], mmarray.labels_array[test]
-        assert np.all(np.unique(y_test) == np.unique(y_train)), "train and test labels are not the same"
-        assert len(np.unique(y_test)) == len(event_names), "number of unique labels is not the same as number of event names"
+    # x_eeg = mmarray
 
-    # if not os.path.exists('HT_grid/RSVP-itemonset-locked'):
-    #     os.mkdir('HT_grid/RSVP-itemonset-locked')
-    # with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb') as f:
-    #     pickle.dump(x_eeg_pca_ica, f)
-    # with open(os.path.join('HT_grid/RSVP-itemonset-locked', 'y.pkl'), 'wb') as f:
-    #     pickle.dump(y, f)
-        with open(os.path.join(export_data_root, 'y_train.p'), 'wb') as f:
-            pickle.dump(y_train, f)
-        with open(os.path.join(export_data_root, 'y_test.p'), 'wb') as f:
-            pickle.dump(y_test, f)
-        with open(os.path.join(export_data_root, 'x_eeg_train.p'), 'wb') as f:
-            pickle.dump(x_eeg_train, f)
-        with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
-            pickle.dump(x_eeg_test, f)
-    elif task_name == TaskName.PreTrain:
-        x_eeg_train, x_eeg_test = train_test_split(x_eeg, test_size=0.1, random_state=random_seed)
-        x_eeg_pca_ica_train, x_eeg_pca_ica_test = train_test_split(x_eeg_pca_ica, test_size=0.1, random_state=random_seed)
-        if not reload_saved_samples:
-            with open(os.path.join(export_data_root, 'x_eeg_pca_ica_test.p'), 'wb') as f:
-                pickle.dump(x_eeg_pca_ica_test, f)
-            with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
-                pickle.dump(x_eeg_test, f)
-    num_channels, num_timesteps = x_eeg_pca_ica.shape[1:] if is_pca_ica else x_eeg.shape[1:]
-
+    # if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
+        # skf = StratifiedShuffleSplit(n_splits=1, random_state=random_seed)
+        # train, test = [(train, test) for train, test in skf.split(x_eeg, y)][0]
+        # for physio_array in mmarray.physio_arrays:
+        #     if physio_array.physio_type == 'eeg':
+        #         x_eeg_train = physio_array.array[train]
+        #         x_eeg_test = physio_array.array[test]
+        #     elif physio_array.physio_type == 'pupil':
+        #         x_pupil_train = physio_array.array[train]
+        #         x_pupil_test = physio_array.array[test]
+        # y_train, y_test = mmarray.labels_array[train], mmarray.labels_array[test]
+        # assert np.all(np.unique(y_test) == np.unique(y_train)), "train and test labels are not the same"
+        # assert len(np.unique(y_test)) == len(event_names), "number of unique labels is not the same as number of event names"
+        # mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
+    # elif task_name == TaskName.PreTrain:
+        # x_eeg_train, x_eeg_test = train_test_split(x_eeg, test_size=0.1, random_state=random_seed)
+        # x_eeg_pca_ica_train, x_eeg_pca_ica_test = train_test_split(x_eeg_pca_ica, test_size=0.1, random_state=random_seed)
+        # if not reload_saved_samples:
+        #     with open(os.path.join(export_data_root, 'x_eeg_pca_ica_test.p'), 'wb') as f:
+        #         pickle.dump(x_eeg_pca_ica_test, f)
+        #     with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
+        #         pickle.dump(x_eeg_test, f)
+    mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
+    eeg_num_channels, eeg_num_timesteps = mmarray['eeg'].get_pca_ica_array().shape[1:] if is_pca_ica else mmarray['eeg'].array.shape[1:]
+    eeg_fs = mmarray['eeg'].sampling_rate
     param_grid = ParameterGrid(grid_search_params)
+
     total_training_histories = {}
     models_param = {}
+    locking_performance = {}
+
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
-        if task_name == TaskName.BasicClassification or task_name == TaskName.FineTune:
-            model = HierarchicalTransformer(num_timesteps, num_channels, eeg_fs, num_classes=2,
+        if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
+            model = HierarchicalTransformer(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
                                             depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                             pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                             dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
-            models, training_histories, criterion, last_activation, _encoder, test_auc, test_loss, test_acc = cv_train_test_model(
-                x_eeg_pca_ica_train if is_pca_ica else x_eeg_train, y_train, model,
-                is_plot_conf_matrix=is_plot_confusion_matrix, is_by_channel=is_by_channel,
-                X_test=x_eeg_pca_ica_test if is_pca_ica else x_eeg_test, Y_test=y_test, n_folds=n_folds,
-                test_name=test_name, task_name=task_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'],
-                viz_rebalance=is_plot_rebalanced_eed)  # use un-dimension reduced EEG data
+            models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(
+                                                                                            mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
+                                                                                            is_plot_conf_matrix=is_plot_confusion_matrix,
+                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
 
         elif task_name == TaskName.PreTrain:
-            model = HierarchicalTransformerContrastivePretrain(num_timesteps, num_channels, eeg_fs, num_classes=2,
+            model = HierarchicalTransformerContrastivePretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
                                                                depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                                                pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                                                dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'],

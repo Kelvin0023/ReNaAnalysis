@@ -93,5 +93,5 @@ assert len(np.unique(y_test)) == len(event_names), "number of unique labels"
 pretrained_model = torch.load(model_path)
 pretrained_model.training_mode = 'classification'
 
-models, training_histories_folds, criterion, last_activation, _encoder = cv_train_test_model(x_eeg_train, y_train, pretrained_model, n_folds=n_folds, lr=ht_lr, l2_weight=ht_l2, test_name=TaskName.FineTune.value,
+models, training_histories_folds, criterion, last_activation, _encoder = cv_train_test_model(x_eeg_train, y_train, pretrained_model, n_folds=n_folds, lr=ht_lr, l2_weight=ht_l2, test_name=TaskName.PretrainedClassifierFineTune.value,
                                                                                              X_test=x_eeg_test, Y_test=y_test, is_by_channel=is_by_channel, is_plot_conf_matrix=is_plot_conf_matrix)

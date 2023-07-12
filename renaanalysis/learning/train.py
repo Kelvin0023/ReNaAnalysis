@@ -34,7 +34,7 @@ from renaanalysis.utils.viz_utils import viz_confusion_matrix, visualize_eeg_epo
 
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
-               test_name='', task_name=TaskName.BasicClassification, n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
+               test_name='', task_name=TaskName.TrainClassifier, n_folds=10, exg_resample_rate=200, ht_lr=1e-4, ht_l2=1e-6, ht_output_mode='multi',
                x_eeg_znormed=None, x_eeg_pca_ica=None, x_pupil_znormed=None, n_top_components=20, viz_rebalance=False, pca=None, ica=None, is_plot_conf_matrix=False):
     if x_pupil is None:
         if x_eeg_znormed is None or x_eeg_pca_ica is None:
@@ -106,7 +106,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             model = EEGPupilCNN(eeg_in_shape=x_eeg_pca_ica.shape, pupil_in_shape=x_pupil.shape, num_classes=2)
             model, training_histories, criterion, last_activation, _encoder = cv_train_test_model([x_eeg_pca_ica_train, x_pupil_train], y_train, model, test_name=test_name, verbose=1, n_folds=n_folds)
             # model, training_histories, criterion, label_encoder = train_model_pupil_eeg([x_eeg_pca_ica_train, x_pupil_train], y_train, model, test_name=test_name, n_folds=n_folds)
-            test_auc, test_loss, test_acc = eval(model, [x_eeg_pca_ica_test, x_pupil_test], y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
+            test_auc, test_loss, test_acc = eval_test(model, [x_eeg_pca_ica_test, x_pupil_test], y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
 
         elif model_name == 'HT' or model_name == 'HT-pca-ica':  # this model uses un-dimension reduced EEG data
             num_timesteps = x_eeg_train.shape[2]
@@ -149,7 +149,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
             else:
                 raise Exception(f"Unknown model name {model_name}")
             model, training_histories, criterion, last_activation, _encoder = cv_train_test_model(x_eeg_pca_ica_train, y_train, model, test_name=test_name, verbose=1, n_folds=n_folds)
-            test_auc, test_loss, test_acc = eval(model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
+            test_auc, test_loss, test_acc = eval_test(model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder, test_name='', verbose=1)
 
         folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_val']), mean_min_sublists(training_histories['loss_val'])
         folds_val_auc = mean_max_sublists(training_histories['auc_val'])
@@ -160,7 +160,7 @@ def _run_model(model_name, x_eeg, x_eeg_pca_ica, x_pupil, y, event_names, test_n
     return performance, training_histories
 
 
-def eval(model, X, Y, criterion, last_activation, _encoder, task_name=TaskName.BasicClassification, verbose=1):
+def eval_test(model, X, Y, criterion, last_activation, _encoder, task_name=TaskName.TrainClassifier, verbose=1):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
     if isinstance(X, list):
@@ -172,7 +172,7 @@ def eval(model, X, Y, criterion, last_activation, _encoder, task_name=TaskName.B
 
     if task_name == TaskName.PreTrain:
         test_dataset = dataset_class(X)
-    elif task_name == TaskName.BasicClassification or task_name == TaskName.FineTune:
+    elif task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
         Y = _encoder(Y)
         Y = torch.Tensor(Y).to(device)
         test_dataset = dataset_class(X, Y)
@@ -181,10 +181,10 @@ def eval(model, X, Y, criterion, last_activation, _encoder, task_name=TaskName.B
 
     if task_name == TaskName.PreTrain:
         return _run_one_epoch_self_sup(model, test_dataloader, criterion, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
-    elif task_name == TaskName.BasicClassification or task_name == TaskName.FineTune:
+    elif task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
         return _run_one_epoch_classification(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
-def cv_train_test_model(X, Y, model, test_name="", task_name=TaskName.BasicClassification, n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', is_plot_conf_matrix=False, is_by_channel=False, rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=True, viz_rebalance=False):
+def cv_train_test_model(X, Y, model, test_name="", task_name=TaskName.TrainClassifier, n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', is_plot_conf_matrix=False, is_by_channel=False, rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=True, viz_rebalance=False):
     """
 
     @param X: can be a list of inputs
@@ -368,7 +368,7 @@ def cv_train_test_model(X, Y, model, test_name="", task_name=TaskName.BasicClass
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
-        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval(best_model, X_test, Y_test, criterion, last_activation, _encoder,
+        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval_test(best_model, X_test, Y_test, criterion, last_activation, _encoder,
                                          task_name=task_name, verbose=1)
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
@@ -513,7 +513,7 @@ def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTr
                     break
         train_losses_folds.append(train_mean_losses)
         val_losses_folds.append(val_mean_losses)
-        test_batch_losses_model, test_mean_loss_model = eval(
+        test_batch_losses_model, test_mean_loss_model = eval_test(
             best_model, X_test, None, criterion, None, None,
             task_name=task_name, verbose=1)
         if verbose >= 1:
@@ -526,7 +526,7 @@ def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTr
 
     return models, training_histories_folds, criterion, last_activation
 
-def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.BasicClassification, verbose=1, check_param=1):
+def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
     """
 
     @param model:
@@ -545,7 +545,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     if mode == 'train':
         model.train()
         # determine which layer to require grad
-        if task_name == TaskName.FineTune:
+        if task_name == TaskName.PretrainedClassifierFineTune:
             for param in model.parameters():
                 param.requires_grad = False
             for param in model.transformer.parameters():
