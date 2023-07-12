@@ -42,11 +42,11 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 
-class Attention(nn.Module):
-    def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
+class RecurrentAttention(nn.Module):
+    def __init__(self, embedding_dim, heads=8, dim_head=64, dropout=0.):
         super().__init__()
-        inner_dim = dim_head * heads
-        project_out = not (heads == 1 and dim_head == dim)
+        all_heads_dim = dim_head * heads
+        project_out = not (heads == 1 and dim_head == embedding_dim)
 
         self.heads = heads
         self.scale = dim_head ** -0.5
@@ -54,10 +54,10 @@ class Attention(nn.Module):
         self.attend = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
 
-        self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
+        self.to_qkv = nn.Linear(embedding_dim, all_heads_dim * 3, bias=False)
 
         self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, dim),
+            nn.Linear(all_heads_dim, embedding_dim),
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
@@ -75,15 +75,21 @@ class Attention(nn.Module):
         return self.to_out(out), attention
 
 
-class Transformer(nn.Module):
+class RecurrentSpatialTemporalTransformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
+                PreNorm(dim, RecurrentAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
                 PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
+        # bias terms representing the absolute positional embedding of <positional feature> times the query weights
+        self.bias_time = nn.Parameter(torch.Tensor(self.num_heads, self.dim_head))
+        self.bias_channel = nn.Parameter(torch.Tensor(self.num_heads, self.dim_head))
+
+        # list object to store attention results from past forward passes
+        self.memories = None
 
     def forward(self, x):
         for prenorm_attention, prenorm_feedforward in self.layers:
@@ -92,8 +98,11 @@ class Transformer(nn.Module):
             x = prenorm_feedforward(x) + x
         return x, attention  # last layer
 
+class RecurrentPositionalFeatureTransformer(nn.Module):
+    raise NotImplementedError
 
-class HierarchicalTransformer(nn.Module):
+
+class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
                  patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
         """
@@ -122,23 +131,16 @@ class HierarchicalTransformer(nn.Module):
         self.num_patches = self.num_channels * self.num_windows
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
-        # self.to_patch_embedding = nn.Sequential(
-        #     Rearrange('b c (nw ps) -> b (c nw) (ps)', nw=self.num_windows, ps=self.patch_length),
-        #     nn.Linear(self.patch_length, patch_embed_dim),
-        # )
         self.to_patch_embedding = nn.Sequential(
             Rearrange('b eegc t -> b 1 eegc t', eegc=self.num_channels, t=self.num_timesteps),
             nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
-            # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
         )
-        # self.to_patch_embedding = ConvFeatureExtractionModel(self.extraction_layers, dropout=emb_dropout)
-        # x = torch.randn(10, self.num_channels, self.num_timesteps)
 
         self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
         self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.transformer = Transformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
+        self.transformer = RecurrentSpatialTemporalTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
 
         self.pool = pool
         self.to_latent = nn.Identity()
@@ -152,11 +154,12 @@ class HierarchicalTransformer(nn.Module):
                 nn.LayerNorm(patch_embed_dim),
                 nn.Linear(patch_embed_dim, num_classes))
 
-    def forward(self, x_eeg):
-            x = self.encode(x_eeg)
+
+    def forward(self, x_eeg, channels, start_time):
+            x = self.encode(x_eeg, channels, start_time)
             return self.mlp_head(x)
 
-    def encode(self, x_eeg):
+    def encode(self, x_eeg, channels, start_time):
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 

@@ -26,7 +26,7 @@ class PhysioArray:
     @attribute is_rebalance_by_channel: when supersampling method such as SMOTE is applied as part of rebalancing,
     whether to apply it by channel or not
     """
-    def __init__(self, array: np.ndarray, * meta_info, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name=''):
+    def __init__(self, array: np.ndarray, meta_info: dict, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name=''):
         assert np.all(array.shape[0] == np.array([len(m) for m in meta_info])), 'all metainfo in a physio array must have the same number of trials/epochs'
         self.array = array
         self.meta_info = meta_info
@@ -48,8 +48,8 @@ class PhysioArray:
         data_preprocessor_str = '-'.join(self.data_processor.keys())
         return f'{self.dataset_name}_{self.physio_type}_{data_preprocessor_str}'
 
-    def get_meta_info(self, index):
-        return [m[index] for m in self.meta_info]
+    def get_meta_info(self, index, meta_info_name):
+        return meta_info_name[meta_info_name][index]
 
     def apply_znorm_by_trial(self):
         self.array_preprocessed = z_norm_by_trial(self.array)

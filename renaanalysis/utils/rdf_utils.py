@@ -65,7 +65,7 @@ def rena_epochs_to_class_samples_rdf(rdf, event_names, event_filters, *, rebalan
             raise NotImplementedError(f'data type {data_type} is not implemented')
         if force_square:
             epochs = force_square_epochs(epochs, tmin, tmax)
-        x, y = _epoch_to_samples(epochs, event_ids)
+        x, y, *_ = _epoch_to_samples(epochs, event_ids)
         # x = []
         # y = []
         # for event_name, event_class in event_ids.items():

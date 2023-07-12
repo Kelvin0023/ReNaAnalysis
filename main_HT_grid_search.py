@@ -17,13 +17,14 @@ is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 
 eeg_resample_rate = 200
 
-reject = 'auto'  # whether to apply auto rejection
-data_root = 'D:/Dataset/auditory_oddball'
-# data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
+# reject = 'auto'  # whether to apply auto rejection
+reject = None  # whether to apply auto rejection
+# data_root = 'D:/Dataset/auditory_oddball'
+data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray.p'
 '''
@@ -112,7 +113,7 @@ start_time = time.time()  # record the start time of the analysis
 
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
-    mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs)
+    mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs, random_seed=random_seed)
     mmarray.save(mmarray_path)
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
