@@ -178,12 +178,12 @@ def _epoch_to_samples(epochs, event_ids, picks=None, perserve_order=True, event_
         y = epochs.events[:, 2]
         if event_marker_to_label: y = y - 1
         x = epochs.get_data(picks=picks)
-        if require_metainfo:
-            start_time = epochs.events[:, 0]
-            metadata = epochs.metadata
-        else:
-            start_time = None
-            metadata = None
+    if require_metainfo:
+        start_time = epochs.events[:, 0]
+        metadata = epochs.metadata
+    else:
+        start_time = None
+        metadata = None
 
     return x, y, start_time, metadata
 
@@ -221,7 +221,7 @@ def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rat
     event_ids = {event_name: i for i, event_name in enumerate(event_names)}
     x, y, start_time, metadata = _epoch_to_samples(epochs_clean, event_ids, require_metainfo=True)
 
-    visualize_eeg_epochs(epochs_clean, event_ids, colors, title='EEG Epochs ' + title)
+    visualize_eeg_epochs(epochs_clean, event_ids, colors, eeg_picks=picks, title='EEG Epochs ' + title)
 
     return x, y, start_time, metadata
 

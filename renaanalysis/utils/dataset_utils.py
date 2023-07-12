@@ -213,6 +213,74 @@ def parse_file_tree(directory):
             result[entry.name] = parse_file_tree(entry.path)
     return result
 
+def get_BCI_montage(montage_name, picks=None):
+    '''
+    This function returns the standard BCI montages with the specified picks
+
+    @param montage_name: The name of the montage, e.g. 'standard_1005'
+    @param picks: The list of channels to be kept
+    @return: montage: The montage object
+    '''
+    montage = mne.channels.make_standard_montage(montage_name)
+    if picks is not None:
+        ind = [i for (i, channel) in enumerate(montage.ch_names) if channel in picks]
+        montage.ch_names = [montage.ch_names[x] for x in ind]
+        kept_channel_info = [montage.dig[x + 3] for x in ind]
+        # Keep the first three rows as they are the fiducial points information
+        montage.dig = montage.dig[0:3] + kept_channel_info
+    return montage
+
+def get_BCICIV_samples(data_root, event_viz_colors, eeg_resample_rate=200, ):
+    '''
+    This function returns the samples of the BCICIV dataset
+
+    @param data_root: The root directory of the dataset
+    @return:
+    '''
+    file_tree_dict = parse_file_tree(data_root)
+    kept_channels = ['Fz', 'FC3', 'FC1', 'FCz', 'FC2', 'FC4', 'C5', 'C3', 'C1', 'Cz', 'C2', 'C4', 'C6', 'CP3', 'CP1',
+                     'CPz', 'CP2', 'CP4', 'P1', 'Pz', 'P2', 'POz']
+    channel_mapping = {'EEG-Fz': 'Fz', 'EEG-0': 'FC3', 'EEG-1': 'FC1', 'EEG-2': 'FCz', 'EEG-3': 'FC2', 'EEG-4': 'FC4', 'EEG-5': 'C5', 'EEG-C3': 'C3', 'EEG-6': 'C1', 'EEG-Cz': 'Cz', 'EEG-7': 'C2', 'EEG-C4': 'C4', 'EEG-8': 'C6', 'EEG-9': 'CP3', 'EEG-10': 'CP1', 'EEG-11': 'CPz', 'EEG-12': 'CP2', 'EEG-13': 'CP4', 'EEG-14': 'P1', 'EEG-Pz': 'Pz', 'EEG-15': 'P2', 'EEG-16': 'POz'}
+    mont1020 = get_BCI_montage('standard_1020', picks=kept_channels)
+    event_id_mapping = {'769': 0, '770': 1, '771': 2, '772': 3, '276': 4, '277': 5, '768': 6, '783': 7, '1023': 8, '1072': 9, '32766': 10}
+    subjects = []
+    for file_name, _ in file_tree_dict.items():
+        if 'T' in file_name:
+            raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
+            mne.rename_channels(raw.info, channel_mapping)
+            raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right']) # otherwise the channel names are not consistent with montage
+            events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
+            is_merge_event = 'drop'
+            data = mne.Epochs(raw, events, event_id=event_id, tmin=-0.1, tmax=0.8, baseline=(-0.1, 0), preload=True, event_repeated=is_merge_event)
+            data.set_montage(mont1020)
+            subjects.append(data)
+    all_epochs = mne.concatenate_epochs(subjects)
+    x, y, start_time, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=kept_channels,
+                                                         reject='auto', n_jobs=16,
+                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
+    return x, y, start_time, metadata
+
+
+def get_DEAP_preprocessed_samples(data_root):
+    ratings = pd.read_csv(os.path.join(data_root, 'metadata_csv/participant_ratings.csv'))
+
+    data_directory = os.path.join(data_root, 'data_preprocessed_python')
+    file_tree_dict = parse_file_tree(data_directory)
+    kept_channels = ['Fp1', 'AF3', 'F3', 'F7', 'FC5', 'FC1', 'C3', 'T7', 'CP5', 'CP1', 'P3', 'P7', 'PO3', 'O1', 'Oz', 'Pz', 'Fp2', 'AF4', 'Fz', 'F4', 'F8', 'FC6', 'FC2', 'Cz', 'C4', 'T8', 'CP6', 'CP2', 'P4', 'P8', 'PO4', 'O2']
+    mont1020 = mne.channels.make_standard_montage('standard_1020', picks=kept_channels)
+    subjects_data = []
+    subjects_label = []
+    for file_name, _ in file_tree_dict.items():
+        data = pickle.load(open(os.path.join(data_directory, file_name), 'rb'), encoding='latin1')
+        subjects_data.append(data['data'])
+        subjects_label.append(data['labels'])
+    x = np.concatenate(subjects_data, axis=0)
+    y = np.concatenate(subjects_label, axis=0)
+    subject_id = ratings['Participant_id'].values
+    sorted_ratings = ratings.sort_values(['Participant_id', 'Experiment_id'])
+    start_time = sorted_ratings['Start_time'].values
+    return x, y, subject_id, start_time, mont1020
+
 def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=None, eeg_resample_rate=200, subject_picks=None):
 
     # Read metadata participant rating
@@ -224,6 +292,8 @@ def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=N
     # Parse the file tree and obtain the dictionary representation
     file_tree_dict = parse_file_tree(data_directory)
     idx = 1
+    kept_channels = ['Fp1', 'AF3', 'F7', 'F3', 'FC1', 'FC5', 'T7', 'C3', 'CP1', 'CP5', 'P7', 'P3', 'Pz', 'PO3', 'O1', 'Oz', 'O2', 'PO4', 'P4', 'P8', 'CP6', 'CP2', 'C4', 'T8', 'FC6', 'FC2', 'F4', 'F8', 'AF4', 'Fp2', 'Fz', 'Cz']
+    mont1020 = mne.channels.make_standard_montage('standard_1020', picks=kept_channels)
     subjects = []
     event_name_map = {'HighValanceHighArousal': 0, 'HighValanceLowArousal': 1, 'LowValanceHighArousal': 2, 'LowValanceLowArousal': 3}
     for file_name, _ in file_tree_dict.items():
@@ -253,7 +323,8 @@ def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=N
         idx += 1
         data = mne.Epochs(raw, eventID_mat, event_id=event_dict_this_run, metadata=metadata, tmin=-0.1, tmax=5, preload=True, baseline=(-0.1, 0))
         subjects.append(data)
-    x, y, start_time, metadata = epochs_to_class_samples(subjects, list(event_viz_colors.keys()), picks=picks,
+    all_epochs = mne.concatenate_epochs(subjects)
+    x, y, start_time, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=picks,
                                                          reject='auto', n_jobs=16,
                                                          eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
 
@@ -368,6 +439,8 @@ def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epoc
 
     print(f"Load data took {time.time() - start_time} seconds")
     return x, y, start_time, metadata, event_viz_colors
+
+
 
 def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, exg_resample_rate, eyetracking_resample_srate, locking_name='VS-I-VT-Head', participant=None, session=None):
     """
