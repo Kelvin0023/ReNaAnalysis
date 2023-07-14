@@ -183,6 +183,8 @@ def _epoch_to_samples(epochs, event_ids, picks=None, perserve_order=True, event_
     else:
         start_time = None
         metadata = None
+    if len(event_ids.keys()) == 1:
+        y = None
 
     return x, y, start_time, metadata
 

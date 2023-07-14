@@ -335,8 +335,20 @@ def get_DEAP_epoch_label(ratings_data, k):
         return 3
 
 
-def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, picks, colors, eeg_resample_rate, subject_picks=None):
+def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epoch_length=4, picks='eeg', reject='auto', eeg_resample_rate=200, subject_picks=None, subject_group_picks=None):
+    '''
 
+    @param data_root: The data root of the TUH EEG Corpus
+    @param export_data_root: data root of the loaded data samples to be stored
+    @param epoch_length: Specify the length of the epoch in seconds
+    @param picks: List of channels to be picked
+    @param eeg_resample_rate: Resample rate of the EEG data
+    @param subject_picks: If is not None, only the subjects in the list will be picked. If None, all subjects will be picked.
+    @return:
+    '''
+    event_viz_colors = {
+        "standard": "red"
+    }
     # Specify the root directory of the file tree
     root_directory = data_root
 
@@ -344,66 +356,37 @@ def get_TUHG_samples(data_root, export_data_root, epoch_length, event_names, pic
     file_tree_dict = parse_file_tree(root_directory)
     subjects = {}
     for subject_group_id, subject_group in file_tree_dict.items():
-        subjects[subject_group_id] = {}
-        for subject_name, subject in subject_group.items():
-            subjects[subject_group_id][subject_name] = {}
-            if subject_picks is None:
-                for session_name, session in subject.items():
-                    subjects[subject_group_id][subject_name][session_name] = {}
-                    for montage_type_name, montage_type in session.items():
-                        subjects[subject_group_id][subject_name][session_name][montage_type_name] = {}
-                        for data_file_name, _ in montage_type.items():
-                            metadata_dict = {'subject_group_id': [], 'subject_name': [], 'session_name': [], 'montage_type_name': []}
-                            raw = mne.io.read_raw_edf(os.path.join(data_root,
-                                                                   f'{subject_group_id}/{subject_name}/{session_name}/{montage_type_name}/{data_file_name}'),
-                                                      preload=True)
-                            num_epochs = math.ceil(raw.__len__()/(epoch_length*raw.info['sfreq']))
-                            eventID_mat = np.zeros((num_epochs, 3))
-                            for k in range(num_epochs):
-                                eventID_mat[k, 0] = k * epoch_length
-                                eventID_mat[k, 2] = 0
-                                metadata_dict['subject_group_id'].append(subject_group_id)
-                                metadata_dict['subject_name'].append(subject_name)
-                                metadata_dict['session_name'].append(session_name)
-                                metadata_dict['montage_type_name'].append(montage_type_name)
-                            metadata = pd.DataFrame(metadata_dict)
-                            data = mne.Epochs(raw, eventID_mat, {0: 'standard'}, metadata=metadata, tmin=0, tmax=epoch_length*raw.info['sfreq'], preload=True)
-                            subjects[subject_group_id][subject_name][session_name][montage_type_name][data_file_name] = data
-            elif subject_name in subject_picks:
-                for session_name, session in subject.items():
-                    subjects[subject_group_id][subject_name][session_name] = {}
-                    for montage_type_name, montage_type in session.items():
-                        subjects[subject_group_id][subject_name][session_name][montage_type_name] = {}
-                        for data_file_name, _ in montage_type.items():
-                            metadata_dict = {'subject_group_id': [], 'subject_name': [], 'session_name': [],
-                                             'montage_type_name': []}
-                            raw = mne.io.read_raw_edf(os.path.join(data_root,
-                                                                   f'{subject_group_id}/{subject_name}/{session_name}/{montage_type_name}/{data_file_name}'),
-                                                      preload=True)
-                            num_epochs = math.ceil(raw.__len__() / (epoch_length * raw.info['sfreq']))
-                            eventID_mat = np.zeros((num_epochs, 3), dtype='int')
-                            for k in range(num_epochs):
-                                eventID_mat[k, 0] = int(k * epoch_length * raw.info['sfreq'])
-                                eventID_mat[k, 2] = 0
-                                metadata_dict['subject_group_id'].append(subject_group_id)
-                                metadata_dict['subject_name'].append(subject_name)
-                                metadata_dict['session_name'].append(session_name)
-                                metadata_dict['montage_type_name'].append(montage_type_name)
-                            metadata = pd.DataFrame(metadata_dict)
-                            data = mne.Epochs(raw, eventID_mat, {'standard': 0}, metadata=metadata, tmin=0,
-                                              tmax=epoch_length, preload=True, baseline=(0, 0))
-                            subjects[subject_group_id][subject_name][session_name][montage_type_name][data_file_name] = data
+        if subject_group_picks is None or subject_group_id in subject_group_picks:
+            for subject_name, subject in subject_group.items():
+                if subject_picks is None or subject_name in subject_picks:
+                    for session_name, session in subject.items():
+                        for montage_type_name, montage_type in session.items():
+                            for data_file_name, _ in montage_type.items():
+                                metadata_dict = {'subject_group_id': [], 'subject_name': [], 'session_name': [],
+                                                 'montage_type_name': []}
+                                raw = mne.io.read_raw_edf(os.path.join(data_root,
+                                                                       f'{subject_group_id}/{subject_name}/{session_name}/{montage_type_name}/{data_file_name}'),
+                                                          preload=True)
+                                num_epochs = math.ceil(raw.__len__() / (epoch_length * raw.info['sfreq']))
+                                eventID_mat = np.zeros((num_epochs, 3), dtype='int')
+                                for k in range(num_epochs):
+                                    eventID_mat[k, 0] = int(k * epoch_length * raw.info['sfreq'])
+                                    metadata_dict['subject_group_id'].append(subject_group_id)
+                                    metadata_dict['subject_name'].append(subject_name)
+                                    metadata_dict['session_name'].append(session_name)
+                                    metadata_dict['montage_type_name'].append(montage_type_name)
+                                metadata = pd.DataFrame(metadata_dict)
+                                data = mne.Epochs(raw, eventID_mat, {'standard': 0}, metadata=metadata, tmin=0,
+                                                  tmax=epoch_length, preload=True, baseline=(0, 0))
+                                if len(data.info['ch_names']) not in subjects.keys():
+                                    subjects[len(data.info['ch_names'])] = []
+                                subjects[len(data.info['ch_names'])].append(data)
     # pickle.dump(subjects, open(export_data_root, 'wb'))
-    all_epochs = []
-    for subject_group_id, subject_group in subjects.items():
-        for subject_name, subject in subject_group.items():
-            for session_name, session in subject.items():
-                for montage_type_name, montage_type in session.items():
-                    for _, data in montage_type.items():
-                        all_epochs.append(data)
-    all_epochs = mne.concatenate_epochs(all_epochs)
-    x, y, start_time, metadata = epochs_to_class_samples(all_epochs, event_names, picks=picks, reject='auto', n_jobs=16,
-                                                         eeg_resample_rate=eeg_resample_rate, colors=colors)
+    for num_channels, data_list in subjects.items():
+        subjects[num_channels] = mne.concatenate_epochs(data_list)
+    x, y, start_time, metadata = epochs_to_class_samples(subjects[31], list(event_viz_colors.keys()), picks=picks, reject='auto', n_jobs=16,
+                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
+    y = None
     return x, y, start_time, metadata
 
 def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epochs, reject, eeg_resample_rate, picks='eeg'):
@@ -509,7 +492,7 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
 
 def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_epochs=False, reject='auto',
                 eeg_resample_rate=200, is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
-                eyetracking_resample_srate=20, rebalance_method='SMOTE'):
+                eyetracking_resample_srate=20, rebalance_method='SMOTE', subject_picks=None, subject_group_picks=None):
     """
 
     @param is_regenerate_epochs: whether to regenerate epochs or not, if set to False, the function will attempt
@@ -532,6 +515,8 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
         x, y, event_viz_colors = get_rena_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, eyetracking_resample_srate)
         physio_arrays = [PhysioArray(x[0], sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name),
               PhysioArray(x[1], sampling_rate=eyetracking_resample_srate, physio_type=pupil_name, dataset_name=dataset_name)]
+    elif dataset_name == "TUH":
+        x, y, start_time, metadata = get_TUHG_samples(data_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=eeg_resample_rate, subject_picks=subject_picks, subject_group_picks=subject_group_picks)
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 
