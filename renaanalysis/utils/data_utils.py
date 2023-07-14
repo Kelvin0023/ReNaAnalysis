@@ -6,7 +6,7 @@ from mne.decoding import UnsupervisedSpatialFilter
 from sklearn.decomposition import PCA, FastICA
 from sklearn.metrics import confusion_matrix
 
-from renaanalysis.params.params import eeg_montage
+from renaanalysis.params.params import eeg_montage, eeg_picks
 from renaanalysis.utils.utils import rescale_merge_exg, visualize_eeg_epochs
 
 
@@ -178,15 +178,16 @@ def _epoch_to_samples(epochs, event_ids, picks=None, perserve_order=True, event_
         if event_marker_to_label: y = y - 1
         x = epochs.get_data(picks=picks)
     if require_metainfo:
-        start_time = epochs.events[:, 0]
-        metadata = epochs.metadata
+        metadata = dict([(k, np.array(v)) for k, v in epochs.metadata.items()])
+        channel_positions = epochs.get_montage().get_positions()['ch_pos']
+        epoch_channel_positions = np.array([channel_positions[ch_name] for ch_name in epochs.ch_names])
+        metadata['channel_positions'] = np.repeat(epoch_channel_positions[np.newaxis, :, :], len(epochs), axis=0)
     else:
-        start_time = None
         metadata = None
     if len(event_ids.keys()) == 1:
         y = None
 
-    return x, y, start_time, metadata
+    return x, y, metadata
 
 def force_square_epochs(epochs, tmin, tmax):
     # get the number of events overall, so we know what the number of time points should be to make the data matrix square
@@ -196,7 +197,9 @@ def force_square_epochs(epochs, tmin, tmax):
     return square_epochs
 
 
-def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rate=128, n_jobs=1, reject='auto', lots='sanity-check', colors=None, title='', random_seed=None):
+def epochs_to_class_samples(epochs, event_names, *, picks=None,
+                            eeg_viz_picks =eeg_picks,
+                            eeg_resample_rate=128, n_jobs=1, reject='auto', plots='sanity-check', colors=None, title='', random_seed=None):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
@@ -220,11 +223,10 @@ def epochs_to_class_samples(epochs, event_names, *, picks=None, eeg_resample_rat
     else:
         epochs_clean = epochs
     event_ids = {event_name: i for i, event_name in enumerate(event_names)}
-    x, y, start_time, metadata = _epoch_to_samples(epochs_clean, event_ids, require_metainfo=True)
+    x, y, metadata = _epoch_to_samples(epochs_clean, event_ids, require_metainfo=True)
+    visualize_eeg_epochs(epochs_clean, event_ids, colors, eeg_picks=eeg_viz_picks, title='EEG Epochs ' + title)
 
-    visualize_eeg_epochs(epochs_clean, event_ids, colors, eeg_picks=picks, title='EEG Epochs ' + title)
-
-    return x, y, start_time, metadata
+    return x, y, metadata
 
 
 

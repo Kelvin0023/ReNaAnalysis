@@ -22,9 +22,10 @@ is_regenerate_epochs = False
 eeg_resample_rate = 200
 
 reject = 'auto'  # whether to apply auto rejection
+# reject = None  # whether to apply auto rejection
+# data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 data_root = 'D:/Dataset/auditory_oddball'
 # data_root = 'J:\TUEH\edf'
-# data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray.p'
 task_name = TaskName.TrainClassifier
@@ -114,7 +115,7 @@ start_time = time.time()  # record the start time of the analysis
 
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
-    mmarray = get_dataset(dataset_name, epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs, subject_picks=subject_pick, subject_group_picks=subject_group_picks)
+    mmarray = get_dataset(dataset_name, epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs, subject_picks=subject_pick, subject_group_picks=subject_group_picks, random_seed=random_seed)
     mmarray.save(mmarray_path)
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
