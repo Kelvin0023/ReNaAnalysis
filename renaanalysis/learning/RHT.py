@@ -1,6 +1,7 @@
 import copy
 import os
 import pickle
+import warnings
 
 import torch
 from torch import nn
@@ -43,12 +44,12 @@ class FeedForward(nn.Module):
 
 
 class RecurrentAttention(nn.Module):
-    def __init__(self, embedding_dim, heads=8, dim_head=64, dropout=0.):
+    def __init__(self, embedding_dim, num_heads=8, dim_head=64, dropout=0.):
         super().__init__()
-        all_heads_dim = dim_head * heads
-        project_out = not (heads == 1 and dim_head == embedding_dim)
+        all_heads_dim = dim_head * num_heads
+        project_out = not (num_heads == 1 and dim_head == embedding_dim)
 
-        self.heads = heads
+        self.heads = num_heads
         self.scale = dim_head ** -0.5
 
         self.attend = nn.Softmax(dim=-1)
@@ -61,7 +62,7 @@ class RecurrentAttention(nn.Module):
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
-    def forward(self, x):
+    def forward(self, x, bias_time_e, bias_time_r, bias_channel_r, bias_channel_e):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
 
@@ -76,30 +77,39 @@ class RecurrentAttention(nn.Module):
 
 
 class RecurrentSpatialTemporalTransformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
+    """
+
+    """
+    def __init__(self, dim, depth, num_heads, dim_head, feedforward_mlp_dim, dropout=0.):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                PreNorm(dim, RecurrentAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
+                PreNorm(dim, RecurrentAttention(dim, num_heads=num_heads, dim_head=dim_head, dropout=dropout)),
                 PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
+        self.num_heads = num_heads
+        self.dim_head = dim_head
         # bias terms representing the absolute positional embedding of <positional feature> times the query weights
-        self.bias_time = nn.Parameter(torch.Tensor(self.num_heads, self.dim_head))
-        self.bias_channel = nn.Parameter(torch.Tensor(self.num_heads, self.dim_head))
-
+        # these bias terms are shared across all layers
+        self.bias_time_e = nn.Parameter(torch.Tensor(self.num_heads, self.dim_head))
+        self.bias_time_r = nn.Parameter(torch.Tensor(self.num_heads, self.dim_head))
+        self.bias_channel_r = nn.Parameter(torch.Tensor(self.num_heads, self.dim_head))
+        self.bias_channel_e = nn.Parameter(torch.Tensor(self.num_heads, self.dim_head))
         # list object to store attention results from past forward passes
         self.memories = None
 
     def forward(self, x):
         for prenorm_attention, prenorm_feedforward in self.layers:
-            out, attention = prenorm_attention(x)
+            out, attention = prenorm_attention(x, bias_time_e=self.bias_time_e, bias_time_r=self.bias_time_r, bias_channel_r=self.bias_channel_r, bias_channel_e=self.bias_channel_e)
             x = out + x
             x = prenorm_feedforward(x) + x
         return x, attention  # last layer
 
 class RecurrentPositionalFeatureTransformer(nn.Module):
-    raise NotImplementedError
+    def __init__(self):
+        super().__init__()
+        raise NotImplementedError
 
 
 class RecurrentHierarchicalTransformer(nn.Module):
@@ -155,11 +165,17 @@ class RecurrentHierarchicalTransformer(nn.Module):
                 nn.Linear(patch_embed_dim, num_classes))
 
 
-    def forward(self, x_eeg, channels, start_time):
-            x = self.encode(x_eeg, channels, start_time)
-            return self.mlp_head(x)
+    def forward(self, x_eeg, meta_info):
+        """
 
-    def encode(self, x_eeg, channels, start_time):
+        @param x_eeg:
+        @param meta_info: meta_info is a dictionary
+        @return:
+        """
+        x = self.encode(x_eeg, meta_info)
+        return self.mlp_head(x)
+
+    def encode(self, x_eeg, meta_info):
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
@@ -181,3 +197,6 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
     def prepare_data(self, x):
         return x
+
+    def reset(self):
+        warnings.warn("RHT.reset(): To be implemented")

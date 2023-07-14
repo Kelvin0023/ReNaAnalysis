@@ -1,4 +1,7 @@
+import itertools
+import math
 import pickle
+import warnings
 from typing import List
 
 import numpy as np
@@ -27,7 +30,7 @@ class PhysioArray:
     whether to apply it by channel or not
     """
     def __init__(self, array: np.ndarray, meta_info: dict, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name=''):
-        assert np.all(array.shape[0] == np.array([len(m) for m in meta_info])), 'all metainfo in a physio array must have the same number of trials/epochs'
+        assert np.all(array.shape[0] == np.array([len(m) for m in meta_info.values()])), 'all metainfo in a physio array must have the same number of trials/epochs'
         self.array = array
         self.meta_info = meta_info
         self.sampling_rate = sampling_rate
@@ -42,14 +45,17 @@ class PhysioArray:
         return self.array[item]
 
     def __len__(self):
-        return len(self.array[0])
+        return len(self.array)
 
     def __str__(self):
         data_preprocessor_str = '-'.join(self.data_processor.keys())
         return f'{self.dataset_name}_{self.physio_type}_{data_preprocessor_str}'
 
-    def get_meta_info(self, index, meta_info_name):
-        return meta_info_name[meta_info_name][index]
+    def get_meta_info_by_name(self, meta_info_name):
+        return self.meta_info[meta_info_name]
+
+    def get_meta_info(self, index):
+        return {k: v[index] for k, v in self.meta_info.items()}
 
     def apply_znorm_by_trial(self):
         self.array_preprocessed = z_norm_by_trial(self.array)
@@ -128,6 +134,9 @@ class MultiModalArrays:
     def __str__(self):
         return '-'.join([str(parray) for parray in self.physio_arrays])
 
+    def get_num_samples(self):
+        return len(self.physio_arrays[0])
+
     def get_rebalanced_dataloader_fold(self, fold_index, batch_size, random_seed=None, device=None):
         """
         get the dataloader for a given fold
@@ -173,6 +182,9 @@ class MultiModalArrays:
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
         return train_dataloader, val_dataloader
+
+    # def get_ordered_dataloader_fold(self, fold_index, batch_size, val_size, test_size, random_seed=None, device=None):
+
 
     def training_val_split(self, n_folds, val_size=0.1, random_seed=None):
         """
@@ -232,15 +244,26 @@ class MultiModalArrays:
             x_test = x_test[0]
         return x_test, y_test
 
-    def get_random_sample(self, preprocessed=False, convert_to_tensor=False, device=None):
+    def get_random_sample(self, preprocessed=False, convert_to_tensor=False, device=None, include_metainfo=False):
         """
         @return: a random sample from each of the physio arrays
         """
         random_sample_index = np.random.randint(0, len(self.physio_arrays[0]))
         rtn = [(parray.array[random_sample_index][None, :] if not preprocessed else parray.array_preprocessed[random_sample_index]) for parray in self.physio_arrays]
+
+        meta_info = None
+        if include_metainfo:
+            meta_info = [parray.get_meta_info(random_sample_index) for parray in self.physio_arrays]
+            meta_info = meta_info if len(meta_info) > 1 else meta_info[0]
+
         if convert_to_tensor:
             rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn]
-        return rtn if len(rtn) > 1 else rtn[0]
+        rtn = rtn if len(rtn) > 1 else rtn[0]
+
+        if include_metainfo:
+            return rtn, meta_info
+        else:
+            return rtn
 
     def get_class_weight(self, convert_to_tensor=False, device=None):
         assert self.labels_array is not None, "Class weight needs labels array but labels is not provided"
@@ -254,7 +277,7 @@ class MultiModalArrays:
     def encode_labels(self):
         pass  # TODO
 
-    def get_label_encoder_criterion_for_model(self, model, device=None):
+    def get_label_encoder_criterion_for_model(self, model, device=None, reset_model=False, include_metainfo=False):
         """
         this function must be called
 
@@ -263,10 +286,11 @@ class MultiModalArrays:
         @param class_weights:
         @return:
         """
-        rand_input = self.get_random_sample(convert_to_tensor=True, device=device)
+        rand_input = self.get_random_sample(convert_to_tensor=True, device=device, include_metainfo=include_metainfo)
         with torch.no_grad():
             model.eval()
-            output_shape = model.to(device)(rand_input).shape[1]
+            output_shape = model.to(device)(*rand_input if isinstance(rand_input, tuple) else rand_input).shape[1]
+            if reset_model: model.reset()
 
         if output_shape == 1:
             assert len(np.unique(self.labels_array)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
@@ -294,6 +318,82 @@ class MultiModalArrays:
         """
         self._encoder = None
         pickle.dump(self, open(path, 'wb'))
+
+    def training_val_test_split_ordered_by_subject_run(self, n_folds, batch_size, val_size, test_size, random_seed=None):
+        """
+        generate the sample indices for each fold and each batch, for train, val, and test
+        consecutive batches have consecutive samples, for example:
+            batch1: [1, 40, 80, 121]
+            batch2: [2, 41, 81, 122]
+            batch3: [3, 42, 82, 123]
+        the method go through each participant and each run, finds a random starting index for test and val. Then get
+        consecutive samples for each test and val batches. The remaining samples are for training. So for each participant&run,
+        the training data will have at most two points where it's not consecutive. That's where the val and test data are.
+
+        also note for each participant&run with n_sample samples, we generate up to < n_sample // batch_size > batches.
+        so any residue samples are ignored. Using a smaller batch size will result in more batches and less residue samples.
+
+        @param n_folds:
+        @param batch_size:
+        @param val_size:
+        @param test_size:
+        @param random_seed:
+        @return:
+        """
+        np.random.seed(random_seed)
+        subject_meta = self.physio_arrays[0].get_meta_info_by_name('subject_id')
+        run_meta = self.physio_arrays[0].get_meta_info_by_name('run')
+
+        all_sample_indices = np.arange(self.get_num_samples())
+        subject_run_samples = {(subject, run): all_sample_indices[np.logical_and(subject_meta==subject, run_meta==run)] for subject, run in itertools.product(np.unique(subject_meta), np.unique(run_meta))}
+
+        test_batch_sample_indices = [np.empty((0, 8), dtype=int) for i in range(n_folds)]
+        val_batch_sample_indices = [np.empty((0, 8), dtype=int) for i in range(n_folds)]
+        train_batch_sample_indices = [np.empty((0, 8), dtype=int) for i in range(n_folds)]
+
+        for (subject, run), sample_indices in subject_run_samples.items():
+            n_batches = len(sample_indices) // batch_size
+            if n_batches == 0:
+                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
+                continue
+            test_n_batches = math.floor(test_size * n_batches)
+            val_n_batches = math.floor(val_size * n_batches)
+            if test_n_batches == 0 or val_n_batches == 0:
+                warnings.warn(f"Subject {subject} run {run} have too few samples to create enough batches for test and val. {n_batches =}")
+                continue
+            batch_indices = sample_indices[:n_batches * batch_size].reshape(batch_size, -1).T  # n_batches x batch_size
+            print(f"Generated {n_batches} batches for subject {subject} run {run}. Last {len(sample_indices) - batch_size * n_batches} samples are ignored.")
+            for fold in range(n_folds):
+                test_start_index = np.random.randint(0, n_batches - test_n_batches)
+                test_batch_indices = np.arange(test_start_index, test_start_index + test_n_batches)
+                val_start_index = np.random.choice([np.random.randint(0, test_start_index - val_n_batches)] if test_start_index > val_n_batches else [] +
+                                                    [np.random.randint(test_start_index + test_n_batches, n_batches - val_n_batches)] if test_start_index + test_n_batches < n_batches - val_n_batches else [])
+                val_batch_indices = np.arange(val_start_index, val_start_index + val_n_batches)
+
+                test_batch_sample_indices[fold] = np.concatenate([test_batch_sample_indices[fold] , batch_indices[test_batch_indices]])
+                val_batch_sample_indices[fold] = np.concatenate([val_batch_sample_indices[fold], batch_indices[val_batch_indices]])
+                train_batch_sample_indices[fold] = np.concatenate([train_batch_sample_indices[fold], np.delete(batch_indices, np.concatenate([val_batch_indices, test_batch_indices]), axis=0)])
+        test_batch_sample_indices = np.array(test_batch_sample_indices)
+        val_batch_sample_indices = np.array(val_batch_sample_indices)
+        train_batch_sample_indices = np.array(train_batch_sample_indices)
+
+
+
+    # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
+    #     n_batches = self.get_num_samples() // batch_size
+    #     test_n_batches = math.floor(test_size * n_batches)
+    #     test_start_index = np.random.randint(0, n_batches - test_n_batches)
+    #     test_batch_indices = np.arange(test_start_index, test_start_index + test_n_batches)
+    #
+    #     val_n_batches = math.floor(val_size * n_batches)
+    #     val_start_index = np.random.choice([np.random.randint(0, test_start_index - val_n_batches) if test_start_index > val_n_batches else [], np.random.randint(test_start_index + test_n_batches, n_batches - val_n_batches)])
+    #     val_batch_indices = np.arange(val_start_index, val_start_index + val_n_batches)
+    #
+    #     batch_indices = np.arange(n_batches * batch_size).reshape(batch_size, -1).T  # n_batches x batch_size
+    #
+    #     val_sample_indices = batch_indices[val_batch_indices]
+        # self.physio_arrays[0][]
+
 
 def load_mmarray(path):
     """
