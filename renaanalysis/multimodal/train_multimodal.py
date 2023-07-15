@@ -5,13 +5,14 @@ import numpy as np
 import torch
 from torch.optim import lr_scheduler
 
-from renaanalysis.learning.train import _run_one_epoch_classification, eval_test
+from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, ContrastiveLoss
+from renaanalysis.learning.train import _run_one_epoch_classification, eval_test, _run_one_epoch_self_sup
 from renaanalysis.params.params import batch_size, epochs, patience, TaskName
 from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_history
 
 
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
-                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size = 0.1,
+                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1,
                                      lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None):
     """
 
@@ -40,7 +41,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
-        train_dataloader, val_dataloader = mmarray.get_rebalanced_dataloader_fold(f_index, batch_size=batch_size, random_seed=random_seed, device=device)
+        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
@@ -131,6 +132,102 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
 
     return models, training_histories_folds, criterion, last_activation, test_auc, test_loss, test_acc
 
+def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=TaskName.PreTrain, n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6,
+                            lr_scheduler_type='exponential', temperature=1, n_neg=20, val_size=0.1, is_plot_conf_matrix=False,
+                            plot_histories=True, random_seed=None):
+
+    """
+
+    @param X: can be a list of inputs
+    @param Y:
+    @param model:
+    @param test_name:
+    @param n_folds:
+    @param lr:
+    @param verbose:
+    @param l2_weight:
+    @param lr_scheduler: can be 'exponential' or 'cosine' or None
+    @return:
+    """
+    if random_seed is None:
+        warnings.warn("self_supervised_pretrain_multimodal: random_seed is None, which means the results are not reproducible.")
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+
+    assert isinstance(model, HierarchicalTransformerContrastivePretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
+    criterion = ContrastiveLoss(temperature, n_neg)
+    X_test, _ = mmarray.get_test_set()
+
+    last_activation = None
+
+    train_losses_folds = []
+    val_losses_folds = []
+    models = []
+
+    model_copy = None
+    test_loss = []
+    mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
+    for f_index in range(n_folds):
+        model_copy = copy.deepcopy(model)
+        model_copy = model_copy.to(device)
+
+        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device)
+
+        optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
+        # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
+        scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+
+        patience_counter = 0
+
+        train_mean_losses = []
+        val_mean_losses = []
+        best_loss = np.inf
+        for epoch in range(epochs):
+            # prev_para = []
+            # for param in model_copy.parameters():
+            #     prev_para.append(param.cpu().detach().numpy())
+            train_batch_losses, train_mean_loss = _run_one_epoch_self_sup(
+                model_copy, train_dataloader, criterion, optimizer, mode='train', device=device,
+                l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            scheduler.step()
+            val_batch_losses, val_mean_loss = _run_one_epoch_self_sup(
+                model_copy, val_dataloader, criterion, optimizer, mode='val', device=device,
+                l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+
+            train_mean_losses.append(train_mean_loss)
+            val_mean_losses.append(val_mean_loss)
+
+            if verbose >= 1:
+                print(
+                    "Fold {}, Epoch {}: val loss = {:.16f}, train loss = {:.16f}, patience left {}".format(
+                        f_index, epoch, val_mean_loss, train_mean_loss, patience - patience_counter))
+            if val_mean_loss < best_loss:
+                if verbose >= 1: print(
+                    'Best validation loss improved from {} to {}'.format(best_loss, val_mean_loss))
+                # best_loss = val_losses[-1]
+                best_loss = val_mean_loss
+                patience_counter = 0
+                best_model = copy.deepcopy(model_copy)
+            else:
+                patience_counter += 1
+                if patience_counter > patience:
+                    if verbose >= 1: print(
+                        f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                    break
+        train_losses_folds.append(train_mean_losses)
+        val_losses_folds.append(val_mean_losses)
+        test_batch_losses_model, test_mean_loss_model = eval_test(
+            best_model, X_test, None, criterion, None, None,
+            task_name=task_name, verbose=1)
+        if verbose >= 1:
+            print("Tested Fold {}: test mean loss = {:.8f}".format(f_index, test_mean_loss_model))
+        test_loss.append(test_mean_loss_model)
+        models.append(best_model)
+
+    training_histories_folds = {'loss_train': train_losses_folds, 'loss_val': val_losses_folds, 'loss_test': test_loss}
+
+
+    return models, training_histories_folds, criterion, last_activation
 
 def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size = 0.1, test_size=0.1,

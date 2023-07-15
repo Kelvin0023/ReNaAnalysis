@@ -184,6 +184,8 @@ def _epoch_to_samples(epochs, event_ids, picks=None, perserve_order=True, event_
         metadata['channel_positions'] = np.repeat(epoch_channel_positions[np.newaxis, :, :], len(epochs), axis=0)
     else:
         metadata = None
+    if len(event_ids.keys()) == 1:
+        y = None
 
     return x, y, metadata
 

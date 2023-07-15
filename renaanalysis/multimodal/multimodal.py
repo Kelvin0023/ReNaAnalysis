@@ -12,6 +12,8 @@ from sklearn.preprocessing import LabelEncoder
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 
+from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, HierarchicalTransformer, \
+    ContrastiveLoss
 from renaanalysis.learning.MutiInputDataset import MultiInputDataset
 from renaanalysis.multimodal.BatchIterator import ordered_batch_iterator
 from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, rebalance_classes
@@ -161,7 +163,7 @@ class MultiModalArrays:
     def get_num_samples(self):
         return len(self.physio_arrays[0])
 
-    def get_rebalanced_dataloader_fold(self, fold_index, batch_size, random_seed=None, device=None):
+    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None):
         """
         get the dataloader for a given fold
         this function must be called after training_val_split
@@ -169,38 +171,55 @@ class MultiModalArrays:
         @param random_seed:
         @return:
         """
-        assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
-        assert self._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
-        training_indices, val_indices = self.training_val_split_indices[fold_index]
-        x_train = []
-        x_val = []
-        y_train = self.labels_array[training_indices]
-        y_val = self.labels_array[val_indices]
-        rebalanced_labels = []
-        for parray in self.physio_arrays:
-            this_x_train, this_y_train = parray[training_indices], y_train
-            if self.rebalance_method == 'SMOTE':
-                this_x_train, this_y_train = rebalance_classes(parray[training_indices], y_train, by_channel=parray.is_rebalance_by_channel, random_seed=random_seed)
-            x_train.append(torch.Tensor(this_x_train).to(device))
-            rebalanced_labels.append(this_y_train)
-            x_val.append(torch.Tensor(parray[val_indices]).to(device))
-        assert np.all([label_set == rebalanced_labels[0] for label_set in rebalanced_labels])
-        y_train = rebalanced_labels[0]
+        if self.labels_array is not None:
+        # assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
+            assert self._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
+            training_indices, val_indices = self.training_val_split_indices[fold_index]
+            x_train = []
+            x_val = []
+            y_train = self.labels_array[training_indices]
+            y_val = self.labels_array[val_indices]
+            rebalanced_labels = []
+            for parray in self.physio_arrays:
+                this_x_train, this_y_train = parray[training_indices], y_train
+                if self.rebalance_method == 'SMOTE' and is_rebalance_training:
+                    this_x_train, this_y_train = rebalance_classes(parray[training_indices], y_train, by_channel=parray.is_rebalance_by_channel, random_seed=random_seed)
+                x_train.append(torch.Tensor(this_x_train).to(device))
+                rebalanced_labels.append(this_y_train)
+                x_val.append(torch.Tensor(parray[val_indices]).to(device))
+            assert np.all([label_set == rebalanced_labels[0] for label_set in rebalanced_labels])
+            y_train = rebalanced_labels[0]
 
-        y_train_encoded = self._encoder(y_train)
-        y_val_encoded = self._encoder(y_val)
+            y_train_encoded = self._encoder(y_train)
+            y_val_encoded = self._encoder(y_val)
 
-        y_train_encoded = torch.Tensor(y_train_encoded)
-        y_val_encoded = torch.Tensor(y_val_encoded)
+            y_train_encoded = torch.Tensor(y_train_encoded)
+            y_val_encoded = torch.Tensor(y_val_encoded)
 
-        if len(x_train) == 1:
-            dataset_class = TensorDataset
-            x_train = x_train[0]
-            x_val = x_val[0]
+            if len(x_train) == 1:
+                dataset_class = TensorDataset
+                x_train = x_train[0]
+                x_val = x_val[0]
+            else:
+                dataset_class = MultiInputDataset
+            train_dataset = dataset_class(x_train, y_train_encoded)
+            val_dataset = dataset_class(x_val, y_val_encoded)
         else:
-            dataset_class = MultiInputDataset
-        train_dataset = dataset_class(x_train, y_train_encoded)
-        val_dataset = dataset_class(x_val, y_val_encoded)
+            warnings.warn('labels array is None, make sure label is not needed for this model')
+            training_indices, val_indices = self.training_val_split_indices[fold_index]
+            x_train = []
+            x_val = []
+            for parray in self.physio_arrays:
+                x_train.append(torch.Tensor(parray[training_indices]).to(device))
+                x_val.append(torch.Tensor(parray[val_indices]).to(device))
+            if len(x_train) == 1:
+                dataset_class = TensorDataset
+                x_train = x_train[0]
+                x_val = x_val[0]
+            else:
+                dataset_class = MultiInputDataset
+            train_dataset = dataset_class(x_train)
+            val_dataset = dataset_class(x_val)
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
@@ -254,16 +273,20 @@ class MultiModalArrays:
         """
         assert self.test_indices is not None, 'test indices have not been set, please call train_test_split first'
         x_test = []
-        y_test = self.labels_array[self.test_indices]
         for parray in self.physio_arrays:
             if convert_to_tensor:
                 x_test.append(torch.Tensor(parray[self.test_indices]).to(device))
             else:
                 x_test.append(parray[self.test_indices])
-        if encode_y:
-            y_test = self._encoder(y_test)
-        if convert_to_tensor:
-            y_test = torch.Tensor(y_test).to(device)
+        if self.labels_array is not None:
+            y_test = self.labels_array[self.test_indices]
+            if encode_y:
+                y_test = self._encoder(y_test)
+            if convert_to_tensor:
+                y_test = torch.Tensor(y_test).to(device)
+        else:
+            warnings.warn('labels array is None, make sure label is not needed for this model')
+            y_test = None
         if len(x_test) == 1:
             x_test = x_test[0]
         return x_test, y_test
@@ -309,6 +332,8 @@ class MultiModalArrays:
         @param class_weights:
         @return:
         """
+        assert not isinstance(model, HierarchicalTransformerContrastivePretrain), "Model is HierarchicalTransformerContrastivePretrain, which does not have label encoder, please use function get_critierion_for_pretrain"
+        rand_input = self.get_random_sample(convert_to_tensor=True, device=device)
         rand_input = self.get_random_sample(convert_to_tensor=True, device=device, include_metainfo=include_metainfo)
         with torch.no_grad():
             model.eval()

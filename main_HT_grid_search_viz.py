@@ -10,7 +10,7 @@ import torch
 
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
-from renaanalysis.learning.train import eval
+from renaanalysis.learning.train import eval_test
 from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_epoch
 from renaanalysis.params.params import *
 from renaanalysis.learning.HT import HierarchicalTransformer
