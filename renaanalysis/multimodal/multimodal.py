@@ -66,7 +66,7 @@ class PhysioArray:
         @return:
         """
         for name, value in self.meta_info.items():
-            if value.dtype == np.object:
+            if value.dtype == object:
                 self.meta_info_encoders[name] = LabelEncoder()
                 self.meta_info_encoded[name] = self.meta_info_encoders[name].fit_transform(value)
             else:
