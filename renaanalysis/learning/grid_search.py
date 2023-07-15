@@ -132,7 +132,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
     return locking_performance, total_training_histories, models_param
 
 
-def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int, test_size=0.1, is_pca_ica=False,
+def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int, results_path, is_pca_ica=False,
                        task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None):
     """
 
@@ -160,7 +160,7 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
 
     total_training_histories = {}
     models_param = {}
-    locking_performance = {}
+    param_performance = {}
 
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
@@ -169,7 +169,7 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
                                             depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                             pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
                                             dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
-            models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal_ordered_batches(
+            best_models_folds, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal_ordered_batches(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix,
                                                                                              verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
@@ -178,13 +178,13 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
             print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}, ')
 
             hashable_params = tuple(params.items())
-            locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss, 'folds test auc': training_histories['auc_test']}
+            param_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss, 'folds test auc': training_histories['auc_test']}
             total_training_histories[hashable_params] = training_histories
-            models_param[hashable_params] = models
-            if not os.path.exists('HT_grid'):
-                os.mkdir('HT_grid')
+            models_param[hashable_params] = best_models_folds
+
             for i in range(n_folds):
-                torch.save(models[i], f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt")
+                model_name = 'rht' + '_'.join([f'{key}_{value}' for key, value in params.items()]) + f'_fold_{i}.pt'
+                torch.save(best_models_folds[i], os.path.join(results_path, model_name))
         elif task_name == TaskName.PreTrain:
             raise NotImplementedError
             # model = HierarchicalTransformerContrastivePretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
@@ -206,4 +206,4 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
             # for i in range(n_folds):
             #     torch.save(models[i], os.path.join(model_save_dir, test_name + f"_lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt"))
 
-    return locking_performance, total_training_histories, models_param
+    return param_performance, total_training_histories, models_param

@@ -370,13 +370,18 @@ class MultiModalArrays:
     def training_val_test_split_ordered_by_subject_run(self, n_folds, batch_size, val_size, test_size, random_seed=None):
         """
         generate the sample indices for each fold and each batch, for train, val, and test
-        consecutive batches have consecutive samples, for example:
-            batch1: [1, 40, 80, 121]
-            batch2: [2, 41, 81, 122]
-            batch3: [3, 42, 82, 123]
+        consecutive batches have consecutive samples, for example, when the batch size is 3, and there are 120 samples for
+        this subject & run
+            batch0: [0, 40, 80]
+            batch1: [1, 41, 81]
+            batch2: [2, 42, 82]
+            ...
+            batch40: [39, 79, 119]
+
         the method go through each participant and each run, finds a random starting index for test and val. Then get
         consecutive samples for each test and val batches. The remaining samples are for training. So for each participant&run,
         the training data will have at most two points where it's not consecutive. That's where the val and test data are.
+        All data partition (train, val, test) are consecutive within themselves.
 
         also note for each participant&run with n_sample samples, we generate up to < n_sample // batch_size > batches.
         so any residue samples are ignored. Using a smaller batch size will result in more batches and less residue samples.
@@ -395,7 +400,7 @@ class MultiModalArrays:
         all_sample_indices = np.arange(self.get_num_samples())
         subject_run_samples = {(subject, run): all_sample_indices[np.logical_and(subject_meta==subject, run_meta==run)] for subject, run in itertools.product(np.unique(subject_meta), np.unique(run_meta))}
 
-        test_batch_sample_indices = [np.empty((0, 8), dtype=int) for i in range(n_folds)]
+        test_batch_sample_indices = np.empty((0, 8), dtype=int)
         val_batch_sample_indices = [np.empty((0, 8), dtype=int) for i in range(n_folds)]
         train_batch_sample_indices = [np.empty((0, 8), dtype=int) for i in range(n_folds)]
 
@@ -412,14 +417,16 @@ class MultiModalArrays:
                 continue
             batch_indices = sample_indices[:n_batches * batch_size].reshape(batch_size, -1).T  # n_batches x batch_size
             print(f"Generated {n_batches} batches for subject {subject} run {run}. Last {len(sample_indices) - batch_size * n_batches} samples are ignored.")
+
+            test_start_index = np.random.randint(0, n_batches - test_n_batches)
+            test_batch_indices = np.arange(test_start_index, test_start_index + test_n_batches)
+            test_batch_sample_indices = np.concatenate([test_batch_sample_indices, batch_indices[test_batch_indices]])
+
             for fold in range(n_folds):
-                test_start_index = np.random.randint(0, n_batches - test_n_batches)
-                test_batch_indices = np.arange(test_start_index, test_start_index + test_n_batches)
                 val_start_index = np.random.choice([np.random.randint(0, test_start_index - val_n_batches)] if test_start_index > val_n_batches else [] +
                                                     [np.random.randint(test_start_index + test_n_batches, n_batches - val_n_batches)] if test_start_index + test_n_batches < n_batches - val_n_batches else [])
                 val_batch_indices = np.arange(val_start_index, val_start_index + val_n_batches)
 
-                test_batch_sample_indices[fold] = np.concatenate([test_batch_sample_indices[fold] , batch_indices[test_batch_indices]])
                 val_batch_sample_indices[fold] = np.concatenate([val_batch_sample_indices[fold], batch_indices[val_batch_indices]])
                 train_batch_sample_indices[fold] = np.concatenate([train_batch_sample_indices[fold], np.delete(batch_indices, np.concatenate([val_batch_indices, test_batch_indices]), axis=0)])
         self.test_batch_sample_indices = np.array(test_batch_sample_indices)
@@ -435,7 +442,7 @@ class MultiModalArrays:
         @param random_seed:
         @return:
         """
-        assert self.test_batch_sample_indices is not None and self.val_batch_sample_indices is not None and self.train_batch_sample_indices is not None, \
+        assert self.val_batch_sample_indices is not None and self.train_batch_sample_indices is not None, \
             "Please call training_val_test_split_ordered_by_subject_run() first."
 
         labels_encoded = self._encoder(self.labels_array)
@@ -443,6 +450,10 @@ class MultiModalArrays:
         return ordered_batch_iterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo), \
             ordered_batch_iterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo)
 
+    def get_test_ordered_batch_iterator(self, device, return_metainfo=False):
+        assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
+        labels_encoded = self._encoder(self.labels_array)
+        return ordered_batch_iterator(self.physio_arrays, labels_encoded, self.test_batch_sample_indices, device, return_metainfo)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)

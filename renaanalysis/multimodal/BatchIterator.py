@@ -30,6 +30,7 @@ class ordered_batch_iterator:
 
     def __next__(self):
         if self.batch_index >= self.n_batches:
+            self.batch_index = 0
             raise StopIteration
         this_batch_sample_indices = self.batch_sample_indices[self.batch_index]
         batch = [torch.Tensor(darray.array[this_batch_sample_indices]).to(self.device) for darray in self.data_arrays]

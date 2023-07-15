@@ -29,24 +29,30 @@ data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray_class-weight.p'
 
+training_results_dir = 'RHT_grid_search'
+training_results_path = os.path.join(os.getcwd(), training_results_dir)
+if not os.path.exists(training_results_path):
+    os.mkdir(training_results_path)
+
 grid_search_params = {
     "depth": [4],
     "num_heads": [8],
     "pool": ['cls'],
     "feedforward_mlp_dim": [32],
 
-    # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [128],
+    "patch_embed_dim": [64, 128, 256],
+    # "patch_embed_dim": [64],
 
     "dim_head": [64],
     "attn_dropout": [0.5],
     "emb_dropout": [0.5],
-    "lr": [1e-4],
+    "lr": [1e-3],
     "l2_weight": [1e-5],
 
     # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
-    "output": ['multi'],
+    # "output": ['multi'],
+    "output": ['multi', 'single'],
     'temperature' : [0.1],
     'n_neg': [1],
     'p_t': [0.1],
@@ -75,7 +81,7 @@ else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
 
 
-locking_performance, training_histories, models = grid_search_rht_eeg(grid_search_params, mmarray, n_folds, task_name=TaskName.TrainClassifier,
+param_performance, training_histories, models = grid_search_rht_eeg(grid_search_params, mmarray, n_folds, training_results_path, task_name=TaskName.TrainClassifier,
                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 # if model_name == 'HT-sesup':
 #     pickle.dump(training_histories,
@@ -84,7 +90,7 @@ locking_performance, training_histories, models = grid_search_rht_eeg(grid_searc
 #                 open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
 #     pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
 # else:
-#     pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_numhead.p', 'wb'))
-#     pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_numhead.p', 'wb'))
-#     pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_numhead.p', 'wb'))
+pickle.dump(training_histories, open(os.path.join(training_results_path, f'model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
+pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
+# pickle.dump(models, open(os.path.join(training_results_path, f'models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
 
