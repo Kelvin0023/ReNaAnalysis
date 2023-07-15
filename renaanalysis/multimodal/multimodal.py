@@ -345,7 +345,7 @@ class MultiModalArrays:
             assert len(np.unique(self.labels_array)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
             self._encoder = lambda y: self.label_encoder.transform(y).reshape(-1, 1)
             # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
-            criterion = nn.BCELoss(reduction='mean')
+            criterion = nn.BCELoss(reduction='mean', weight=self.get_class_weight(True, device) if self.rebalance_method=='class_weight' else None)
             last_activation = nn.Sigmoid()
         else:
 
