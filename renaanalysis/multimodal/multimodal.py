@@ -337,7 +337,8 @@ class MultiModalArrays:
         rand_input = self.get_random_sample(convert_to_tensor=True, device=device, include_metainfo=include_metainfo)
         with torch.no_grad():
             model.eval()
-            output_shape = model.to(device)(*rand_input if isinstance(rand_input, tuple) else rand_input).shape[1]
+            rand_input= rand_input if isinstance(rand_input, tuple) else (rand_input,)
+            output_shape = model.to(device)(*rand_input).shape[1]
             if reset_model: model.reset()
 
         if output_shape == 1:
