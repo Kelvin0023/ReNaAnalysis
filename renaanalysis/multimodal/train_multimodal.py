@@ -230,7 +230,7 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
     return models, training_histories_folds, criterion, last_activation
 
 def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
-                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size = 0.1, test_size=0.1,
+                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6,
                                      lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None):
     """
 
@@ -254,7 +254,6 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     test_auc = []
     test_acc = []
     test_loss = []
-    mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=test_size, random_seed=random_seed)
     test_iterator = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)

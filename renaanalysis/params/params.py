@@ -170,7 +170,7 @@ pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 
 lr = 1e-3
 batch_size = 8
-epochs = 1
+epochs = 50000
 patience = 30
 train_ratio = 0.8
 model_save_dir = 'renaanalysis/learning/saved_models'

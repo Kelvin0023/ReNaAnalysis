@@ -8,7 +8,7 @@ from renaanalysis.learning.RHT import RecurrentHierarchicalTransformer
 from renaanalysis.learning.train import cv_train_test_model, self_supervised_pretrain
 from renaanalysis.multimodal.train_multimodal import train_test_classifier_multimodal, \
     train_test_classifier_multimodal_ordered_batches
-from renaanalysis.params.params import TaskName, eeg_name, model_save_dir
+from renaanalysis.params.params import TaskName, eeg_name, model_save_dir, batch_size
 from renaanalysis.utils.data_utils import mean_min_sublists, mean_max_sublists
 from renaanalysis.multimodal.multimodal import MultiModalArrays
 
@@ -242,7 +242,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
 
 
 def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int, results_path, is_pca_ica=False,
-                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None):
+                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, val_size = 0.1, test_size=0.1):
     """
 
     @param grid_search_params:
@@ -271,6 +271,7 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
     models_param = {}
     param_performance = {}
 
+    mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=test_size, random_seed=random_seed)
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
         if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
