@@ -277,8 +277,9 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
         if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
             model = RecurrentHierarchicalTransformer(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
                                             depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
-                                            pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
-                                            dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
+                                            pool=params['pool'], patch_embed_dim=params['patch_embed_dim'], dim_head=params['dim_head'],
+                                            emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], dropout=params['dropout'],
+                                            output=params['output'])
             best_models_folds, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal_ordered_batches(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix,

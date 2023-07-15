@@ -36,7 +36,7 @@ if not os.path.exists(training_results_path):
 
 grid_search_params = {
     "depth": [4],
-    "num_heads": [4,8],
+    "num_heads": [8],
     "pool": ['cls'],
     "feedforward_mlp_dim": [32],
 
@@ -46,6 +46,8 @@ grid_search_params = {
     "dim_head": [64],
     "attn_dropout": [0.0],
     "emb_dropout": [0.1],
+    "dropout": [0.1],
+
     "lr": [1e-3],
     "l2_weight": [1e-5],
 
