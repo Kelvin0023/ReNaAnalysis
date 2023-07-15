@@ -407,7 +407,8 @@ class MultiModalArrays:
             test_n_batches = math.floor(test_size * n_batches)
             val_n_batches = math.floor(val_size * n_batches)
             if test_n_batches == 0 or val_n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} have too few samples to create enough batches for test and val. {n_batches =}")
+                warnings.warn(f"Subject {subject} run {run} have too few samples to create enough batches for test and val.{n_batches =}. Ignored.")
+                # TODO maybe when this subject&run doesn't have enough samples, we can add it to the next subject&run
                 continue
             batch_indices = sample_indices[:n_batches * batch_size].reshape(batch_size, -1).T  # n_batches x batch_size
             print(f"Generated {n_batches} batches for subject {subject} run {run}. Last {len(sample_indices) - batch_size * n_batches} samples are ignored.")
