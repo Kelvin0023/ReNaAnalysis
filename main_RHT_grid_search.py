@@ -44,8 +44,10 @@ grid_search_params = {
     # "patch_embed_dim": [64],
 
     "dim_head": [64],
-    "attn_dropout": [0.5],
-    "emb_dropout": [0.5],
+    "attn_dropout": [0.0],
+    "emb_dropout": [0.1],
+    "dropout": [0.1],
+
     "lr": [1e-3],
     "l2_weight": [1e-5],
 

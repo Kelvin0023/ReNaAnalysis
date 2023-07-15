@@ -57,7 +57,7 @@ class FeedForward(nn.Module):
 
 
 class RecurrentAttention(nn.Module):
-    def __init__(self, embedding_dim, num_heads=8, dim_head=64, dropout=0.):
+    def __init__(self, embedding_dim, num_heads=8, dim_head=64, drop_attention=0., dropout=0.1):
         super().__init__()
         all_heads_dim = dim_head * num_heads
         project_out = not (num_heads == 1 and dim_head == embedding_dim)
@@ -67,7 +67,7 @@ class RecurrentAttention(nn.Module):
         self.scale = dim_head ** -0.5
 
         self.attend = nn.Softmax(dim=-1)
-        self.dropout = nn.Dropout(dropout)
+        self.drop_attention = nn.Dropout(drop_attention)
 
         self.to_qkv = nn.Linear(embedding_dim, all_heads_dim * 3, bias=False)
 
@@ -116,7 +116,7 @@ class RecurrentAttention(nn.Module):
         dots = (A + B + C) * self.scale
 
         attention = self.attend(dots)
-        attention = self.dropout(attention)  # n query, n query, batch_size, num_heads
+        attention = self.drop_attention(attention)  # n query, n query, batch_size, num_heads
 
         out = torch.torch.einsum('ijbn,jbnd->ibnd', (attention, v))
         out = rearrange(out, 'n b h d -> b n (h d)')
@@ -127,12 +127,12 @@ class RecurrentSpatialTemporalTransformer(nn.Module):
     """
 
     """
-    def __init__(self, dim, depth, num_heads, dim_head, feedforward_mlp_dim, dropout=0.):
+    def __init__(self, dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=0., dropout=0.1):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                PreNorm(dim, RecurrentAttention(dim, num_heads=num_heads, dim_head=dim_head, dropout=dropout)),
+                PreNorm(dim, RecurrentAttention(dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
                 PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
         self.num_heads = num_heads
@@ -175,7 +175,7 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi'):
         """
 
         # a token is a time slice of data on a single channel
@@ -213,7 +213,7 @@ class RecurrentHierarchicalTransformer(nn.Module):
         self.cls_token_pos_embedding = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.transformer = RecurrentSpatialTemporalTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
+        self.transformer = RecurrentSpatialTemporalTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=attn_dropout, dropout=dropout)
 
         self.pool = pool
         self.to_latent = nn.Identity()
