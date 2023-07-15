@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import torch
 
 from renaanalysis.learning.grid_search import grid_search_ht_eeg, grid_search_rht_eeg
+from renaanalysis.multimodal.ChannelSpace import create_discretize_channel_space
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
@@ -68,9 +69,11 @@ start_time = time.time()  # record the start time of the analysis
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
     mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs, random_seed=random_seed, rebalance_method="class_weight")
+    create_discretize_channel_space(mmarray['eeg'])
     mmarray.save(mmarray_path)
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
+
 
 locking_performance, training_histories, models = grid_search_rht_eeg(grid_search_params, mmarray, n_folds, task_name=TaskName.TrainClassifier,
                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
