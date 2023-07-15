@@ -15,7 +15,9 @@ from torch.utils.data import TensorDataset, DataLoader
 from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, HierarchicalTransformer, \
     ContrastiveLoss
 from renaanalysis.learning.MutiInputDataset import MultiInputDataset
+from renaanalysis.multimodal.BatchIterator import ordered_batch_iterator
 from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, rebalance_classes
+
 
 
 class PhysioArray:
@@ -35,6 +37,11 @@ class PhysioArray:
         assert np.all(array.shape[0] == np.array([len(m) for m in meta_info.values()])), 'all metainfo in a physio array must have the same number of trials/epochs'
         self.array = array
         self.meta_info = meta_info
+
+        self.meta_info_encoders = dict()
+        self.meta_info_encoded = dict()
+        self.encode_meta_info()
+
         self.sampling_rate = sampling_rate
         self.physio_type = physio_type
         self.is_rebalance_by_channel = is_rebalance_by_channel
@@ -53,11 +60,23 @@ class PhysioArray:
         data_preprocessor_str = '-'.join(self.data_processor.keys())
         return f'{self.dataset_name}_{self.physio_type}_{data_preprocessor_str}'
 
+    def encode_meta_info(self):
+        """
+        will encode any meta info that is not numeric
+        @return:
+        """
+        for name, value in self.meta_info.items():
+            if value.dtype == np.object:
+                self.meta_info_encoders[name] = LabelEncoder()
+                self.meta_info_encoded[name] = self.meta_info_encoders[name].fit_transform(value)
+            else:
+                self.meta_info_encoded[name] = value
+
     def get_meta_info_by_name(self, meta_info_name):
         return self.meta_info[meta_info_name]
 
-    def get_meta_info(self, index):
-        return {k: v[index] for k, v in self.meta_info.items()}
+    def get_meta_info(self, index, encoded=False):
+        return {k: v[index] for k, v in (self.meta_info_encoded if encoded else self.meta_info).items()}
 
     def apply_znorm_by_trial(self):
         self.array_preprocessed = z_norm_by_trial(self.array)
@@ -120,6 +139,11 @@ class MultiModalArrays:
 
             self.label_onehot_encoder = preprocessing.OneHotEncoder()
             self.label_onehot_encoder.fit(self.labels_array.reshape(-1, 1))
+
+        # for ordered batches
+        self.test_batch_sample_indices = None
+        self.val_batch_sample_indices = None
+        self.train_batch_sample_indices = None
 
     def keys(self):
         return self._physio_types_arrays.keys()
@@ -273,15 +297,14 @@ class MultiModalArrays:
         """
         random_sample_index = np.random.randint(0, len(self.physio_arrays[0]))
         rtn = [(parray.array[random_sample_index][None, :] if not preprocessed else parray.array_preprocessed[random_sample_index]) for parray in self.physio_arrays]
+        rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn] if convert_to_tensor else rtn
+        rtn = rtn if len(rtn) > 1 else rtn[0]
 
         meta_info = None
         if include_metainfo:
-            meta_info = [parray.get_meta_info(random_sample_index) for parray in self.physio_arrays]
+            meta_info = [parray.get_meta_info(random_sample_index, encoded=True) for parray in self.physio_arrays]
+            meta_info = [{name: torch.tensor([value], device=device) for name, value in m.items()} for m in meta_info] if convert_to_tensor else meta_info
             meta_info = meta_info if len(meta_info) > 1 else meta_info[0]
-
-        if convert_to_tensor:
-            rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn]
-        rtn = rtn if len(rtn) > 1 else rtn[0]
 
         if include_metainfo:
             return rtn, meta_info
@@ -384,7 +407,8 @@ class MultiModalArrays:
             test_n_batches = math.floor(test_size * n_batches)
             val_n_batches = math.floor(val_size * n_batches)
             if test_n_batches == 0 or val_n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} have too few samples to create enough batches for test and val. {n_batches =}")
+                warnings.warn(f"Subject {subject} run {run} have too few samples to create enough batches for test and val.{n_batches =}. Ignored.")
+                # TODO maybe when this subject&run doesn't have enough samples, we can add it to the next subject&run
                 continue
             batch_indices = sample_indices[:n_batches * batch_size].reshape(batch_size, -1).T  # n_batches x batch_size
             print(f"Generated {n_batches} batches for subject {subject} run {run}. Last {len(sample_indices) - batch_size * n_batches} samples are ignored.")
@@ -398,11 +422,26 @@ class MultiModalArrays:
                 test_batch_sample_indices[fold] = np.concatenate([test_batch_sample_indices[fold] , batch_indices[test_batch_indices]])
                 val_batch_sample_indices[fold] = np.concatenate([val_batch_sample_indices[fold], batch_indices[val_batch_indices]])
                 train_batch_sample_indices[fold] = np.concatenate([train_batch_sample_indices[fold], np.delete(batch_indices, np.concatenate([val_batch_indices, test_batch_indices]), axis=0)])
-        test_batch_sample_indices = np.array(test_batch_sample_indices)
-        val_batch_sample_indices = np.array(val_batch_sample_indices)
-        train_batch_sample_indices = np.array(train_batch_sample_indices)
+        self.test_batch_sample_indices = np.array(test_batch_sample_indices)
+        self.val_batch_sample_indices = np.array(val_batch_sample_indices)
+        self.train_batch_sample_indices = np.array(train_batch_sample_indices)
 
+    def get_train_val_ordered_batch_iterator_fold(self, fold, device, return_metainfo=False):
+        """
+        get a batch iterator for a specific fold
+        @param fold:
+        @param batch_size:
+        @param batch_type:
+        @param random_seed:
+        @return:
+        """
+        assert self.test_batch_sample_indices is not None and self.val_batch_sample_indices is not None and self.train_batch_sample_indices is not None, \
+            "Please call training_val_test_split_ordered_by_subject_run() first."
 
+        labels_encoded = self._encoder(self.labels_array)
+
+        return ordered_batch_iterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo), \
+            ordered_batch_iterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo)
 
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
