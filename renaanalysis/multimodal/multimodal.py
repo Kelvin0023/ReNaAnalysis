@@ -113,6 +113,7 @@ class MultiModalArrays:
         @param event_viz_colors:
         @param rebalance_method: can be SMOTE or class_weight
         """
+        self._encoder_object = None
         assert len(physio_arrays) > 0, 'physio_arrays must be a non-empty list of PhysioArray'
         assert np.all(len(physio_arrays[0]) == np.array([len(parray) for parray in physio_arrays])), 'all physio arrays must have the same number of trials/epochs'
 
@@ -135,7 +136,7 @@ class MultiModalArrays:
         self._encoder = None
         if self.labels_array is not None:
             self.label_encoder = LabelEncoder()
-            self.labels_array = self.label_encoder.fit_transform(self.labels_array)
+            self.label_encoder.fit(self.labels_array)
 
             self.label_onehot_encoder = preprocessing.OneHotEncoder()
             self.label_onehot_encoder.fit(self.labels_array.reshape(-1, 1))
@@ -171,6 +172,8 @@ class MultiModalArrays:
         @param random_seed:
         @return:
         """
+        if self.rebalance_method != 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
+            warnings.warn("Using class_weight as rebalancing method while encoder is LabelEncoder. ")
         if self.labels_array is not None:
         # assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
             assert self._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
@@ -333,8 +336,7 @@ class MultiModalArrays:
         @return:
         """
         assert not isinstance(model, HierarchicalTransformerContrastivePretrain), "Model is HierarchicalTransformerContrastivePretrain, which does not have label encoder, please use function get_critierion_for_pretrain"
-        rand_input = self.get_random_sample(convert_to_tensor=True, device=device)
-        rand_input = self.get_random_sample(convert_to_tensor=True, device=device, include_metainfo=include_metainfo)
+        rand_input = self.get_random_sample(convert_to_tensor=True, device=device, include_metainfo=include_metainfo) if include_metainfo else self.get_random_sample(convert_to_tensor=True, device=device)
         with torch.no_grad():
             model.eval()
             rand_input= rand_input if isinstance(rand_input, tuple) else (rand_input,)
@@ -343,14 +345,14 @@ class MultiModalArrays:
 
         if output_shape == 1:
             assert len(np.unique(self.labels_array)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
-            self._encoder = lambda y: self.label_encoder.transform(y).reshape(-1, 1)
-            # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
-            criterion = nn.BCELoss(reduction='mean', weight=self.get_class_weight(True, device) if self.rebalance_method=='class_weight' else None)
+            # self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
+            self._encoder_object = self.label_encoder
+            self._encoder = lambda y: self.label_encoder.transform(y.reshape(-1, 1))
+            criterion = nn.BCELoss(reduction='mean')
             last_activation = nn.Sigmoid()
         else:
-
+            self._encoder_object = self.label_onehot_encoder
             self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
-            # _decoder = lambda y: label_encoder.inverse_transform(y.reshape(-1, 1))
             criterion = nn.CrossEntropyLoss(weight=self.get_class_weight(True, device) if self.rebalance_method=='class_weight' else None)
             last_activation = nn.Softmax(dim=1)
 

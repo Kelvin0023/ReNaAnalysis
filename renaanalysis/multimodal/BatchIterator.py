@@ -36,7 +36,7 @@ class ordered_batch_iterator:
         batch = [torch.Tensor(darray.array[this_batch_sample_indices]).to(self.device) for darray in self.data_arrays]
         batch = batch[0] if len(batch) == 1 else batch
         self.batch_index += 1
-        labels = torch.Tensor(self.labels[this_batch_sample_indices]).to(self.device)
+        labels = torch.Tensor(self.labels[this_batch_sample_indices]).to(self.device)[:, None]
         if self.return_metainfo:
             meta_info = [{name: torch.Tensor(value[this_batch_sample_indices]).to(self.device) for name, value in darray.meta_info_encoded.items()} for darray in self.data_arrays]
             meta_info = meta_info[0] if len(meta_info) == 1 else meta_info
