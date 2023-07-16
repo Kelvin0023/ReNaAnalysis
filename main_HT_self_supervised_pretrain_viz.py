@@ -13,7 +13,7 @@ from renaanalysis.learning.HT import ContrastiveLoss
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
 from renaanalysis.learning.train import eval
-from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_epoch, \
+from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_samples, \
     plot_training_loss_history
 from renaanalysis.params.params import *
 import torch.nn.functional as F

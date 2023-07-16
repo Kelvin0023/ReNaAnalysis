@@ -40,8 +40,8 @@ grid_search_params = {
     "pool": ['cls'],
     "feedforward_mlp_dim": [32],
 
-    # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [128],
+    "patch_embed_dim": [64, 128, 256],
+    # "patch_embed_dim": [128],
 
     "dim_head": [64],
     "attn_dropout": [0.0],
@@ -53,8 +53,8 @@ grid_search_params = {
 
     # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
-    "output": ['multi'],
-    # "output": ['multi', 'single'],
+    # "output": ['multi'],
+    "output": ['single', 'multi'],
     'temperature' : [0.1],
     'n_neg': [1],
     'p_t': [0.1],

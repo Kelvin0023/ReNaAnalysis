@@ -11,7 +11,7 @@ import torch
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
 from renaanalysis.learning.train import eval_test
-from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_epoch
+from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_samples
 from renaanalysis.params.params import *
 from renaanalysis.learning.HT import HierarchicalTransformer
 
@@ -75,7 +75,7 @@ if is_plot_epochs:
     eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
     this_picks = ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz']
     if viz_all_epoch:
-        visualize_eeg_epoch(x_eeg_test, y_test, colors, this_picks)
+        visualize_eeg_samples(x_eeg_test, y_test, colors, this_picks)
         model = HierarchicalTransformer(180, 20, 200, 2, depth=4, num_heads=8, feedforward_mlp_dim=64,
                                         window_duration=0.1, pool='cls',
                                         patch_embed_dim=64, dim_head=64, attn_dropout=0.5, emb_dropout=0.5,
@@ -87,7 +87,7 @@ if is_plot_epochs:
                eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
                discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
     else:
-        visualize_eeg_epoch(x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
+        visualize_eeg_samples(x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
         model = HierarchicalTransformer(180, 20 , 200, 2, depth=4, num_heads=8, feedforward_mlp_dim=64, window_duration=0.1, pool='cls',
                      patch_embed_dim=64, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi')
         model.load_state_dict(best_model.state_dict())

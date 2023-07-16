@@ -503,8 +503,8 @@ def plot_training_loss_history(history, param_list, fold):
 def compare_epochs():
     pass
 
-def visualize_eeg_epoch(x, y, colors, eeg_picks, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
-                         is_plot_timeseries=True):
+def visualize_eeg_samples(x, y, colors, eeg_picks, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
+                          is_plot_timeseries=True):
 
     # Set the figure size for the plot
     plt.rcParams["figure.figsize"] = fig_size

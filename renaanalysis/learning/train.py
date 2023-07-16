@@ -30,7 +30,7 @@ from renaanalysis.utils.training_utils import count_standard_error, count_target
 from renaanalysis.utils.data_utils import rebalance_classes, mean_max_sublists, \
     mean_min_sublists
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
-from renaanalysis.utils.viz_utils import viz_confusion_matrix, visualize_eeg_epoch, plot_training_history
+from renaanalysis.utils.viz_utils import viz_confusion_matrix, visualize_eeg_samples, plot_training_history
 
 
 def eval_model(x_eeg, x_pupil, y, event_names, model_name, eeg_montage,
@@ -291,7 +291,7 @@ def cv_train_test_model(X, Y, model, test_name="", task_name=TaskName.TrainClass
             if viz_rebalance:
                 colors = {0:'red', 6:'blue'}
                 eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
-                visualize_eeg_epoch(x_train, y_train, colors, eeg_picks, out_dir=f'renaanalysis/learning/saved_images/by_channel_{is_by_channel}')
+                visualize_eeg_samples(x_train, y_train, colors, eeg_picks, out_dir=f'renaanalysis/learning/saved_images/by_channel_{is_by_channel}')
             x_train = torch.Tensor(x_train).to(device)
             x_val = torch.Tensor(x_val).to(device)
 

@@ -403,9 +403,9 @@ class MultiModalArrays:
         all_sample_indices = np.arange(self.get_num_samples())
         subject_run_samples = {(subject, run): all_sample_indices[np.logical_and(subject_meta==subject, run_meta==run)] for subject, run in itertools.product(np.unique(subject_meta), np.unique(run_meta))}
 
-        test_batch_sample_indices = np.empty((0, 8), dtype=int)
-        val_batch_sample_indices = [np.empty((0, 8), dtype=int) for i in range(n_folds)]
-        train_batch_sample_indices = [np.empty((0, 8), dtype=int) for i in range(n_folds)]
+        test_batch_sample_indices = np.empty((0, batch_size), dtype=int)
+        val_batch_sample_indices = [np.empty((0, batch_size), dtype=int) for i in range(n_folds)]
+        train_batch_sample_indices = [np.empty((0, batch_size), dtype=int) for i in range(n_folds)]
 
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size

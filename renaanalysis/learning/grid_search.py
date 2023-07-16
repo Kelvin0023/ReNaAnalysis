@@ -1,4 +1,5 @@
 import os
+import pickle
 
 import torch
 from sklearn.model_selection import ParameterGrid
@@ -272,6 +273,8 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
     param_performance = {}
 
     mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=test_size, random_seed=random_seed)
+    model_counter = 0
+    model_counter_param_dict = {}
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
         if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
@@ -294,8 +297,11 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
             models_param[hashable_params] = best_models_folds
 
             for i in range(n_folds):
-                model_name = 'rht' + '_'.join([f'{key}_{value}' for key, value in params.items()]) + f'_fold_{i}.pt'
-                torch.save(best_models_folds[i], os.path.join(results_path, model_name))
+                model_name = 'rht' + '_'.join([f'{key}_{value}' for key, value in params.items()]) + f'_fold_{i}'
+                model_counter_param_dict[model_counter] = (model_name, param_performance[hashable_params], total_training_histories[hashable_params])
+                torch.save(best_models_folds[i], os.path.join(results_path, '{model_counter}.pt'))
+                pickle.dump(model_counter_param_dict, open(os.path.join(results_path, 'model_counter_param_dict.pkl'), 'wb'))
+                model_counter += 1
         elif task_name == TaskName.PreTrain:
             raise NotImplementedError
             # model = HierarchicalTransformerContrastivePretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
