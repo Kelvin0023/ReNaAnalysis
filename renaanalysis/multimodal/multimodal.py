@@ -16,6 +16,7 @@ from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain,
     ContrastiveLoss
 from renaanalysis.learning.MutiInputDataset import MultiInputDataset
 from renaanalysis.multimodal.BatchIterator import ordered_batch_iterator
+from renaanalysis.params.params import TaskName
 from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, rebalance_classes
 
 
@@ -167,7 +168,7 @@ class MultiModalArrays:
     def get_num_samples(self):
         return len(self.physio_arrays[0])
 
-    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None):
+    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, task_name=TaskName.TrainClassifier):
         """
         get the dataloader for a given fold
         this function must be called after training_val_split
@@ -177,7 +178,7 @@ class MultiModalArrays:
         """
         if self.rebalance_method == 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
             warnings.warn("Using class_weight as rebalancing method while encoder is LabelEncoder because BCELoss can not apply class weights ")
-        if self.labels_array is not None:
+        if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
         # assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
             assert self._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
             training_indices, val_indices = self.training_val_split_indices[fold_index]
@@ -189,6 +190,7 @@ class MultiModalArrays:
             for parray in self.physio_arrays:
                 this_x_train, this_y_train = parray[training_indices], y_train
                 if self.rebalance_method == 'SMOTE' and is_rebalance_training:
+                    assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
                     this_x_train, this_y_train = rebalance_classes(parray[training_indices], y_train, by_channel=parray.is_rebalance_by_channel, random_seed=random_seed)
                 x_train.append(torch.Tensor(this_x_train).to(device))
                 rebalanced_labels.append(this_y_train)
@@ -210,8 +212,7 @@ class MultiModalArrays:
                 dataset_class = MultiInputDataset
             train_dataset = dataset_class(x_train, y_train_encoded)
             val_dataset = dataset_class(x_val, y_val_encoded)
-        else:
-            warnings.warn('labels array is None, make sure label is not needed for this model')
+        elif task_name == TaskName.PreTrain:
             training_indices, val_indices = self.training_val_split_indices[fold_index]
             x_train = []
             x_val = []

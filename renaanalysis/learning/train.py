@@ -798,7 +798,8 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
         #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
-            pred_tokens, orig_tokens, mask_t, mask_c = model(x[0])
+            x = x if isinstance(x[0], tuple) else (x[0],)
+            pred_tokens, orig_tokens, mask_t, mask_c = model(*x)
             # y_tensor = y.to(device)
             classification_loss = criterion(pred_tokens, orig_tokens)
 

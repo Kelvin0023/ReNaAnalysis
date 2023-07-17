@@ -172,7 +172,7 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
 
-        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device)
+        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device, task_name=task_name)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)

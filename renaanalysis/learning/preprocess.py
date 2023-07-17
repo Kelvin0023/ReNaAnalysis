@@ -35,6 +35,7 @@ def preprocess_samples_and_save(physio_arrays: List[PhysioArray], epochs_root: s
     for i in range(len(physio_arrays)):
         parray_preprocessed_eeg_file_path = f'{epochs_root}/x_{str(physio_arrays[i])}_preprocessed.p'
         if physio_arrays[i].physio_type == eeg_name:
+            physio_arrays[i].apply_znorm_by_trial()
             if is_apply_pca_ica_eeg:
                 if os.path.exists(parray_preprocessed_eeg_file_path):
                     physio_arrays[i] = pickle.load(open(parray_preprocessed_eeg_file_path, "rb"))
