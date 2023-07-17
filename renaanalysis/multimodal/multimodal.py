@@ -282,9 +282,9 @@ class MultiModalArrays:
         for parray in self.physio_arrays:
             is_pca_ica_preprocessed = 'pca' in parray.data_processor.keys() or 'ica' in parray.data_processor.keys()
             if is_pca_ica_preprocessed:
-                warnings.warn('test set is pca or ica preprocessed, make sure preprocessing is needed for this model')
+                print("\033[93m  {}\033[00m".format('test set is pca or ica preprocessed, make sure preprocessing is needed for this model'))
             else:
-                warnings.warn('test set is not pca or ica preprocessed, make sure preprocessing is not needed for this model')
+                print("\033[93m  {}\033[00m".format('test set is not pca or ica preprocessed, make sure preprocessing is not needed for this model'))
             if convert_to_tensor:
                 x_test.append(torch.Tensor(parray[self.test_indices]).to(device))
             else:
