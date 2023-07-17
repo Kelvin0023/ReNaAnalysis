@@ -44,7 +44,7 @@ start_time = time.time()  # record the start time of the analysis
 
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path) or is_regenerate_epochs:
-    mmarray = get_dataset(dataset_name, epochs_root=export_data_root, data_root=data_root, reject=reject, eeg_resample_rate=250,
+    mmarray = get_dataset(dataset_name, epochs_root=export_data_root, dataset_root=data_root, reject=reject, eeg_resample_rate=250,
                           is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs,
                           subject_picks=subject_pick, subject_group_picks=subject_group_picks, random_seed=random_seed)
     mmarray.save(mmarray_path)

@@ -52,7 +52,7 @@ data_root = 'D:/Dataset/auditory_oddball'
 
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
-    mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, data_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs)
+    mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, dataset_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs)
     mmarray.save(mmarray_path)
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))

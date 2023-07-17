@@ -501,11 +501,21 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
     return x, y, event_viz_colors
 
 
-def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_epochs=False, reject='auto',
+def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate_epochs=False, reject='auto',
                 eeg_resample_rate=200, is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
                 eyetracking_resample_srate=20, rebalance_method='SMOTE', subject_picks=None, subject_group_picks=None, random_seed=None):
     """
 
+    This function creates several save files, including the data samples obtained from the dataset_root
+     in as ndarray to epochs_root, and the preprocessed samples as PhysioArray to epochs_root.
+
+    preprocessings including znorm, pca and ica is applied with preprocess_samples_and_save, the preprocessed epochs
+    are saved to to epochs_root save time for future runs. When ica and pca are applied, it checks if the preprocessed
+    physio arraies loaded from epochs_root have the same number of components as specified in pca_ica_eeg_n_components,
+    if not it will recalculate .
+
+    @param epochs_root: the root directory to save/load preprocessed epochs see @param is_regenerate_epochs. The preprocessed
+    EEG physio array will also be saved here.
     @param is_regenerate_epochs: whether to regenerate epochs or not, if set to False, the function will attempt
     to read original data from data_root. If set to True, the function will attempt to read epochs from epochs_root.
     The latter is usually faster because it loads preprocessed epochs directly.
@@ -515,21 +525,22 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
     @return:
     """
     if not is_regenerate_epochs:
-        assert data_root is not None, "data_root must be specified if is_regenerate_epochs is False"
+        assert dataset_root is not None, "data_root must be specified if is_regenerate_epochs is False"
     else:
         assert epochs_root is not None, "epochs_root must be specified if is_regenerate_epochs is True"
+        print(f"Regenerating epochs from {dataset_root}, nothing from epochs_root will be used")
 
     if dataset_name == 'auditory_oddball':
-        x, y, metadata, event_viz_colors = get_auditory_oddball_samples(data_root, epochs_root, is_regenerate_epochs, None, eeg_resample_rate, random_seed=random_seed)
+        x, y, metadata, event_viz_colors = get_auditory_oddball_samples(dataset_root, epochs_root, is_regenerate_epochs, None, eeg_resample_rate, random_seed=random_seed)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == "rena":
-        x, y, event_viz_colors = get_rena_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, eyetracking_resample_srate)
+        x, y, event_viz_colors = get_rena_samples(dataset_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, eyetracking_resample_srate)
         physio_arrays = [PhysioArray(x[0], sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name),
               PhysioArray(x[1], sampling_rate=eyetracking_resample_srate, physio_type=pupil_name, dataset_name=dataset_name)]
     elif dataset_name == "TUH":
-        x, y, start_time, metadata = get_TUHG_samples(data_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=eeg_resample_rate, subject_picks=subject_picks, subject_group_picks=subject_group_picks)
+        x, y, start_time, metadata = get_TUHG_samples(dataset_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=eeg_resample_rate, subject_picks=subject_picks, subject_group_picks=subject_group_picks)
     elif dataset_name == 'BCICIV':
-        x, y, metadata, event_viz_colors = get_BCICIV_samples(data_root, eeg_resample_rate=250, epoch_tmin=2, epoch_tmax=6)
+        x, y, metadata, event_viz_colors = get_BCICIV_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=2, epoch_tmax=6)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
