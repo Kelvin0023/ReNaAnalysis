@@ -17,12 +17,10 @@ n_folds = 3
 is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
-viz_rebalance = False # viz training data after rebalance or not
 is_regenerate_epochs = False
 
 eeg_resample_rate = 200
 
-# reject = 'auto'  # whether to apply auto rejection
 reject = None  # whether to apply auto rejection
 # data_root = 'D:/Dataset/auditory_oddball'
 data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
@@ -40,7 +38,7 @@ grid_search_params = {
     "pool": ['cls'],
     "feedforward_mlp_dim": [32],
 
-    "patch_embed_dim": [64, 128, 256],
+    "patch_embed_dim": [128, 256],
     # "patch_embed_dim": [128],
 
     "dim_head": [64],
@@ -53,8 +51,8 @@ grid_search_params = {
 
     # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
-    # "output": ['multi'],
-    "output": ['single', 'multi'],
+    # "output": ['single'],
+    "output": ['multi'],
     'temperature' : [0.1],
     'n_neg': [1],
     'p_t': [0.1],

@@ -244,6 +244,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
         b, nchannel, _ = x_eeg.shape
         # get discretized time for each token
         discretized_start_times = meta_info['epoch_start_times'] // self.window_duration
+        # print(f"{discretized_start_times = }")
+
         time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows
         # time_pos = time_pos.unsqueeze(1).repeat(1, x_eeg.shape[1], 1).reshape(len(x_eeg), -1)  # batch_size x num_tokens
         # compute channel position magitudes discretized

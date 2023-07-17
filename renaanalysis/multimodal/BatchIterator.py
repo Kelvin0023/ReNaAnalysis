@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 
-class ordered_batch_iterator:
+class OrderedBatchIterator:
     def __init__(self, data_arrays, labels, batch_sample_indices, device, return_metainfo=False):
         assert len(batch_sample_indices.shape) == 2, "batch_sample_indices must be a 2D array."
         # check the batch is ordered
@@ -29,14 +29,21 @@ class ordered_batch_iterator:
         return self
 
     def __next__(self):
+        """
+        When self.data_arrays is a list of PhysioArray's. The default getitem method in PhysioArray will get the
+        preprocessed data.
+        @return:
+        """
         if self.batch_index >= self.n_batches:
             self.batch_index = 0
             raise StopIteration
         this_batch_sample_indices = self.batch_sample_indices[self.batch_index]
-        batch = [torch.Tensor(darray.array[this_batch_sample_indices]).to(self.device) for darray in self.data_arrays]
+        batch = [torch.Tensor(darray[this_batch_sample_indices]).to(self.device) for darray in self.data_arrays]
         batch = batch[0] if len(batch) == 1 else batch
         self.batch_index += 1
-        labels = torch.Tensor(self.labels[this_batch_sample_indices]).to(self.device)[:, None]
+        labels = torch.Tensor(self.labels[this_batch_sample_indices]).to(self.device)
+        if len(labels.shape) == 1:
+            labels = labels.unsqueeze(1)
         if self.return_metainfo:
             meta_info = [{name: torch.Tensor(value[this_batch_sample_indices]).to(self.device) for name, value in darray.meta_info_encoded.items()} for darray in self.data_arrays]
             meta_info = meta_info[0] if len(meta_info) == 1 else meta_info

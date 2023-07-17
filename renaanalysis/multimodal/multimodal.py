@@ -15,7 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, HierarchicalTransformer, \
     ContrastiveLoss
 from renaanalysis.learning.MutiInputDataset import MultiInputDataset
-from renaanalysis.multimodal.BatchIterator import ordered_batch_iterator
+from renaanalysis.multimodal.BatchIterator import OrderedBatchIterator
 from renaanalysis.params.params import TaskName
 from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, rebalance_classes
 
@@ -308,7 +308,7 @@ class MultiModalArrays:
         @return: a random sample from each of the physio arrays
         """
         random_sample_index = np.random.randint(0, len(self.physio_arrays[0]))
-        rtn = [(parray.array[random_sample_index][None, :] if parray.data_processor is None else parray.array_preprocessed[random_sample_index][None, :]) for parray in self.physio_arrays]
+        rtn = [(parray.array[random_sample_index][None, :]) for parray in self.physio_arrays]
         rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn] if convert_to_tensor else rtn
         rtn = rtn if len(rtn) > 1 else rtn[0]
 
@@ -459,13 +459,13 @@ class MultiModalArrays:
 
         labels_encoded = self._encoder(self.labels_array)
 
-        return ordered_batch_iterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo), \
-            ordered_batch_iterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo)
+        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo), \
+            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo)
 
     def get_test_ordered_batch_iterator(self, device, return_metainfo=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
         labels_encoded = self._encoder(self.labels_array)
-        return ordered_batch_iterator(self.physio_arrays, labels_encoded, self.test_batch_sample_indices, device, return_metainfo)
+        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.test_batch_sample_indices, device, return_metainfo)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)

@@ -588,7 +588,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     mini_batch_i = 0
 
     if verbose >= 1:
-        pbar = tqdm(total=math.ceil(len(dataloader.dataset) / dataloader.batch_size), desc=f'{mode} {test_name}')
+        pbar = tqdm(total=len(dataloader), desc=f'{mode} {test_name}', unit='batch')
         pbar.update(mini_batch_i := 0)
     batch_losses = []
     num_correct_preds = 0
