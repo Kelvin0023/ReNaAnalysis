@@ -67,11 +67,14 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
     info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))
     info.set_montage(eeg_montage)
 
-    rollout_fname = f'HT-rollout_{note}.pkl'
-    rollout_x_fname = f'HT-rollout_x_{note}.pkl'
-    rollout_y_fname = f'HT-rollout_y_{note}.pkl'
+    rollout_fname = f'HT-rollout_{note}_.pkl'
+    activation_fname = f'HT-activation_{note}_.pkl'
+    rollout_x_fname = f'HT-rollout_x_{note}_.pkl'
+    rollout_y_fname = f'HT-rollout_y_{note}_.pkl'
 
     if load_saved_rollout:
+        with open(os.path.join(data_root, activation_fname), 'rb') as f:
+            activations = pickle.load(f)
         with open(os.path.join(data_root, rollout_fname), 'rb') as f:
             rolls = pickle.load(f)
         with open(os.path.join(data_root, rollout_x_fname), 'rb') as f:
@@ -79,15 +82,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
         with open(os.path.join(data_root, rollout_y_fname), 'rb') as f:
             _y = pickle.load(f)
     else:
-        # x_train, x_test, y_train, y_test = X[train], X[test], Y[train], Y[test]
-        # x_train, y_train = rebalance_classes(x_train, y_train)  # rebalance by class
-
-        # train_size, val_size = len(x_train), len(x_test)
-        # x_train = torch.Tensor(x_train)  # transform to torch tensor
-        # x_test = torch.Tensor(x_test)
-        #
-        # y_train = torch.Tensor(y_train)
-        # y_test = torch.Tensor(y_test)
+        activations = defaultdict(list)
 
         rollout = VITAttentionRollout(model, device, attention_layer_class=Attention, token_shape=model.grid_dims, discard_ratio=discard_ratio, head_fusion=head_fusion)
         Y_encoded = y_encoder(Y)
@@ -103,7 +98,6 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
         val_size = len(dataset)
 
         rolls = defaultdict(list)
-        activations = defaultdict(list)
         _y = []
         _x = []
         for i, (x, x_pca_ica, y) in enumerate(dataloader):
@@ -138,6 +132,8 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
 
                         activations[roll_depth].append(forward_activation)
                         rolls[roll_depth].append(roll)
+                if j == 5: break
+            if i == 5: break
 
             _y.append(y.cpu().numpy())
             _x.append(x.cpu().numpy())
@@ -145,6 +141,8 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
         _y = np.concatenate(_y)
 
         # save the rollout
+        with open(os.path.join(data_root, activation_fname), 'wb') as f:
+            pickle.dump(activations, f)
         with open(os.path.join(data_root, rollout_fname), 'wb') as f:
             pickle.dump(rolls, f)
         with open(os.path.join(data_root, rollout_x_fname), 'wb') as f:
