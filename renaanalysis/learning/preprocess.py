@@ -32,17 +32,17 @@ def preprocess_samples_and_save(physio_arrays: List[PhysioArray], epochs_root: s
     """
 
     x_dict_preprocessed = dict()
-    for parray in physio_arrays:
-        parray_preprocessed_eeg_file_path = f'{epochs_root}/x_{str(parray)}_preprocessed.p'
-        if parray.physio_type == eeg_name:
+    for i in range(len(physio_arrays)):
+        parray_preprocessed_eeg_file_path = f'{epochs_root}/x_{str(physio_arrays[i])}_preprocessed.p'
+        if physio_arrays[i].physio_type == eeg_name:
             if is_apply_pca_ica_eeg:
                 if os.path.exists(parray_preprocessed_eeg_file_path):
-                    parray = pickle.load(open(parray_preprocessed_eeg_file_path, "rb"))
-                parray.apply_pca_ica(pca_ica_eeg_n_components)
-            pickle.dump(parray, open(parray_preprocessed_eeg_file_path, "wb"))
-        elif parray.physio_type == pupil_name:
-            parray.apply_znorm_by_trial()
-            pickle.dump(parray, open(parray_preprocessed_eeg_file_path, "wb"))
+                    physio_arrays[i] = pickle.load(open(parray_preprocessed_eeg_file_path, "rb"))
+                physio_arrays[i].apply_pca_ica(pca_ica_eeg_n_components)  # this will check if pca_ica_eeg_n_components matches
+            pickle.dump(physio_arrays[i], open(parray_preprocessed_eeg_file_path, "wb"))
+        elif physio_arrays[i].physio_type == pupil_name:
+            physio_arrays[i].apply_znorm_by_trial()
+            pickle.dump(physio_arrays[i], open(parray_preprocessed_eeg_file_path, "wb"))
         else:
             raise NotImplementedError
 

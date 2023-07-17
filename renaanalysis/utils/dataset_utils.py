@@ -2,6 +2,8 @@ import os
 import time
 
 import json
+import re
+
 import numpy as np
 import pandas as pd
 import mne
@@ -196,7 +198,7 @@ def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tm
 
     baseline_tuple = (-0.1, 0)
     subjects = load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_width, datatype, task, suffix, extension, event_label_dict, epoch_tmin, epoch_tmax, baseline_tuple)
-    visualize_eeg_epochs(subjects['sub-001']['run-1'], event_plot, colors, ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz'])
+    # visualize_eeg_epochs(subjects['sub-001']['run-1'], event_plot, colors, ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz'])
     # pickle.dump(subjects, open(os.path.join('./3rd_party_data/audio_oddball', f'subjects.p'), 'wb'))
     return subjects
 
@@ -226,13 +228,14 @@ def get_BCI_montage(montage_name, picks=None):
         montage.dig = montage.dig[0:3] + kept_channel_info
     return montage
 
-def get_BCICIV_samples(data_root, event_viz_colors, eeg_resample_rate=200, ):
+def get_BCICIV_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tmax=3):
     '''
     This function returns the samples of the BCICIV dataset
 
     @param data_root: The root directory of the dataset
     @return:
     '''
+    event_viz_colors = {'769': 'red', '770': 'blue', '771': 'green', '772': 'yellow'}
     file_tree_dict = parse_file_tree(data_root)
     kept_channels = ['Fz', 'FC3', 'FC1', 'FCz', 'FC2', 'FC4', 'C5', 'C3', 'C1', 'Cz', 'C2', 'C4', 'C6', 'CP3', 'CP1',
                      'CPz', 'CP2', 'CP4', 'P1', 'Pz', 'P2', 'POz']
@@ -242,19 +245,26 @@ def get_BCICIV_samples(data_root, event_viz_colors, eeg_resample_rate=200, ):
     subjects = []
     for file_name, _ in file_tree_dict.items():
         if 'T' in file_name:
+            metadata_dict = {}
+            subject_id = int(re.findall(r'\d+', file_name)[0])
             raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
             mne.rename_channels(raw.info, channel_mapping)
             raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right']) # otherwise the channel names are not consistent with montage
             events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
             is_merge_event = 'drop'
-            data = mne.Epochs(raw, events, event_id=event_id, tmin=-0.1, tmax=0.8, baseline=(-0.1, 0), preload=True, event_repeated=is_merge_event)
+            data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax, baseline=(epoch_tmin, epoch_tmin + (epoch_tmax-epoch_tmin)*0.1), preload=True, event_repeated=is_merge_event)
+            metadata_dict['subject_id'] = [subject_id] * len(data)
+            metadata_dict['run'] = [1] * len(data)
+            metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
+            metadata = pd.DataFrame(metadata_dict)
+            data.metadata = metadata
             data.set_montage(mont1020)
             subjects.append(data)
     all_epochs = mne.concatenate_epochs(subjects)
-    x, y, start_time, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=kept_channels,
-                                                         reject='auto', n_jobs=16,
-                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
-    return x, y, start_time, metadata
+    x, y, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=kept_channels,
+                                                         reject=None, n_jobs=16,
+                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, low_freq=4, high_freq=40, eeg_viz_picks=kept_channels, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax)
+    return x, y, metadata, event_viz_colors
 
 
 def get_DEAP_preprocessed_samples(data_root):
@@ -375,6 +385,8 @@ def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epo
                                     metadata_dict['subject_name'].append(subject_name)
                                     metadata_dict['session_name'].append(session_name)
                                     metadata_dict['montage_type_name'].append(montage_type_name)
+                                epoch_start_times = raw.times[eventID_mat[:, 0]]
+                                metadata_dict['epoch_start_times'] = epoch_start_times
                                 metadata = pd.DataFrame(metadata_dict)
                                 data = mne.Epochs(raw, eventID_mat, {'standard': 0}, metadata=metadata, tmin=0,
                                                   tmax=epoch_length, preload=True, baseline=(0, 0))
@@ -384,10 +396,10 @@ def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epo
     # pickle.dump(subjects, open(export_data_root, 'wb'))
     for num_channels, data_list in subjects.items():
         subjects[num_channels] = mne.concatenate_epochs(data_list)
-    x, y, start_time, metadata = epochs_to_class_samples(subjects[31], list(event_viz_colors.keys()), picks=picks, reject='auto', n_jobs=16,
+    x, y, metadata = epochs_to_class_samples(subjects[31], list(event_viz_colors.keys()), picks=picks, reject='auto', n_jobs=16,
                                                          eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
     y = None
-    return x, y, start_time, metadata
+    return x, y, metadata
 
 def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epochs, reject, eeg_resample_rate, picks='eeg', random_seed=None):
     loading_start_time = time.perf_counter()
@@ -405,7 +417,7 @@ def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epoc
             for run_key, run in run_values.items():
                 all_epochs.append(run)
         all_epochs = mne.concatenate_epochs(all_epochs)
-        x, y, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=picks, reject=reject, n_jobs=16, eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, random_seed=random_seed)
+        x, y, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=picks, reject=reject, n_jobs=16, eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, random_seed=random_seed, epoch_tmin=-0.1, epoch_tmax=0.8)
         # add start times to metadata
         pickle.dump(x, open(x_path, 'wb'))
         pickle.dump(y, open(y_path, 'wb'))
@@ -508,7 +520,7 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
         assert epochs_root is not None, "epochs_root must be specified if is_regenerate_epochs is True"
 
     if dataset_name == 'auditory_oddball':
-        x, y, metadata, event_viz_colors = get_auditory_oddball_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, random_seed=random_seed)
+        x, y, metadata, event_viz_colors = get_auditory_oddball_samples(data_root, epochs_root, is_regenerate_epochs, None, eeg_resample_rate, random_seed=random_seed)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == "rena":
         x, y, event_viz_colors = get_rena_samples(data_root, epochs_root, is_regenerate_epochs, reject, eeg_resample_rate, eyetracking_resample_srate)
@@ -516,6 +528,9 @@ def get_dataset(dataset_name, epochs_root=None, data_root=None, is_regenerate_ep
               PhysioArray(x[1], sampling_rate=eyetracking_resample_srate, physio_type=pupil_name, dataset_name=dataset_name)]
     elif dataset_name == "TUH":
         x, y, start_time, metadata = get_TUHG_samples(data_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=eeg_resample_rate, subject_picks=subject_picks, subject_group_picks=subject_group_picks)
+    elif dataset_name == 'BCICIV':
+        x, y, metadata, event_viz_colors = get_BCICIV_samples(data_root, eeg_resample_rate=250, epoch_tmin=2, epoch_tmax=6)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 

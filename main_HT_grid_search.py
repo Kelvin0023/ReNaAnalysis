@@ -7,13 +7,14 @@ import time
 import matplotlib.pyplot as plt
 import torch
 
-from renaanalysis.learning.grid_search import grid_search_ht_eeg
+from renaanalysis.learning.Conformer import Conformer
+from renaanalysis.learning.grid_search import grid_search_ht_eeg, grid_search_eeg
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
 # user parameters
 n_folds = 1
-is_pca_ica = False # apply pca and ica on data or not
+is_pca_ica = True # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
@@ -120,8 +121,13 @@ if not os.path.exists(mmarray_path):
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
 
-locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name,
+# define model class
+model_class = Conformer
+
+locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name, is_pca_ica=is_pca_ica,
                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
+# locking_performance, training_histories, models = grid_search_eeg(grid_search_params, mmarray, model_class, n_folds, task_name=task_name,
+#                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 if task_name == TaskName.PreTrain:
     pickle.dump(training_histories,
                 open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))

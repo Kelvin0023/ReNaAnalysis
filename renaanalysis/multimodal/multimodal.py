@@ -51,7 +51,10 @@ class PhysioArray:
         self.array_preprocessed = None
 
     def __getitem__(self, item):
-        return self.array[item]
+        if self.data_processor is not None:
+            return self.array_preprocessed[item]
+        else:
+            return self.array[item]
 
     def __len__(self):
         return len(self.array)
@@ -172,8 +175,8 @@ class MultiModalArrays:
         @param random_seed:
         @return:
         """
-        if self.rebalance_method != 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
-            warnings.warn("Using class_weight as rebalancing method while encoder is LabelEncoder. ")
+        if self.rebalance_method == 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
+            warnings.warn("Using class_weight as rebalancing method while encoder is LabelEncoder because BCELoss can not apply class weights ")
         if self.labels_array is not None:
         # assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
             assert self._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
@@ -243,11 +246,11 @@ class MultiModalArrays:
         self.training_val_split_indices = []
         if self.labels_array is not None:
             skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
-            for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array, self.labels_array)):
+            for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices], self.labels_array[self.train_indices])):
                 self.training_val_split_indices.append((train, val))
         else:
             skf = ShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
-            for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array)):
+            for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
                 self.training_val_split_indices.append((train, val))
 
     def train_test_split(self, test_size=0.1, random_seed=None):
@@ -277,6 +280,11 @@ class MultiModalArrays:
         assert self.test_indices is not None, 'test indices have not been set, please call train_test_split first'
         x_test = []
         for parray in self.physio_arrays:
+            is_pca_ica_preprocessed = 'pca' in parray.data_processor.keys() or 'ica' in parray.data_processor.keys()
+            if is_pca_ica_preprocessed:
+                warnings.warn('test set is pca or ica preprocessed, make sure preprocessing is needed for this model')
+            else:
+                warnings.warn('test set is not pca or ica preprocessed, make sure preprocessing is not needed for this model')
             if convert_to_tensor:
                 x_test.append(torch.Tensor(parray[self.test_indices]).to(device))
             else:
@@ -294,12 +302,12 @@ class MultiModalArrays:
             x_test = x_test[0]
         return x_test, y_test
 
-    def get_random_sample(self, preprocessed=False, convert_to_tensor=False, device=None, include_metainfo=False):
+    def get_random_sample(self, convert_to_tensor=False, device=None, include_metainfo=False):
         """
         @return: a random sample from each of the physio arrays
         """
         random_sample_index = np.random.randint(0, len(self.physio_arrays[0]))
-        rtn = [(parray.array[random_sample_index][None, :] if not preprocessed else parray.array_preprocessed[random_sample_index]) for parray in self.physio_arrays]
+        rtn = [(parray.array[random_sample_index][None, :] if parray.data_processor is None else parray.array_preprocessed[random_sample_index][None, :]) for parray in self.physio_arrays]
         rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn] if convert_to_tensor else rtn
         rtn = rtn if len(rtn) > 1 else rtn[0]
 

@@ -14,6 +14,8 @@ from torch import nn
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
+
+from renaanalysis.learning.Conformer import interaug
 from renaanalysis.learning.HT import ContrastiveLoss
 
 from tqdm import tqdm
@@ -183,6 +185,30 @@ def eval_test(model, X, Y, criterion, last_activation, _encoder, task_name=TaskN
         return _run_one_epoch_self_sup(model, test_dataloader, criterion, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
     elif task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
         return _run_one_epoch_classification(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+
+def eval_test_augmented(model, X, Y, criterion, last_activation, _encoder, task_name=TaskName.TrainClassifier, verbose=1):
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+    if isinstance(X, list):
+        X = [torch.Tensor(this_x).to(device) for this_x in X]
+        dataset_class = MultiInputDataset
+    else:
+        X = torch.Tensor(X).to(device)
+        dataset_class = TensorDataset
+
+    if task_name == TaskName.PreTrain:
+        test_dataset = dataset_class(X)
+    elif task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
+        Y = _encoder(Y)
+        Y = torch.Tensor(Y).to(device)
+        test_dataset = dataset_class(X, Y)
+
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
+
+    if task_name == TaskName.PreTrain:
+        return _run_one_epoch_self_sup(model, test_dataloader, criterion, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+    elif task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
+        return _run_one_epoch_classification_augmented(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
 def cv_train_test_model(X, Y, model, test_name="", task_name=TaskName.TrainClassifier, n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', is_plot_conf_matrix=False, is_by_channel=False, rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=True, viz_rebalance=False):
     """
@@ -571,6 +597,108 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     num_standard_errors = 0
     num_target_errors = 0
     for x, y in dataloader:
+        if mode == 'train': optimizer.zero_grad()
+
+        mini_batch_i += 1
+        if verbose >= 1:
+            pbar.update(1)
+
+        # if check_param:
+        #     for key1, value1 in a.items():
+        #         value2 = b[key1]
+        #         # Perform tensor comparison
+        #         if torch.equal(value1, value2):
+        #             print(f"Tensor {key1} is equal in both models.")
+        #         else:
+        #             print(f"Tensor {key1} is not equal in both models.")
+
+        with context_manager:
+            x = x if isinstance(x, tuple) else (x,)
+            y_pred = model(*x)
+
+            y_tensor = y.to(device)
+            y_pred = last_activation(y_pred)
+            classification_loss = criterion(y_pred, y_tensor)
+
+        if mode == 'train' and l2_weight > 0:
+            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+        else:
+            l2_penalty = 0
+        loss = classification_loss + l2_penalty
+        if mode == 'train':
+            loss.backward()
+            grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
+            nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
+            optimizer.step()
+
+        y_all = np.concatenate([y_all, y.detach().cpu().numpy()]) if y_all is not None else y.detach().cpu().numpy()
+        y_all_pred = np.concatenate([y_all_pred, y_pred.detach().cpu().numpy()]) if y_all_pred is not None else y_pred.detach().cpu().numpy()
+
+        batch_losses.append(loss.item())
+        if y_pred.shape[1] == 1:
+            predicted_labels = (y_pred > .5).int()
+            true_label = y_tensor
+        else:
+            predicted_labels = torch.argmax(y_pred, dim=1)
+            true_label = torch.argmax(y_tensor, dim=1)
+        num_correct_preds += torch.sum(true_label == predicted_labels).item()
+        num_standard_errors += count_standard_error(true_label, predicted_labels)
+        num_target_errors += count_target_error(true_label, predicted_labels)
+        if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
+
+    if verbose >= 1: pbar.close()
+    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
+
+def _run_one_epoch_classification_augmented(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
+    """
+
+    @param model:
+    @param dataloader: contains x and y, y should be onehot encoded
+    @param label_encoder:
+    @param criterion:
+    @param device:
+    @param mode: can be train or val
+    @param test_name:
+    @param verbose:
+    @return:
+    """
+    if device is None:
+        use_cuda = torch.cuda.is_available()
+        device = torch.device("cuda:0" if use_cuda else "cpu")
+    if mode == 'train':
+        model.train()
+        # determine which layer to require grad
+        if task_name == TaskName.PretrainedClassifierFineTune:
+            for param in model.parameters():
+                param.requires_grad = False
+            for param in model.transformer.parameters():
+                param.requires_grad = True
+            for param in model.mlp_head.parameters():
+                param.requires_grad = True
+            model.cls_token.requires_grad = True
+    elif mode == 'val':
+        model.eval()
+    else:
+        raise ValueError('mode must be train or eval')
+    grad_norms = []
+    context_manager = torch.no_grad() if mode == 'val' else contextlib.nullcontext()
+    mini_batch_i = 0
+
+    if verbose >= 1:
+        pbar = tqdm(total=math.ceil(len(dataloader.dataset) / dataloader.batch_size), desc=f'{mode} {test_name}')
+        pbar.update(mini_batch_i := 0)
+    batch_losses = []
+    num_correct_preds = 0
+    y_all = None
+    y_all_pred = None
+    num_standard_errors = 0
+    num_target_errors = 0
+    for x, y in dataloader:
+        aug_data, aug_labels = interaug(x, y)
+        aug_data = aug_data.to(device)
+        aug_labels = aug_labels.to(device)
+        x = torch.cat((x, aug_data), dim=0)
+        y = torch.cat((y, aug_labels), dim=0)
         if mode == 'train': optimizer.zero_grad()
 
         mini_batch_i += 1

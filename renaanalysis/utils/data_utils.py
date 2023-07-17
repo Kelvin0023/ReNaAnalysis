@@ -3,6 +3,7 @@ from autoreject import AutoReject
 from imblearn.over_sampling import SMOTE
 from matplotlib import pyplot as plt
 from mne.decoding import UnsupervisedSpatialFilter
+from scipy.signal import butter, lfilter
 from sklearn.decomposition import PCA, FastICA
 from sklearn.metrics import confusion_matrix
 
@@ -199,7 +200,8 @@ def force_square_epochs(epochs, tmin, tmax):
 
 def epochs_to_class_samples(epochs, event_names, *, picks=None,
                             eeg_viz_picks =eeg_picks,
-                            eeg_resample_rate=128, n_jobs=1, reject='auto', plots='sanity-check', colors=None, title='', random_seed=None):
+                            eeg_resample_rate=128, n_jobs=1, reject='auto', plots='sanity-check', colors=None, title='', random_seed=None, low_freq=None, high_freq=None, require_metainfo=True,
+                            is_plot_ERP=True, is_plot_PSD=True, epoch_tmin=1, epoch_tmax=3):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
@@ -214,6 +216,8 @@ def epochs_to_class_samples(epochs, event_names, *, picks=None,
     else:
         epochs = epochs.copy()[event_names]
 
+    if low_freq is not None and high_freq is not None:
+        epochs.filter(low_freq, high_freq, n_jobs=n_jobs)
     if epochs.info['sfreq'] != eeg_resample_rate:
         epochs.resample(eeg_resample_rate, n_jobs=n_jobs)
     if reject == 'auto':
@@ -223,8 +227,8 @@ def epochs_to_class_samples(epochs, event_names, *, picks=None,
     else:
         epochs_clean = epochs
     event_ids = {event_name: i for i, event_name in enumerate(event_names)}
-    x, y, metadata = _epoch_to_samples(epochs_clean, event_ids, require_metainfo=True)
-    visualize_eeg_epochs(epochs_clean, event_ids, colors, eeg_picks=eeg_viz_picks, title='EEG Epochs ' + title)
+    x, y, metadata = _epoch_to_samples(epochs_clean, event_ids, require_metainfo=require_metainfo, event_marker_to_label=False)
+    visualize_eeg_epochs(epochs_clean, event_ids, colors, tmin_eeg_viz=epoch_tmin, tmax_eeg_viz=epoch_tmax, eeg_picks=eeg_viz_picks, title='EEG Epochs ' + title, low_frequency=low_freq, high_frequency=high_freq, is_plot_PSD=is_plot_PSD, is_plot_timeseries=is_plot_ERP)
 
     return x, y, metadata
 
