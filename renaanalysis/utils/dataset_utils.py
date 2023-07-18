@@ -1,3 +1,4 @@
+import copy
 import os
 import time
 
@@ -246,13 +247,15 @@ def get_BCICIV_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tma
     for file_name, _ in file_tree_dict.items():
         if 'T' in file_name:
             metadata_dict = {}
+            epoch_tmax_copy = copy.copy(epoch_tmax)
             subject_id = int(re.findall(r'\d+', file_name)[0])
             raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
+            epoch_tmax_copy -= 1 / raw.info['sfreq']
             mne.rename_channels(raw.info, channel_mapping)
             raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right']) # otherwise the channel names are not consistent with montage
             events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
             is_merge_event = 'drop'
-            data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax, baseline=(epoch_tmin, epoch_tmin + (epoch_tmax-epoch_tmin)*0.1), preload=True, event_repeated=is_merge_event)
+            data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax_copy, baseline=(epoch_tmin, epoch_tmin + (epoch_tmax-epoch_tmin)*0.1), preload=True, event_repeated=is_merge_event)
             metadata_dict['subject_id'] = [subject_id] * len(data)
             metadata_dict['run'] = [1] * len(data)
             metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
@@ -503,7 +506,7 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
 
 def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate_epochs=False, reject='auto',
                 eeg_resample_rate=200, is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
-                eyetracking_resample_srate=20, rebalance_method='SMOTE', subject_picks=None, subject_group_picks=None, random_seed=None):
+                eyetracking_resample_srate=20, rebalance_method='SMOTE', subject_picks=None, subject_group_picks=None, random_seed=None, filename=None):
     """
 
     This function creates several save files, including the data samples obtained from the dataset_root
@@ -547,4 +550,4 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
 
     physio_arrays = preprocess_samples_and_save(physio_arrays, epochs_root, is_apply_pca_ica_eeg, pca_ica_eeg_n_components)
 
-    return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors, rebalance_method=rebalance_method)
+    return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors, rebalance_method=rebalance_method, filename=filename)

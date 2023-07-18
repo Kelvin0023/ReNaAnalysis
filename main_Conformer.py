@@ -19,7 +19,7 @@ is_pca_ica = False  # apply pca and ica on data or not
 is_by_channel = False  # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False  # plot confusion matrix of training and validation during training or not
 viz_rebalance = False  # viz training data after rebalance or not
-is_regenerate_epochs = True
+is_regenerate_epochs = False
 
 eeg_resample_rate = 200
 
@@ -43,11 +43,11 @@ np.random.seed(random_seed)
 start_time = time.time()  # record the start time of the analysis
 
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
-if not os.path.exists(mmarray_path) or is_regenerate_epochs:
+if not os.path.exists(mmarray_path):
     mmarray = get_dataset(dataset_name, epochs_root=export_data_root, dataset_root=data_root, reject=reject, eeg_resample_rate=250,
                           is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs,
-                          subject_picks=subject_pick, subject_group_picks=subject_group_picks, random_seed=random_seed)
-    mmarray.save(mmarray_path)
+                          subject_picks=subject_pick, subject_group_picks=subject_group_picks, random_seed=random_seed, filename=mmarray_path)
+    mmarray.save_to_path(mmarray_path)
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
 
@@ -68,8 +68,7 @@ models_param = {}
 locking_performance = {}
 
 
-models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_augmented(
-                                                                                            mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
+models, training_histories, criterion, _, test_loss, test_acc = train_test_augmented(mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix,
                                                                                              verbose=1, lr=lr, l2_weight=l2_weight, random_seed=random_seed)
 

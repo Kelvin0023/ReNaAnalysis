@@ -208,7 +208,7 @@ def eval_test_augmented(model, X, Y, criterion, last_activation, _encoder, task_
     if task_name == TaskName.PreTrain:
         return _run_one_epoch_self_sup(model, test_dataloader, criterion, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
     elif task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
-        return _run_one_epoch_classification_augmented(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+        return _run_one_epoch_classification_augmented(model, test_dataloader, _encoder, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
 def cv_train_test_model(X, Y, model, test_name="", task_name=TaskName.TrainClassifier, n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, lr_scheduler_type='exponential', is_plot_conf_matrix=False, is_by_channel=False, rebalance_method='SMOT', X_test=None, Y_test=None, plot_histories=True, viz_rebalance=False):
     """
@@ -745,7 +745,7 @@ def _run_one_epoch_classification_ordered_batch(model, dataloader, criterion, la
 
 
 
-def _run_one_epoch_classification_augmented(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
+def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
     """
 
     @param model:
@@ -790,12 +790,13 @@ def _run_one_epoch_classification_augmented(model, dataloader, criterion, last_a
     num_standard_errors = 0
     num_target_errors = 0
     for x, y in dataloader:
-        aug_data, aug_labels = interaug(x, y)
-        aug_data = aug_data.to(device)
-        aug_labels = aug_labels.to(device)
-        x = torch.cat((x, aug_data), dim=0)
-        y = torch.cat((y, aug_labels), dim=0)
-        if mode == 'train': optimizer.zero_grad()
+        if mode == 'train':
+            optimizer.zero_grad()
+            aug_data, aug_labels = interaug(x[:, None, :, :], y, encoder)
+            aug_data = torch.squeeze(aug_data, dim=1)
+            aug_data = aug_data.to(device)
+            x = torch.cat((x, aug_data), dim=0)
+            y = torch.cat((y, aug_labels), dim=0)
 
         mini_batch_i += 1
         if verbose >= 1:
@@ -845,7 +846,7 @@ def _run_one_epoch_classification_augmented(model, dataloader, criterion, last_a
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
     if verbose >= 1: pbar.close()
-    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
+    return np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
 
 def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.PreTrain, verbose=1, check_param=1):
     """

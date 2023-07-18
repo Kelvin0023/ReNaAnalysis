@@ -168,7 +168,7 @@ debug = True
 eeg_epoch_ticks = np.array([0, 0.3, 0.6, 0.8])
 pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 
-lr = 1e-3
+lr = 2e-4
 batch_size = 32
 epochs = 50000
 patience = 30

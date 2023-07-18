@@ -9,6 +9,7 @@ import torch.nn.utils.rnn as rnn_utils
 import torch.nn.functional as F
 
 from renaanalysis.learning.types_ import Tensor
+from renaanalysis.params.params import batch_size
 
 
 class Conformer(nn.Sequential):
@@ -43,12 +44,13 @@ class ClassificationHead(nn.Sequential):
     def forward(self, x):
         x = x.contiguous().view(x.size(0), -1)
         out = self.fc(x)
-        return x, out
+        return out
 
 class PatchEmbed(nn.Module):
     def __init__(self, n_kernels=40, n_channels=22, emb_size=40):
         super().__init__()
         self.layers = nn.Sequential(
+            Rearrange('b eegc t -> b 1 eegc t', eegc=n_channels),
             nn.Conv2d(in_channels=1, out_channels=n_kernels, kernel_size=(1, 25), stride=(1, 1)),
             nn.Conv2d(in_channels=n_kernels, out_channels=n_kernels, kernel_size=(n_channels, 1), stride=(1, 1)),
             nn.BatchNorm2d(n_kernels),
@@ -145,32 +147,35 @@ class TransformerEncoder(nn.Sequential):
     def __init__(self, depth, emb_size):
         super().__init__(*[TransformerEncoderBlock(emb_size) for _ in range(depth)])
 
-def interaug(timg, label):
+def interaug(timg, label, encoder):
     aug_data = []
     aug_label = []
     for cls4aug in range(4):
-        cls_idx = np.where(label == cls4aug + 1)
+        cls_idx = np.where(np.all(label.numpy() == encoder(np.array(cls4aug).reshape(1, 1)), axis=1))[0]
         tmp_data = timg[cls_idx]
-        tmp_label = label[cls_idx]
+        tmp_label = encoder(np.array(cls4aug).reshape(1, 1))
 
-        tmp_aug_data = np.zeros((int(self.batch_size / 4), 1, 22, 1000))
-        for ri in range(int(self.batch_size / 4)):
-            for rj in range(8):
-                rand_idx = np.random.randint(0, tmp_data.shape[0], 8)
-                tmp_aug_data[ri, :, :, rj * 125:(rj + 1) * 125] = tmp_data[rand_idx[rj], :, :,
-                                                                  rj * 125:(rj + 1) * 125]
+        if tmp_data.shape[0] == 0:
+            continue
+        else:
+            tmp_aug_data = torch.zeros((int(batch_size / 4), 1, 22, 1000))
+            for ri in range(int(batch_size / 4)):
+                for rj in range(8):
+                    rand_idx = np.random.randint(0, tmp_data.shape[0], 8)
+                    tmp_aug_data[ri, :, :, rj * 125:(rj + 1) * 125] = tmp_data[rand_idx[rj], :, :,
+                                                                      rj * 125:(rj + 1) * 125]
 
-        aug_data.append(tmp_aug_data)
-        aug_label.append(tmp_label[:int(self.batch_size / 4)])
+            aug_data.append(tmp_aug_data)
+            aug_label.append(torch.from_numpy(tmp_label).expand(int(batch_size / 4), -1))
     aug_data = np.concatenate(aug_data)
     aug_label = np.concatenate(aug_label)
     aug_shuffle = np.random.permutation(len(aug_data))
     aug_data = aug_data[aug_shuffle, :, :]
     aug_label = aug_label[aug_shuffle]
 
-    aug_data = torch.from_numpy(aug_data).cuda()
+    aug_data = torch.from_numpy(aug_data)
     aug_data = aug_data.float()
-    aug_label = torch.from_numpy(aug_label - 1).cuda()
+    aug_label = torch.from_numpy(aug_label)
     aug_label = aug_label.long()
     return aug_data, aug_label
 

@@ -1,3 +1,4 @@
+import copy
 import itertools
 import math
 import pickle
@@ -108,7 +109,7 @@ class MultiModalArrays:
     """
 
     """
-    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE'):
+    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None):
         """
 
         @param physio_arrays:
@@ -149,6 +150,7 @@ class MultiModalArrays:
         self.test_batch_sample_indices = None
         self.val_batch_sample_indices = None
         self.train_batch_sample_indices = None
+        self.filename = filename
 
     def keys(self):
         return self._physio_types_arrays.keys()
@@ -268,6 +270,8 @@ class MultiModalArrays:
             skf = ShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
             for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
                 self.training_val_split_indices.append((train, val))
+        self.save()
+
 
     def train_test_split(self, test_size=0.1, random_seed=None):
         """
@@ -287,6 +291,7 @@ class MultiModalArrays:
             assert len(np.unique(self.labels_array[self.test_indices])) == len(self.event_names), "number of unique labels is not the same as number of event names"
         else:
             self.train_indices, self.test_indices = train_test_split(list(range(self.physio_arrays[0].array.shape[0])), test_size=test_size, random_state=random_seed, stratify=self.labels_array)
+        self.save()
 
     def get_test_set(self, encode_y=False, convert_to_tensor=False, device=None):
         """
@@ -360,6 +365,22 @@ class MultiModalArrays:
     def encode_labels(self):
         pass  # TODO
 
+    def create_label_encoder(self, output_shape):
+        """
+        create a label encoder for the dataset
+        @return:
+        """
+        if output_shape == 1:
+            assert len(np.unique(
+                self.labels_array)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
+            # self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
+            self._encoder_object = self.label_encoder
+            self._encoder = lambda y: self.label_encoder.transform(y.reshape(-1, 1))
+        else:
+            self._encoder_object = self.label_onehot_encoder
+            self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
+
+
     def get_label_encoder_criterion_for_model(self, model, device=None, reset_model=False, include_metainfo=False):
         """
         this function must be called
@@ -377,32 +398,40 @@ class MultiModalArrays:
             output_shape = model.to(device)(*rand_input).shape[1]
             if reset_model: model.reset()
 
+        self.create_label_encoder(output_shape)
         if output_shape == 1:
-            assert len(np.unique(self.labels_array)) == 2, "Model only has one output node. But given Y has more than two classes. Binary classification model should have 2 classes"
-            # self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
-            self._encoder_object = self.label_encoder
-            self._encoder = lambda y: self.label_encoder.transform(y.reshape(-1, 1))
             criterion = nn.BCELoss(reduction='mean')
             last_activation = nn.Sigmoid()
         else:
-            self._encoder_object = self.label_onehot_encoder
-            self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
-            criterion = nn.CrossEntropyLoss(weight=self.get_class_weight(True, device) if self.rebalance_method=='class_weight' else None)
+            criterion = nn.CrossEntropyLoss(
+                weight=self.get_class_weight(True, device) if self.rebalance_method == 'class_weight' else None)
             last_activation = nn.Softmax(dim=1)
+        self.save()
 
         return criterion, last_activation
 
     def get_encoder_function(self):
         return self._encoder
 
-    def save(self, path):
+    def save_to_path(self, path):
         """
-        save the dataset to a path
+        save the dataset to a given path
         @param path:
         @return:
         """
-        self._encoder = None
-        pickle.dump(self, open(path, 'wb'))
+        copy_without_encoder = copy.deepcopy(self)
+        copy_without_encoder._encoder = None
+        pickle.dump(copy_without_encoder, open(path, 'wb'))
+
+    def save(self):
+        """
+        save the dataset to the default path
+        @param path:
+        @return:
+        """
+        copy_without_encoder = copy.deepcopy(self)
+        copy_without_encoder._encoder = None
+        pickle.dump(copy_without_encoder, open(self.filename, 'wb'))
 
     def training_val_test_split_ordered_by_subject_run(self, n_folds, batch_size, val_size, test_size, random_seed=None):
         """
@@ -469,6 +498,7 @@ class MultiModalArrays:
         self.test_batch_sample_indices = np.array(test_batch_sample_indices)
         self.val_batch_sample_indices = np.array(val_batch_sample_indices)
         self.train_batch_sample_indices = np.array(train_batch_sample_indices)
+        self.save()
 
     def get_train_val_ordered_batch_iterator_fold(self, fold, device, return_metainfo=False):
         """

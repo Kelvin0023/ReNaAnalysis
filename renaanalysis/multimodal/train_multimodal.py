@@ -7,7 +7,7 @@ from torch.optim import lr_scheduler
 
 from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, ContrastiveLoss
 from renaanalysis.learning.train import _run_one_epoch_classification, eval_test, _run_one_epoch_self_sup, \
-    _run_one_epoch_classification_augmented, _run_one_epoch_classification_ordered_batch
+    _run_one_epoch_classification_augmented, eval_test_augmented, _run_one_epoch_classification_ordered_batch
 from renaanalysis.params.params import batch_size, epochs, patience, TaskName
 from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_history
 
@@ -375,11 +375,9 @@ def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainC
     train_accs_folds = []
     val_losses_folds = []
     val_accs_folds = []
-    val_aucs_folds = []
     models = []
 
     model_copy = None
-    test_auc = []
     test_acc = []
     test_loss = []
     mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
@@ -398,17 +396,16 @@ def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainC
         num_train_target_errors = []
         num_val_standard_errors = []
         num_val_target_errors = []
-        best_auc = 0
+        best_acc = 0
         train_losses = []
         train_accs = []
         val_losses = []
         val_accs = []
-        val_aucs = []
         for epoch in range(epochs):
         # prev_para = []
         # for param in model_copy.parameters():
         #     prev_para.append(param.cpu().detach().numpy())
-            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification_augmented(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification_augmented(model_copy, train_dataloader, mmarray.get_encoder_function(), criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
             if is_plot_conf_matrix:
                 train_predicted_labels_all = np.argmax(train_y_all_pred, axis=1)
                 train_true_label_all = np.argmax(train_y_all, axis=1)
@@ -417,7 +414,7 @@ def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainC
                 viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
-            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification_augmented(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification_augmented(model_copy, val_dataloader, mmarray.get_encoder_function(), criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
             if is_plot_conf_matrix:
                 val_predicted_labels_all = np.argmax(val_y_all_pred, axis=1)
                 val_true_label_all = np.argmax(val_y_all, axis=1)
@@ -427,16 +424,15 @@ def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainC
 
             train_losses.append(train_loss)
             train_accs.append(train_accuracy)
-            val_aucs.append(val_auc)
             val_losses.append(val_loss)
             val_accs.append(val_accuracy)
 
             if verbose >= 1:
-                print("Fold {}, Epoch {}: val auc = {:.16f}, train accuracy = {:.16f}, train loss={:.16f}; val accuracy = {:.16f}, val loss={:.16f}, patience left {}".format(f_index, epoch, np.max(val_aucs), train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1], patience - patience_counter))
-            if val_auc > best_auc:
-                if verbose >= 1: print('Best validation auc improved from {} to {}'.format(best_auc, val_auc))
+                print("Fold {}, Epoch {}: train accuracy = {:.16f}, train loss={:.16f}; val accuracy = {:.16f}, val loss={:.16f}, patience left {}".format(f_index, epoch, train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1], patience - patience_counter))
+            if val_accuracy > best_acc:
+                if verbose >= 1: print('Best validation auc improved from {} to {}'.format(best_acc, val_accuracy))
                 # best_loss = val_losses[-1]
-                best_auc = val_auc
+                best_acc = val_accuracy
                 patience_counter = 0
                 best_model = copy.deepcopy(model_copy)
             else:
@@ -450,29 +446,25 @@ def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainC
         train_losses_folds.append(train_losses)
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
-        val_aucs_folds.append(val_aucs)
-        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval_test(best_model, X_test, Y_test, criterion, last_activation,
+        test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval_test_augmented(best_model, X_test, Y_test, criterion, last_activation,
                                          _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
         if verbose >= 1:
-            print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
-        test_auc.append(test_auc_model)
+            print("Tested Fold {}: test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_loss_model, test_acc_model))
         test_loss.append(test_loss_model)
         test_acc.append(test_acc_model)
         models.append(best_model)
 
-    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds, 'auc_test': test_auc, 'acc_test': test_acc, 'loss_test': test_loss}
+    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'acc_test': test_acc, 'loss_test': test_loss}
     if plot_histories:
         for i in range(n_folds):
             history = {'loss_train': training_histories_folds['loss_train'][i],
                        'acc_train': training_histories_folds['acc_train'][i],
                        'loss_val': training_histories_folds['loss_val'][i],
                        'acc_val': training_histories_folds['acc_val'][i],
-                       'auc_val': training_histories_folds['auc_val'][i],
-                       'auc_test': training_histories_folds['auc_test'][i],
                        'acc_test': training_histories_folds['acc_test'][i],
                        'loss_test': training_histories_folds['loss_test'][i]}
             seached_params = None
-            plot_training_history(history, seached_params, i)
+            plot_training_history(history, seached_params, i, is_plot_auc=False)
 
 
-    return models, training_histories_folds, criterion, last_activation, test_auc, test_loss, test_acc
+    return models, training_histories_folds, criterion, last_activation, test_loss, test_acc

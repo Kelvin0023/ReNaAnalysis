@@ -435,23 +435,30 @@ def viz_binary_roc(true_label, pred_score, param_list, fold, target_label=1):
 
     plt.show()
 
-def plot_training_history(history, param_list, fold):
+def plot_training_history(history, param_list, fold, is_plot_auc=True):
     # Extract the training history
     train_loss = history['loss_train']
     val_loss = history['loss_val']
     train_acc = history['acc_train']
     val_acc = history['acc_val']
-    val_auc = history['auc_val']
-    test_auc = history['auc_test']
+    if is_plot_auc:
+        val_auc = history['auc_val']
+        test_auc = history['auc_test']
     test_acc = history['acc_test']
     test_loss = history['loss_test']
 
     # Plot the training and validation loss
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
     if param_list is not None:
-        fig.suptitle(f'Training history of param {param_list} in fold {fold}, test auc = {test_auc}')
+        if is_plot_auc:
+            fig.suptitle(f'Training history of param {param_list} in fold {fold}, test auc = {test_auc}')
+        else:
+            fig.suptitle(f'Training history of param {param_list} in fold {fold}, test acc = {test_acc}')
     else:
-        fig.suptitle(f'Training history of fold {fold}, test auc = {test_auc}')
+        if is_plot_auc:
+            fig.suptitle(f'Training history of fold {fold}, test auc = {test_auc}')
+        else:
+            fig.suptitle(f'Training history of fold {fold}, test acc = {test_acc}')
     axs[0].plot(range(1, len(train_loss) + 1), train_loss, label='Training Loss')
     axs[0].plot(range(1, len(val_loss) + 1), val_loss, label='Validation Loss')
     axs[0].set_xlabel('Epochs')
@@ -462,7 +469,8 @@ def plot_training_history(history, param_list, fold):
     # Plot the training and validation accuracy
     axs[1].plot(range(1, len(train_acc) + 1), train_acc, label='Training Accuracy')
     axs[1].plot(range(1, len(val_acc) + 1), val_acc, label='Validation Accuracy')
-    axs[1].plot(range(1, len(val_auc) + 1), val_auc, label='Validation AUC')
+    if is_plot_auc:
+        axs[1].plot(range(1, len(val_auc) + 1), val_auc, label='Validation AUC')
     axs[1].set_xlabel('Epochs')
     axs[1].set_ylabel('Accuracy / Area')
     axs[1].set_title('Training and Validation Accuracy')
