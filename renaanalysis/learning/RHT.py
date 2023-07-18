@@ -66,7 +66,7 @@ class RecurrentAttention(nn.Module):
         self.num_heads = num_heads
         self.scale = dim_head ** -0.5
 
-        self.attend = nn.Softmax(dim=-1)
+        self.softmax = nn.Softmax(dim=-1)
         self.drop_attention = nn.Dropout(drop_attention)
 
         self.to_qkv = nn.Linear(embedding_dim, all_heads_dim * 3, bias=False)
@@ -115,11 +115,23 @@ class RecurrentAttention(nn.Module):
         # dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
         dots = (A + B + C) * self.scale
 
-        attention = self.attend(dots)
+        attention = self.softmax(dots)
         attention = self.drop_attention(attention)  # n query, n query, batch_size, num_heads
 
         out = torch.torch.einsum('ijbn,jbnd->ibnd', (attention, v))
         out = rearrange(out, 'n b h d -> b n (h d)')
+
+        # qkv = self.to_qkv(x).chunk(3, dim=-1)
+        # q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads), qkv)
+        #
+        # dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+        #
+        # attention = self.softmax(dots)
+        # attention = self.drop_attention(attention)  # TODO
+        #
+        # out = torch.matmul(attention, v)
+        # out = rearrange(out, 'b h n d -> b n (h d)')
+
         return self.to_out(out), attention
 
 
@@ -207,7 +219,7 @@ class RecurrentHierarchicalTransformer(nn.Module):
             nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
         )
 
-        # self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        # self.learnablepos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
         self.pos_embedding = SinusoidalPositionalEmbedding(patch_embed_dim)
         self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.cls_token_pos_embedding = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
@@ -246,7 +258,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
         discretized_start_times = meta_info['epoch_start_times'] // self.window_duration
         # print(f"{discretized_start_times = }")
 
-        time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows
+        # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
+        time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
         # time_pos = time_pos.unsqueeze(1).repeat(1, x_eeg.shape[1], 1).reshape(len(x_eeg), -1)  # batch_size x num_tokens
         # compute channel position magitudes discretized
         channel_pos = meta_info['channel_voxel_indices']  # batch_size x num_channels
@@ -269,7 +282,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
         cls_tokens_pos_embedding = repeat(self.cls_token_pos_embedding, '1 1 d -> b 1 d', b=b)
         time_pos_embed = torch.cat((cls_tokens_pos_embedding, time_pos_embed), dim=1)
         channel_pos_embed = torch.cat((cls_tokens_pos_embedding, channel_pos_embed), dim=1)
-        # x += self.pos_embedding[:, :(n + 1)]
+
+        # x += self.learnablepos_embedding[:, :(ntoken + 1)]
 
         x = self.dropout(x)
         time_pos_embed = self.dropout(time_pos_embed)

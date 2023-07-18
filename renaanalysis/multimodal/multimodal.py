@@ -168,7 +168,7 @@ class MultiModalArrays:
     def get_num_samples(self):
         return len(self.physio_arrays[0])
 
-    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, task_name=TaskName.TrainClassifier):
+    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, task_name=TaskName.TrainClassifier, return_metainfo=False):
         """
         get the dataloader for a given fold
         this function must be called after training_val_split
@@ -186,17 +186,30 @@ class MultiModalArrays:
             x_val = []
             y_train = self.labels_array[training_indices]
             y_val = self.labels_array[val_indices]
-            rebalanced_labels = []
+
+            labels = []
+            meta_info_train = []
+            meta_info_val = []
             for parray in self.physio_arrays:
                 this_x_train, this_y_train = parray[training_indices], y_train
                 if self.rebalance_method == 'SMOTE' and is_rebalance_training:
-                    assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
+                    assert return_metainfo is False, 'get_dataloader_fold: return_metainfo is not supported for SMOTE'
+                    assert self.labels_array is not None, 'get_dataloader_fold: labels array must be provided to use rebalancing'
                     this_x_train, this_y_train = rebalance_classes(parray[training_indices], y_train, by_channel=parray.is_rebalance_by_channel, random_seed=random_seed)
                 x_train.append(torch.Tensor(this_x_train).to(device))
-                rebalanced_labels.append(this_y_train)
                 x_val.append(torch.Tensor(parray[val_indices]).to(device))
-            assert np.all([label_set == rebalanced_labels[0] for label_set in rebalanced_labels])
-            y_train = rebalanced_labels[0]
+
+                labels.append(this_y_train)  # just for assertion
+
+                # meta_info_train.append({name: values[training_indices] for name, values in parray.meta_info.items()})
+                # meta_info_val.append({name: values[val_indices] for name, values in parray.meta_info.items()})
+            meta_info_train = [{name: torch.Tensor(value[training_indices]).to(device) for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
+            meta_info_val = [{name: torch.Tensor(value[val_indices]).to(device) for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
+            meta_info_train = {k: v for d in meta_info_train for k, v in d.items()}
+            meta_info_val = {k: v for d in meta_info_val for k, v in d.items()}
+
+            assert np.all([label_set == labels[0] for label_set in labels])
+            y_train = labels[0]
 
             y_train_encoded = self._encoder(y_train)
             y_val_encoded = self._encoder(y_val)
@@ -210,8 +223,10 @@ class MultiModalArrays:
                 x_val = x_val[0]
             else:
                 dataset_class = MultiInputDataset
-            train_dataset = dataset_class(x_train, y_train_encoded)
-            val_dataset = dataset_class(x_val, y_val_encoded)
+            train_set = (x_train, *list(meta_info_train.values()), y_train_encoded )if return_metainfo else (x_train, y_train_encoded)
+            val_set = (x_val, *list(meta_info_val.values()), y_val_encoded )if return_metainfo else (x_val, y_val_encoded)
+            train_dataset = dataset_class(*train_set)
+            val_dataset = dataset_class(*val_set)
         elif task_name == TaskName.PreTrain:
             training_indices, val_indices = self.training_val_split_indices[fold_index]
             x_train = []
@@ -302,6 +317,16 @@ class MultiModalArrays:
         if len(x_test) == 1:
             x_test = x_test[0]
         return x_test, y_test
+
+    def get_test_dataloader(self, batch_size, encode_y=False, convert_to_tensor=False, device=None):
+        x_test, y_test = self.get_test_set(encode_y=encode_y, convert_to_tensor=convert_to_tensor, device=device)
+        if isinstance(x_test, tuple) == 1:
+            dataset_class = TensorDataset
+        else:
+            dataset_class = MultiInputDataset
+        test_dataset = dataset_class(x_test, y_test)
+        test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
+        return test_dataloader
 
     def get_random_sample(self, convert_to_tensor=False, device=None, include_metainfo=False):
         """
