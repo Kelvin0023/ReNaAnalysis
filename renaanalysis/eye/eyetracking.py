@@ -369,9 +369,9 @@ def fixation_detection_i_dt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
     print("Detected {} fixation from I-DT with {}% glitch percentage {}".format(len(fixations), glitch_precentage * 100, "" if head_rotation_xy_degree is None else "with head rotation"))
     return events, fixations, saccades, velocities
 
-def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", gaze_status=None,
+def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_status=None,
                             saccade_min_peak=6, saccade_min_amplitude=2, saccade_spacing=20e-3, saccade_min_sample=2,
-                            fixation_min_sample=2, glitch_threshold=1000, head_rotation_xy_degree=None):
+                            fixation_min_sample=2, glitch_threshold=1000, head_rotation_xy_degree=None, fixation_min_duraiton_second=0.1):
     """
     gaze event detection based on Velocity Threshold Identification (I-VT)
     inspirations:
@@ -405,7 +405,7 @@ def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
         raise ValueError('Invalid gaze timestamps, time delta is zero at {0}'.format(np.argwhere(np.diff(gaze_timestamps, prepend=1) == 0)))
     velocities = np.gradient(gaze_angles_degree) / np.diff(gaze_timestamps, prepend=1)
     velocities[0] = velocities[1]  # assume the first velocity is the same as the first velocity
-
+    speed = abs(velocities)
     events[velocities > glitch_threshold] = -1
 
     acceleration = np.gradient(velocities) / np.diff(gaze_timestamps, prepend=1)
@@ -413,16 +413,16 @@ def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
 
     acceleration_zero_crossings = np.where(np.logical_and(np.isfinite(acceleration), acceleration_sign_diff))[0] - 1
 
-    # num_points = 50
+    # num_points = 100
     # zero_crossing_indices = [x for x in acceleration_zero_crossings if x < num_points]
-    # plt.figure().set_figwidth(15)
+    # plt.figure().set_figwidth(30)
     # plt.plot(velocities[:num_points], label='velocity')
     # plt.scatter(np.arange(0, num_points), velocities[:num_points])
     # plt.legend()
     # plt.twinx()
     # plt.plot(acceleration[:num_points], label='acceleration', color='orange')
     # plt.scatter(np.arange(0, num_points), acceleration[:num_points], color='orange')
-    # plt.scatter(zero_crossing_indices, acceleration[zero_crossing_indices], color='red')
+    # plt.scatter(zero_crossing_indices, acceleration[zero_crossing_indices], color='red', label='a zero crossing')
     # plt.legend()
     # plt.twinx()
     # plt.show()
@@ -432,24 +432,51 @@ def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
         peak = acceleration_zero_crossings[crossing_i + 1]
         offset = acceleration_zero_crossings[crossing_i + 2]
 
-        # if not acceleration[peak] > 0 and acceleration[peak + 1] < 0:
-        #     # check the peak is cross from positive to negative
-        #     continue
+        # is_positive_peak = velocities[peak] > velocities[onset] and velocities[peak] > velocities[offset]
+        # is_negative_peak = velocities[peak] < velocities[onset] and velocities[peak] < velocities[offset]
+        # if not (is_positive_peak or is_negative_peak):  # check if the velocity peaks at peak
+
+        is_peak = speed[peak] > speed[onset] and speed[peak] > speed[offset]
+        if not is_peak:
+            # check if the velocity peaks at peak
+            continue
         if len(saccades) > 0 and gaze_timestamps[onset] - gaze_timestamps[saccades[-1].offset] < saccade_spacing:  # check temporal spacing condition for saccade
             continue
         if np.any(events[onset:offset] == -1):  # check if gaze status is invalid during the potential saccade
             continue
         if offset - onset < saccade_min_sample:
             continue
+        if np.any(np.isnan(velocities[onset:offset])):
+            continue
 
-        amplitude = gaze_angles_degree[offset] - gaze_angles_degree[onset]
-
-        peak_velocity = velocities[peak]
-        average_velocity = np.mean(velocities[onset:offset])
-        duration = gaze_timestamps[offset] - gaze_timestamps[onset]
-        if velocities[peak] > saccade_min_peak and amplitude > saccade_min_amplitude:
+        amplitude = abs(gaze_angles_degree[offset] - gaze_angles_degree[onset])  # deg
+        real_peak = onset + np.argmax(speed[onset:offset])  # peak may not be at the acceleration zero crossing depending on the sampling rate
+        peak_speed = speed[real_peak]  # deg/s
+        average_speed = np.mean(speed[onset:offset])  # deg/s
+        duration = gaze_timestamps[offset] - gaze_timestamps[onset]  # s
+        if peak_speed > saccade_min_peak and amplitude > saccade_min_amplitude:
             saccades.append(
-                Saccade(amplitude, duration, peak_velocity, average_velocity, onset, offset, gaze_timestamps[onset], gaze_timestamps[offset], peak, detection_alg=detection_alg))
+                Saccade(amplitude, duration, peak_speed, average_speed, onset, offset, gaze_timestamps[onset], gaze_timestamps[offset], real_peak, detection_alg=detection_alg))
+
+    # num_points = 1000
+    # zero_crossing_indices = [x for x in acceleration_zero_crossings if x < num_points]
+    # plt.figure().set_figwidth(300)
+    # plt.plot(velocities[:num_points], label='velocity')
+    # plt.scatter(np.arange(0, num_points), velocities[:num_points])
+    #
+    # plotting_saccades = [saccade for saccade in saccades if saccade.offset < num_points]
+    # plt.scatter([saccade.peak for saccade in plotting_saccades], [velocities[saccade.peak] for saccade in plotting_saccades], color='cyan', label='a saccade velocity peak', marker='X')
+    # [plt.axvspan(saccade.onset, saccade.offset, facecolor='g', alpha=0.2) for saccade in plotting_saccades]
+    #
+    # plt.legend()
+    # plt.twinx()
+    # plt.plot(acceleration[:num_points], label='acceleration', color='orange')
+    # plt.scatter(np.arange(0, num_points), acceleration[:num_points], color='orange')
+    # plt.scatter(zero_crossing_indices, acceleration[zero_crossing_indices], color='red', label='a zero crossing')
+    #
+    # plt.legend()
+    # plt.twinx()
+    # plt.show()
 
     # identify the fixations for all the intervals between saccades
     fixation_interval_indices = [(saccades[i - 1].offset, saccades[i].onset) for i in range(1, len(saccades))]  # IGNORE the interval before the first saccade
@@ -457,12 +484,40 @@ def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
         duration = gaze_timestamps[offset] - gaze_timestamps[onset]
 
         # _xy_deg = dtheta_degree[:, onset:offset][:, events[onset:offset] != -1] -    # check the dispersion excluding the invalid points
-        _yaw_deg = gaze_yaw_degree[onset:offset][events[onset:offset] != -1]   # check the dispersion excluding the invalid points
-        _pitch_deg = gaze_pitch_degree[onset:offset][events[onset:offset] != -1]   # check the dispersion excluding the invalid points
-        _xy_deg = np.stack((_yaw_deg, _pitch_deg), axis=1)
-        if _xy_deg.shape[0] != 0 and offset - onset > fixation_min_sample:  # if the entire interval is invalid, then we do NOT add it to fixation
-            dispersion = np.max(_xy_deg, axis=0) - np.min(_xy_deg, axis=0)
+        # _yaw_deg = gaze_yaw_degree[onset:offset][events[onset:offset] != -1]   # check the dispersion excluding the invalid points
+        # _pitch_deg = gaze_pitch_degree[onset:offset][events[onset:offset] != -1]   # check the dispersion excluding the invalid points
+        # _xy_deg = np.stack((_yaw_deg, _pitch_deg), axis=1)
+        fix_gaze_angles = gaze_angles_degree[onset:offset]
+        if np.any(np.isnan(fix_gaze_angles)):  # don't detect for invalid intervals
+            continue
+        if gaze_timestamps[offset] - gaze_timestamps[onset] < fixation_min_duraiton_second:  # don't detect for short intervals
+            continue
+        if offset - onset > fixation_min_sample:  # if the entire interval is invalid, then we do NOT add it to fixation
+            dispersion = np.max(fix_gaze_angles, axis=0) - np.min(fix_gaze_angles, axis=0)
             fixations.append(Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset, gaze_timestamps[onset], gaze_timestamps[offset], detection_alg=detection_alg))
+    #
+    # num_points = 1000
+    # zero_crossing_indices = [x for x in acceleration_zero_crossings if x < num_points]
+    # plt.figure().set_figwidth(300)
+    # plt.plot(velocities[:num_points], label='velocity')
+    # plt.scatter(np.arange(0, num_points), velocities[:num_points])
+    #
+    # plotting_saccades = [saccade for saccade in saccades if saccade.offset < num_points]
+    # plt.scatter([saccade.peak for saccade in plotting_saccades], [velocities[saccade.peak] for saccade in plotting_saccades], color='cyan', label='a saccade velocity peak', marker='X')
+    # [plt.axvspan(saccade.onset, saccade.offset, facecolor='g', alpha=0.2) for saccade in plotting_saccades]
+    #
+    # plotting_fixations = [fixation for fixation in fixations if fixation.offset < num_points]
+    # [plt.axvspan(fixation.onset, fixation.offset, facecolor='r', alpha=0.2) for fixation in plotting_fixations]
+    #
+    # plt.legend()
+    # plt.twinx()
+    # plt.plot(acceleration[:num_points], label='acceleration', color='orange')
+    # plt.scatter(np.arange(0, num_points), acceleration[:num_points], color='orange')
+    # plt.scatter(zero_crossing_indices, acceleration[zero_crossing_indices], color='red', label='a zero crossing')
+    #
+    # plt.legend()
+    # plt.twinx()
+    # plt.show()
 
     glitch_precentage = np.sum(events == -1) / len(events)
 

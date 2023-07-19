@@ -20,7 +20,8 @@ np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-rdf = get_rdf()
+base_root = "D:/Dropbox/Dropbox/ReNa/data/RenaPipeline-2023Spring"
+rdf = get_rdf(base_root)
 # rdf = pickle.load(open(os.path.join(export_data_root, 'rdf.p'), 'rb'))
 pickle.dump(rdf, open(os.path.join(export_data_root, 'rdf.p'), 'wb'))  # dump to the SSD c drive
 print(f"Saving/loading RDF complete, took {time.time() - start_time} seconds")
