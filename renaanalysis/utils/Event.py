@@ -121,7 +121,24 @@ def get_overlapping_events(start_time, end_time, events, event_filter: callable=
     overlapping_events.sort(key=lambda e: e.onset_time)
     return overlapping_events
 
-def get_overlapping_events_single_target(target_time, events, event_filter: callable=None):
+def get_longest_overlapping_event(start_time, end_time, events, event_filter: callable=None):
+    """
+
+    @param start_time:
+    @param end_time:
+    @param events:
+    @param event_filter:
+    @return: None means no overlapping event
+    """
+    filter_events = get_overlapping_events(start_time, end_time, events, event_filter)
+    if len(filter_events) == 0:
+        return None
+    elif len(filter_events) == 1:
+        return filter_events[0]
+    overlapping_times = np.array([find_overlap_duration(e.onset_time, e.offset_time, start_time, end_time) for e in filter_events])
+    return filter_events[np.argmax(overlapping_times)]
+
+def get_overlapping_events_single_at_time(target_time, events, event_filter: callable=None):
     """
     given events must have onset and offset in fields
     @return:
@@ -134,6 +151,14 @@ def get_overlapping_events_single_target(target_time, events, event_filter: call
 
     mask = np.logical_and(onset_times <= target_time, offset_times >= target_time)
     return filter_events[mask]
+
+
+def find_overlap_duration(event1_onset, event1_offset, event2_onset, event2_offset):
+    overlap_start = max(event1_onset, event2_onset)
+    overlap_end = min(event1_offset, event2_offset)
+    overlap_duration = max(0, overlap_end - overlap_start)
+    return overlap_duration
+
 
 def add_events_to_data(data_array: Union[np.ndarray, RawArray], data_timestamp, events, event_names, event_filters, deviate=25e-2):
     event_array = np.zeros(((1,) + data_timestamp.shape))
