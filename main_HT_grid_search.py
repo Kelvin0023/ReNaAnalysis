@@ -9,6 +9,7 @@ import torch
 
 from renaanalysis.learning.Conformer import Conformer
 from renaanalysis.learning.grid_search import grid_search_ht_eeg, grid_search_eeg
+from renaanalysis.multimodal.ChannelSpace import create_discretize_channel_space
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
@@ -33,6 +34,7 @@ mmarray_fn = f'{dataset_name}_mmarray.p'
 task_name = TaskName.TrainClassifier
 subject_pick = None
 subject_group_picks = ['001']
+
 '''
 grid_search_params = {
     "depth": [2, 4, 6],
@@ -89,13 +91,22 @@ grid_search_params = {
     # "patch_embed_dim": [64, 128, 256],
     "patch_embed_dim": [128],
 
+    "pos_embed_mode": ['learnable'],
+    # "pos_embed_mode": ['sinusoidal'],
+
     "dim_head": [64],
-    "attn_dropout": [0.5],
-    "emb_dropout": [0.5],
+
+    # "attn_dropout": [0.5],
+    "attn_dropout": [0.0],
+
+    # "emb_dropout": [0.5],
+    "emb_dropout": [0.1],
+
     "lr": [1e-4],
+    # "lr": [1e-3],
+
     "l2_weight": [1e-5],
 
-    # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
     'temperature' : [0.1],
@@ -118,6 +129,7 @@ start_time = time.time()  # record the start time of the analysis
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
     mmarray = get_dataset(dataset_name, epochs_root=export_data_root, dataset_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs, subject_picks=subject_pick, subject_group_picks=subject_group_picks, random_seed=random_seed, filename=mmarray_path)
+    create_discretize_channel_space(mmarray['eeg'])
     mmarray.save_to_path(mmarray_path)
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))

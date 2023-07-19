@@ -7,7 +7,7 @@ from torch.optim import lr_scheduler
 
 from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, ContrastiveLoss
 from renaanalysis.learning.train import _run_one_epoch_classification, eval_test, _run_one_epoch_self_sup, \
-    _run_one_epoch_classification_augmented, eval_test_augmented, _run_one_epoch_classification_ordered_batch
+    _run_one_epoch_classification_augmented, eval_test_augmented
 from renaanalysis.params.params import batch_size, epochs, patience, TaskName
 from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_history
 
@@ -23,8 +23,9 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device)
-    X_test, Y_test = mmarray.get_test_set()
+    criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device, include_metainfo=True)
+    test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
+
     # X = model.prepare_data(X)
 
     train_losses_folds = []
@@ -42,7 +43,8 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
-        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device)
+        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=True,
+                                                                       random_seed=random_seed, device=device, return_metainfo=True)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
@@ -107,8 +109,12 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
-        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval_test(best_model, X_test, Y_test, criterion, last_activation,
-                                         _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
+        # test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval_test(best_model, X_test, Y_test, criterion, last_activation,
+        #                                  _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
+
+        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
+            _run_one_epoch_classification(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
         test_auc.append(test_auc_model)
@@ -258,13 +264,13 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     # test_iterator = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
     mmarray.train_test_split(test_size=0.1, random_seed=random_seed)
     mmarray.training_val_split(n_folds, val_size=0.1, random_seed=random_seed)
-    test_iterator = mmarray.get_dataloader_test(batch_size=batch_size, device=device, encode_y=True)
+    test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
 
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
         # train_iterator, val_iterator = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True)
-        train_iterator, val_iterator = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device, task_name=task_name)
+        train_iterator, val_iterator = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device, task_name=task_name, return_metainfo=True)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
@@ -286,7 +292,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
         # prev_para = []
         # for param in model_copy.parameters():
         #     prev_para.append(param.cpu().detach().numpy())
-            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification_ordered_batch(model_copy, train_iterator, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(model_copy, train_iterator, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
             if is_plot_conf_matrix:
                 train_predicted_labels_all = np.argmax(train_y_all_pred, axis=1)
                 train_true_label_all = np.argmax(train_y_all, axis=1)
@@ -295,7 +301,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
                 viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
-            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification_ordered_batch(model_copy, val_iterator, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_iterator, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
             if is_plot_conf_matrix:
                 val_predicted_labels_all = np.argmax(val_y_all_pred, axis=1)
                 val_true_label_all = np.argmax(val_y_all, axis=1)
@@ -331,7 +337,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
         val_aucs_folds.append(val_aucs)
 
         test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
-            _run_one_epoch_classification_ordered_batch(model, test_iterator, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+            _run_one_epoch_classification(model, test_iterator, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))

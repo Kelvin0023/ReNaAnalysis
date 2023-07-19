@@ -11,11 +11,20 @@ import torch.nn.utils.rnn as rnn_utils
 import torch.nn.functional as F
 
 
-def pair(t):
-    return t if isinstance(t, tuple) else (t, t)
+class SinusoidalPositionalEmbedding(nn.Module):
+    def __init__(self, embed_dim):
+        super().__init__()
 
+        self.embed_dim = embed_dim
+        inverse_frequency = 1. / (10000 ** (torch.arange(0, embed_dim, 2).float() / embed_dim))
+        inverse_frequency = torch.unsqueeze(inverse_frequency, dim=0)  # unsequeeze for broadcasting to batches
+        self.register_buffer('inverse_frequency', inverse_frequency)
 
-# classes
+    def forward(self, p):
+        # t has shape (batch_size, seq_len, embed_dim)
+        outer_product = torch.einsum('bn,nd->bnd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
+        pos_emb = torch.cat([outer_product.sin(), outer_product.cos()], dim=-1)
+        return pos_emb
 
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
@@ -209,7 +218,8 @@ class MaskLayer(nn.Module):
 
 class HierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi'):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi',
+                 pos_embed_mode='learnable'):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """
@@ -220,6 +230,8 @@ class HierarchicalTransformer(nn.Module):
         @param num_channels: int: number of channels of the input data
         @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
         note that 'single' only works when the number of classes is 2.
+        @param pos_embed_mode: str: can be 'learnable' or 'sinusoidal'. If 'learnable', the positional embedding is learned.
+        If 'sinusoidal', the positional embedding is sinusoidal. The sinusoidal positional embedding requires meta_info to be passed in with forward
         """
         if output == 'single':
             assert num_classes == 2, 'output can only be single when num_classes is 2'
@@ -230,7 +242,7 @@ class HierarchicalTransformer(nn.Module):
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
-        self.path_embed_dim = patch_embed_dim
+        self.patch_embed_dim = patch_embed_dim
         self.patch_length = int(window_duration * sampling_rate)
         self.num_windows = num_timesteps // self.patch_length
 
@@ -250,7 +262,10 @@ class HierarchicalTransformer(nn.Module):
         # self.to_patch_embedding = ConvFeatureExtractionModel(self.extraction_layers, dropout=emb_dropout)
         # x = torch.randn(10, self.num_channels, self.num_timesteps)
 
-        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        self.pos_embed_mode = pos_embed_mode
+        self.learnable_pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        self.sinusoidal_pos_embedding = SinusoidalPositionalEmbedding(patch_embed_dim)
+
         self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
@@ -268,11 +283,11 @@ class HierarchicalTransformer(nn.Module):
                 nn.LayerNorm(patch_embed_dim),
                 nn.Linear(patch_embed_dim, num_classes))
 
-    def forward(self, x_eeg):
-            x = self.encode(x_eeg)
+    def forward(self, x_eeg, *args, **kwargs):
+            x = self.encode(x_eeg, *args, **kwargs)
             return self.mlp_head(x)
 
-    def encode(self, x_eeg):
+    def encode(self, x_eeg, *args, **kwargs):
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
@@ -280,7 +295,27 @@ class HierarchicalTransformer(nn.Module):
 
         cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
         x = torch.cat((cls_tokens, x), dim=1)
-        x += self.pos_embedding[:, :(n + 1)]
+
+        if self.pos_embed_mode == 'sinusoidal':
+            channel_pos = args[4]  # batch_size x num_channels
+            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
+
+            pos_embed = time_pos_embed + channel_pos_embed
+            cls_tokens_pos_embedding = repeat(self.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+            pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
+
+        elif self.pos_embed_mode == 'learnable':
+            pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
+        else:
+            raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
+
+        x += pos_embed
         x = self.dropout(x)
 
         x, att_matrix = self.transformer(x)
@@ -300,7 +335,7 @@ class HierarchicalTransformer(nn.Module):
     #
     #     cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
     #     x = torch.cat((cls_tokens, x), dim=1)
-    #     x += self.pos_embedding[:, :(n + 1)]
+    #     x += self.learnable_pos_embedding[:, :(n + 1)]
     #     x = self.dropout(x)
     #
     #     x, att_matrix = self.transformer(x)
@@ -350,7 +385,7 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
 
         cls_tokens = repeat(self.HierarchicalTransformer.cls_token, '1 1 d -> b 1 d', b=b)
         x = torch.cat((cls_tokens, x), dim=1)
-        x += self.HierarchicalTransformer.pos_embedding[:, :(n + 1)]
+        x += self.HierarchicalTransformer.learnable_pos_embedding[:, :(n + 1)]
         x = self.HierarchicalTransformer.dropout(x)
 
         x, att_matrix = self.HierarchicalTransformer.transformer(x)
