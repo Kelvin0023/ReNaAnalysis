@@ -249,6 +249,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
 
     criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device, include_metainfo=True, reset_model=True)  # reset the memory of the recurrent model
     # X_test, Y_test = mmarray.get_test_set()
+    model.reset()  # reset model memories
 
     train_losses_folds = []
     train_accs_folds = []
@@ -264,7 +265,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     # test_iterator = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
     mmarray.train_test_split(test_size=0.1, random_seed=random_seed)
     mmarray.training_val_split(n_folds, val_size=0.1, random_seed=random_seed)
-    test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
+    test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
 
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)

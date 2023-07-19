@@ -36,7 +36,7 @@ grid_search_params = {
     "depth": [4],
     "num_heads": [8],
     "pool": ['cls'],
-    "feedforward_mlp_dim": [32],
+    "feedforward_mlp_dim": [256],
 
     "patch_embed_dim": [128],
 
@@ -45,7 +45,7 @@ grid_search_params = {
     "emb_dropout": [0.1],
     "dropout": [0.1],
 
-    "lr": [1e-3],
+    "lr": [1e-4],
     "l2_weight": [1e-5],
 
     # "lr_scheduler_type": ['cosine'],

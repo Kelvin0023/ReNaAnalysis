@@ -387,7 +387,7 @@ class MultiModalArrays:
             self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
 
 
-    def get_label_encoder_criterion_for_model(self, model, device=None, reset_model=False, include_metainfo=False):
+    def get_label_encoder_criterion_for_model(self, model, device=None, include_metainfo=False):
         """
         this function must be called
 
@@ -402,7 +402,6 @@ class MultiModalArrays:
             model.eval()
             rand_input= rand_input if isinstance(rand_input, tuple) else (rand_input,)
             output_shape = model.to(device)(*rand_input).shape[1]
-            if reset_model: model.reset()
 
         self.create_label_encoder(output_shape)
         if output_shape == 1:

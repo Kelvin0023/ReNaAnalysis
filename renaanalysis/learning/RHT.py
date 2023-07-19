@@ -97,27 +97,31 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         v = rearrange(v, 'b h n d -> n b h d')
 
         # generalized pf attention
-        # Ex_Wq_e_biased = Ex_Wq + bias_time_e  # batch_size, n query, num_heads, dim_head
-        # W_kr_R_t = self.k_r_time_net(r_t).view(ntoken, b, self.num_heads, self.dim_head)
-        # W_kr_R_c = self.k_r_channel_net(r_c).view(ntoken, b, self.num_heads, self.dim_head)
-        # Ex_Wke_r_biased = Ex_Wke + (W_kr_R_t + W_kr_R_c) * 0.5   # batch_size, n query, num_heads, dim_head
-        # dots = torch.einsum('ibhd,jbhd->ijbh', Ex_Wq_e_biased, Ex_Wke_r_biased) * self.scale
+        Ex_Wq_e_biased = Ex_Wq + bias_time_e  # batch_size, n query, num_heads, dim_head treating bias_time_e as the generalized content bias
+
+        # time relative position bias
+        W_kr_R_t = self.k_r_time_net(r_t)
+        W_kr_R_t = rearrange(W_kr_R_t, 'b n (h d)-> n b h d', h=self.num_heads)
+        W_kr_R_c = self.k_r_channel_net(r_c)
+        W_kr_R_c = rearrange(W_kr_R_c, 'b n (h d)-> n b h d', h=self.num_heads)
+        Ex_Wke_r_biased = Ex_Wke + (W_kr_R_t + W_kr_R_c) * 0.5   # batch_size, n query, num_heads, dim_head
+        dots = torch.einsum('ibhd,jbhd->ijbh', Ex_Wq_e_biased, Ex_Wke_r_biased) * self.scale
 
 
         # transformer-xl attention
-        r = r_t + r_c
-        # W_kr_R_t = self.k_r_time_net(r).view(ntoken, b, self.num_heads, self.dim_head)
-        W_kr_R_t = self.k_r_time_net(r)
-        W_kr_R_t = rearrange(W_kr_R_t, 'b n (h d)-> n b h d', h=self.num_heads)
-
-        rw_head_q = Ex_Wq + bias_time_e                                         # qlen x bsz x n_head x d_head
-        AC = torch.einsum('ibnd,jbnd->ijbn', (rw_head_q, Ex_Wke))             # qlen x klen x bsz x n_head
-        rr_head_q = Ex_Wq + bias_time_r
-        BD = torch.einsum('ibnd,jbnd->ijbn', (rr_head_q, W_kr_R_t))
-        BD = self._rel_shift(BD)
-
-        dots = AC + BD
-        dots.mul_(self.scale)
+        # r = r_t + r_c
+        # # W_kr_R_t = self.k_r_time_net(r).view(ntoken, b, self.num_heads, self.dim_head)
+        # W_kr_R_t = self.k_r_time_net(r)
+        # W_kr_R_t = rearrange(W_kr_R_t, 'b n (h d)-> n b h d', h=self.num_heads)
+        #
+        # rw_head_q = Ex_Wq + bias_time_e                                         # qlen x bsz x n_head x d_head
+        # AC = torch.einsum('ibnd,jbnd->ijbn', (rw_head_q, Ex_Wke))             # qlen x klen x bsz x n_head
+        # rr_head_q = Ex_Wq + bias_time_r
+        # BD = torch.einsum('ibnd,jbnd->ijbn', (rr_head_q, W_kr_R_t))
+        # BD = self._rel_shift(BD)
+        #
+        # dots = AC + BD
+        # dots.mul_(self.scale)
 
         attention = self.softmax(dots)
         attention = self.drop_attention(attention)  # n query, n query, batch_size, num_heads
