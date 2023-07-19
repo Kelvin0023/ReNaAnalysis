@@ -12,6 +12,7 @@ from renaanalysis.utils.Event import Event, add_event_meta_info, get_events_betw
 from copy import copy
 
 from renaanalysis.utils.interpolation import interpolate_array_nan
+from renaanalysis.utils.jitter_removal import jitter_removal
 
 
 class Saccade(Event):
@@ -99,7 +100,7 @@ def fill_gap(gaze_xyz, gaze_timestamps, gaze_valid_array, max_gap_time=0.075, in
             interpolated_gap_durations.append(gap_duration)
     plt.hist(interpolated_gap_durations + ignored_gap_durations, bins=100)
     plt.show()
-    print(f"{interpolated_gap_count} gaps are interpolated among {len(gap_start_indices)} gaps, \n with interpolated gap with mean:median duration {np.mean(interpolated_gap_durations) *1e3}ms:{np.median(interpolated_gap_durations) *1e3}ms, \n and ignored gap with mean:median duration {np.mean(ignored_gap_durations) *1e3}ms:{np.median(ignored_gap_durations) *1e3}ms ")
+    print(f"With max gap duration {max_gap_time * 1e3}ms, \n {interpolated_gap_count} gaps are interpolated among {len(gap_start_indices)} gaps, \n with interpolated gap with mean:median duration {np.mean(interpolated_gap_durations) *1e3}ms:{np.median(interpolated_gap_durations) *1e3}ms, \n and ignored gap with mean:median duration {np.mean(ignored_gap_durations) *1e3}ms:{np.median(ignored_gap_durations) *1e3}ms ")
     # interpolate the gaps
     gaze_xyz = interpolate_array_nan(gaze_xyz)
 
@@ -109,7 +110,11 @@ def fill_gap(gaze_xyz, gaze_timestamps, gaze_valid_array, max_gap_time=0.075, in
     return gaze_xyz
 
 def _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timestamps=None):
-    eyetracking_data, eyetracking_timestamps = eyetracking_data_timestamps
+    eyetracking_data, eyetracking_lsl_timestamps = eyetracking_data_timestamps
+
+    eyetracking_raw_timestamps = 1e-9 * eyetracking_data[varjoEyetracking_chs.index('raw_timestamp')]  # use the more accuracy raw timestamps for eyetracking
+    eyetracking_timestamps = eyetracking_raw_timestamps + (eyetracking_lsl_timestamps[0] - eyetracking_raw_timestamps[0])
+
     assert eyetracking_data.shape[0] == len(varjoEyetracking_chs)
     gaze_xyz = np.copy(eyetracking_data[[varjoEyetracking_chs.index('gaze_forward_{0}'.format(x)) for x in ['x', 'y', 'z']]])
     status = eyetracking_data[varjoEyetracking_chs.index('status')]
@@ -133,9 +138,9 @@ def _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timesta
     return eyetracking_timestamps, gaze_xyz, status, head_rotation_xy_degree_eyesampled
 
 def gaze_event_detection_I_DT(eyetracking_data_timestamps, events, headtracking_data_timestamps=None):
-    eyetracking_timestamps, gaze_xyz, gaze_status, head_rotation_xy_eyesampled = _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timestamps)
+    eyetracking_raw_timestamps, gaze_xyz, gaze_status, head_rotation_xy_eyesampled = _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timestamps)
     gaze_behavior_events, fixations, saccades, velocity = fixation_detection_i_dt(gaze_xyz,
-                                                                                  gaze_timestamps=eyetracking_timestamps,
+                                                                                  gaze_timestamps=eyetracking_raw_timestamps,
                                                                                   # gaze_status=gaze_status,  no need to add gaze status as we are gap filling, which already accounts for gaze status
                                                                                   head_rotation_xy_degree=head_rotation_xy_eyesampled)
     fixations, saccades = add_event_info_to_gaze(fixations, events)
@@ -143,10 +148,10 @@ def gaze_event_detection_I_DT(eyetracking_data_timestamps, events, headtracking_
     return fixations + saccades
 
 def gaze_event_detection_I_VT(eyetracking_data_timestamps, events, headtracking_data_timestamps=None):
-    eyetracking_timestamps, gaze_xyz, gaze_status, head_rotation_xy_eyesampled = _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timestamps)
+    eyetracking_raw_timestamps, gaze_xyz, gaze_status, head_rotation_xy_eyesampled = _preprocess_gaze_data(eyetracking_data_timestamps, headtracking_data_timestamps)
 
     gaze_behavior_events, fixations, saccades, velocity = fixation_detection_i_vt(gaze_xyz,
-                                                                                  gaze_timestamps=eyetracking_timestamps,
+                                                                                  gaze_timestamps=eyetracking_raw_timestamps,
                                                                                   # gaze_status=gaze_status,  no need to add gaze status as we are gap filling, which already accounts for gaze status
                                                                                   head_rotation_xy_degree=head_rotation_xy_eyesampled)
     fixations, saccades = add_event_info_to_gaze(fixations, events)
@@ -207,28 +212,54 @@ def add_event_info_to_gaze(fixations, events, long_gaze_threshold=0.15):
 
 
 def _calculate_gaze_angles(gaze_vector, head_rotation_xy_degree):
-    gaze_yaw_degree = np.rad2deg(np.arctan2(gaze_vector[0, :], gaze_vector[2, :]))
-    gaze_pitch_degree = np.rad2deg(np.arctan2(gaze_vector[1, :], gaze_vector[2, :]))
+    """
+    gaze vectors should be 3D vectors in the eye coordinate system, with the z axis pointing out of the eye straight ahead
+    @param gaze_vector:
+    @param head_rotation_xy_degree:
+    @return:
+    """
 
     # Calculate the angle of the 2D vector
-    gaze_angles_degree = np.rad2deg(np.arctan2(gaze_vector[1, :], gaze_vector[0, :]))
+    # gaze_yaw_degree = np.rad2deg(np.arctan2(gaze_vector[0, :], gaze_vector[2, :]))
+    # gaze_pitch_degree = np.rad2deg(np.arctan2(gaze_vector[1, :], gaze_vector[2, :]))
+    # gaze_angles_degree = np.rad2deg(np.arctan2(gaze_vector[1, :], gaze_vector[0, :]))
 
-    if head_rotation_xy_degree is not None:
-        head_rotation_xy_degree_diff = np.diff(head_rotation_xy_degree, prepend=head_rotation_xy_degree[:, 0][..., np.newaxis])
-        gaze_yaw_degree = gaze_yaw_degree + head_rotation_xy_degree_diff[0, :]
-        gaze_pitch_degree = gaze_pitch_degree + head_rotation_xy_degree_diff[1, :]
-
-        head_yaw_rad = np.deg2rad(head_rotation_xy_degree[0, :])
-        head_pitch_rad = np.deg2rad(head_rotation_xy_degree[1, :])
-        x = np.sin(head_yaw_rad) * np.cos(head_pitch_rad)
-        y = np.sin(head_pitch_rad)
-        z = np.cos(head_yaw_rad) * np.cos(head_pitch_rad)
-        vector = np.array([x, y, z])
-
-        gaze_angles_degree = gaze_angles_degree + np.rad2deg(np.arctan2(vector[1, :], vector[0, :]))
-
+    # if head_rotation_xy_degree is not None:
+        # head_rotation_xy_degree_diff = np.diff(head_rotation_xy_degree, prepend=head_rotation_xy_degree[:, 0][..., np.newaxis])
+        # gaze_yaw_degree = gaze_yaw_degree + head_rotation_xy_degree_diff[0, :]
+        # gaze_pitch_degree = gaze_pitch_degree + head_rotation_xy_degree_diff[1, :]
+        #
+        # head_yaw_rad = np.deg2rad(head_rotation_xy_degree[0, :])
+        # head_pitch_rad = np.deg2rad(head_rotation_xy_degree[1, :])
+        # x = np.sin(head_yaw_rad) * np.cos(head_pitch_rad)
+        # y = np.sin(head_pitch_rad)
+        # z = np.cos(head_yaw_rad) * np.cos(head_pitch_rad)
+        # vector = np.array([x, y, z])
+        #
+        # gaze_angles_degree = gaze_angles_degree + np.rad2deg(np.arctan2(vector[1, :], vector[0, :]))
     # delta_gaze_angle_degree = np.diff(gaze_angles_degree, prepend=gaze_angles_degree[0])
-    return gaze_yaw_degree, gaze_pitch_degree, gaze_angles_degree
+    # return gaze_yaw_degree, gaze_pitch_degree, gaze_angles_degree
+
+    # if head_rotation_xy_degree is not None:
+    #     yaw_rad  = np.deg2rad(head_rotation_xy_degree[0, :])
+    #     pitch_rad  = np.deg2rad(head_rotation_xy_degree[1, :])
+    #
+    #     head_x = np.cos(yaw_rad) * np.sin(pitch_rad)
+    #     head_y = np.sin(yaw_rad) * np.sin(pitch_rad)
+    #     head_z = np.cos(pitch_rad)
+    #
+    #     # add the head vector with the gaze vector
+    #     gaze_vector = gaze_vector + np.stack([head_x, head_y, head_z])
+
+    reference_vector = np.array([0, 0, 1])
+    dot_products = np.dot(gaze_vector.T, reference_vector)
+    magnitudes = np.linalg.norm(gaze_vector, axis=0)
+    reference_magnitude = np.linalg.norm(reference_vector)
+    cosine_angles = dot_products / (magnitudes * reference_magnitude)
+    angles_rad = np.arccos(cosine_angles)
+    angles_deg = np.degrees(angles_rad)
+
+    return angles_deg
 
 
 def i_dt_is_fixation(gaze_angles_degree_glitched_nan, gaze_point_window_start_index, gaze_point_window_end_index, dispersion_threshold_degree):
@@ -255,7 +286,7 @@ def fixation_detection_i_dt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
     '''
     events = np.zeros(gaze_timestamps.shape)
 
-    gaze_yaw_degree, gaze_pitch_degree, gaze_angles_degree = _calculate_gaze_angles(gaze_xyz, head_rotation_xy_degree)
+    gaze_angles_degree = _calculate_gaze_angles(gaze_xyz, head_rotation_xy_degree)
 
     velocities = np.gradient(gaze_angles_degree) / np.diff(gaze_timestamps, prepend=1)
     velocities[0] = 0.  # assume the first velocity is 0
@@ -365,7 +396,7 @@ def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
     saccades = []  # items are tuple of three: saccade onset index, saccade peak velocity index, saccade offset index, Saccade object,
     fixations = []  # items are tuple of three: saccade onset index, saccade peak velocity index, saccade offset index, Saccade object,
 
-    gaze_yaw_degree, gaze_pitch_degree, gaze_angles_degree = _calculate_gaze_angles(gaze_xyz, head_rotation_xy_degree)
+    gaze_angles_degree = _calculate_gaze_angles(gaze_xyz, head_rotation_xy_degree)
     detection_alg = 'I-VT' if head_rotation_xy_degree is None else 'I-VT-Head'
 
     try:
@@ -373,13 +404,30 @@ def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
     except AssertionError:
         raise ValueError('Invalid gaze timestamps, time delta is zero at {0}'.format(np.argwhere(np.diff(gaze_timestamps, prepend=1) == 0)))
     velocities = np.gradient(gaze_angles_degree) / np.diff(gaze_timestamps, prepend=1)
-    velocities[0] = 0.  # assume the first velocity is 0
+    velocities[0] = velocities[1]  # assume the first velocity is the same as the first velocity
 
     events[velocities > glitch_threshold] = -1
 
     acceleration = np.gradient(velocities) / np.diff(gaze_timestamps, prepend=1)
-    acceleration_zero_crossings = np.where(np.diff(np.sign(acceleration)))[0]
-    for crossing_i in range(0, len(acceleration_zero_crossings) - 2):
+    acceleration_sign_diff = np.concatenate([[0], np.diff(np.sign(acceleration))])
+
+    acceleration_zero_crossings = np.where(np.logical_and(np.isfinite(acceleration), acceleration_sign_diff))[0] - 1
+
+    # num_points = 50
+    # zero_crossing_indices = [x for x in acceleration_zero_crossings if x < num_points]
+    # plt.figure().set_figwidth(15)
+    # plt.plot(velocities[:num_points], label='velocity')
+    # plt.scatter(np.arange(0, num_points), velocities[:num_points])
+    # plt.legend()
+    # plt.twinx()
+    # plt.plot(acceleration[:num_points], label='acceleration', color='orange')
+    # plt.scatter(np.arange(0, num_points), acceleration[:num_points], color='orange')
+    # plt.scatter(zero_crossing_indices, acceleration[zero_crossing_indices], color='red')
+    # plt.legend()
+    # plt.twinx()
+    # plt.show()
+    # check if the first crossing is a onset, peak or an offset  # TODO complete checking acceleration zero crossings
+    for crossing_i in range(0, len(acceleration_zero_crossings) - 2): # we start from the first onset, discard previous ones
         onset = acceleration_zero_crossings[crossing_i]
         peak = acceleration_zero_crossings[crossing_i + 1]
         offset = acceleration_zero_crossings[crossing_i + 2]
