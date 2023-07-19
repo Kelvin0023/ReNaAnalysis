@@ -88,9 +88,13 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
         Ex_Wq, Ex_Wke, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads), qkv)
 
-        Ex_Wq = Ex_Wq.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
-        Ex_Wke = Ex_Wke.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
-        v = v.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
+        # Ex_Wq = Ex_Wq.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
+        # Ex_Wke = Ex_Wke.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
+        # v = v.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
+
+        Ex_Wq = rearrange(Ex_Wq, 'b h n d -> n b h d')
+        Ex_Wke = rearrange(Ex_Wke, 'b h n d -> n b h d')
+        v = rearrange(v, 'b h n d -> n b h d')
 
         # generalized pf attention
         # Ex_Wq_e_biased = Ex_Wq + bias_time_e  # batch_size, n query, num_heads, dim_head
@@ -102,7 +106,10 @@ class RecurrentGeneralizedPFAttention(nn.Module):
 
         # transformer-xl attention
         r = r_t + r_c
-        W_kr_R_t = self.k_r_time_net(r).view(ntoken, b, self.num_heads, self.dim_head)
+        # W_kr_R_t = self.k_r_time_net(r).view(ntoken, b, self.num_heads, self.dim_head)
+        W_kr_R_t = self.k_r_time_net(r)
+        W_kr_R_t = rearrange(W_kr_R_t, 'b n (h d)-> n b h d', h=self.num_heads)
+
         rw_head_q = Ex_Wq + bias_time_e                                         # qlen x bsz x n_head x d_head
         AC = torch.einsum('ibnd,jbnd->ijbn', (rw_head_q, Ex_Wke))             # qlen x klen x bsz x n_head
         rr_head_q = Ex_Wq + bias_time_r
@@ -337,13 +344,13 @@ class RecurrentHierarchicalTransformer(nn.Module):
         @return:
         """
         # check meta info is complete
-        x = self.encode(x_eeg, args, kwargs)
+        x = self.encode(x_eeg, *args, **kwargs)
         return self.mlp_head(x)
 
     def encode(self, x_eeg, *args, **kwargs):
         b, nchannel, _ = x_eeg.shape
         # get discretized time for each token
-        discretized_start_times = args[0]  // self.window_duration  # TODO is this index right?
+        discretized_start_times = args[2]  // self.window_duration
         # print(f"{discretized_start_times = }")
 
         # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
