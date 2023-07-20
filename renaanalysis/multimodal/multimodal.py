@@ -111,7 +111,7 @@ class MultiModalArrays:
     """
     def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None):
         """
-
+        mmarray will assume the ordered set of labels correpond to each event in event_viz_colors
         @param physio_arrays:
         @param labels_array:
         @param dataset_name:
@@ -125,13 +125,18 @@ class MultiModalArrays:
         self.physio_arrays = physio_arrays
         self.labels_array = labels_array
         self.dataset_name = dataset_name
+
         self.event_viz_colors = event_viz_colors
+
         self._physio_types = [parray.physio_type for parray in physio_arrays]
         self._physio_types_arrays = dict(zip(self._physio_types, self.physio_arrays))
         self.rebalance_method = rebalance_method
 
         self.event_names = list(event_viz_colors.keys()) if event_viz_colors is not None else None
 
+        if self.labels_array is not None:
+            self.event_ids = {label: e_name for label, e_name in zip(self.event_names, set(self.labels_array))}
+            self.event_id_viz_colors = {self.event_ids[label]: color for label, color in self.event_viz_colors.items()}
         self.test_indices = None
         self.train_indices = None
         self.training_val_split_indices = None
@@ -345,7 +350,7 @@ class MultiModalArrays:
         @return: a random sample from each of the physio arrays
         """
         random_sample_index = np.random.randint(0, len(self.physio_arrays[0]))
-        rtn = [(parray.array[random_sample_index][None, :]) for parray in self.physio_arrays]
+        rtn = [(parray[random_sample_index][None, :]) for parray in self.physio_arrays]
         rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn] if convert_to_tensor else rtn
         rtn = rtn if len(rtn) > 1 else rtn[0]
 

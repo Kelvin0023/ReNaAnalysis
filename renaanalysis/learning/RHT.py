@@ -96,7 +96,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         Ex_Wke = rearrange(Ex_Wke, 'b h n d -> n b h d')
         v = rearrange(v, 'b h n d -> n b h d')
 
-        # generalized pf attention
+        # generalized pf attention ########################################################################
         Ex_Wq_e_biased = Ex_Wq + bias_time_e  # batch_size, n query, num_heads, dim_head treating bias_time_e as the generalized content bias
 
         # time relative position bias
@@ -104,11 +104,20 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         W_kr_R_t = rearrange(W_kr_R_t, 'b n (h d)-> n b h d', h=self.num_heads)
         W_kr_R_c = self.k_r_channel_net(r_c)
         W_kr_R_c = rearrange(W_kr_R_c, 'b n (h d)-> n b h d', h=self.num_heads)
-        Ex_Wke_r_biased = Ex_Wke + (W_kr_R_t + W_kr_R_c) * 0.5   # batch_size, n query, num_heads, dim_head
-        dots = torch.einsum('ibhd,jbhd->ijbh', Ex_Wq_e_biased, Ex_Wke_r_biased) * self.scale
 
+        # without relative shift ######
+        # Ex_Wke_r_biased = Ex_Wke + (W_kr_R_t + W_kr_R_c) * 0.5   # batch_size, n query, num_heads, dim_head
+        # dots = torch.einsum('ibhd,jbhd->ijbh', Ex_Wq_e_biased, Ex_Wke_r_biased) * self.scale
 
-        # transformer-xl attention
+        # with relative shift ######
+        AC = torch.einsum('ibnd,jbnd->ijbn', (Ex_Wq_e_biased, Ex_Wke))  # qlen x klen x bsz x n_head
+        BD_t = torch.einsum('ibnd,jbnd->ijbn', (Ex_Wq_e_biased, W_kr_R_t))
+        BD_t = self._rel_shift(BD_t)
+        BD_c = torch.einsum('ibnd,jbnd->ijbn', (Ex_Wq_e_biased, W_kr_R_c))
+        BD_c = self._rel_shift(BD_c)
+        dots = AC + (BD_t + BD_c) * 0.5  # times 0.5 to normalize across multiple positional features
+
+        # transformer-xl attention ########################################################################
         # r = r_t + r_c
         # # W_kr_R_t = self.k_r_time_net(r).view(ntoken, b, self.num_heads, self.dim_head)
         # W_kr_R_t = self.k_r_time_net(r)
@@ -122,6 +131,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         #
         # dots = AC + BD
         # dots.mul_(self.scale)
+        ##################################################################################################
 
         attention = self.softmax(dots)
         attention = self.drop_attention(attention)  # n query, n query, batch_size, num_heads
@@ -141,7 +151,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         # out = torch.matmul(attention, v)
         # out = rearrange(out, 'b h n d -> b n (h d)')
 
-        return self.to_out(out), attention
+        return self.to_out(out), rearrange(attention, 'q k b h -> b h q k')
 
     def _rel_shift(self, x, zero_triu=False):
         zero_pad = torch.zeros((x.size(0), 1, *x.size()[2:]), device=x.device, dtype=x.dtype)

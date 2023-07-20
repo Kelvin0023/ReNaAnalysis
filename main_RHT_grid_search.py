@@ -13,7 +13,7 @@ from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
 # user parameters
-n_folds = 3
+n_folds = 1
 is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
@@ -91,7 +91,7 @@ param_performance, training_histories, models = grid_search_rht_eeg(grid_search_
 #                 open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
 #     pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
 # else:
-pickle.dump(training_histories, open(os.path.join(training_results_path, f'model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
-pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
+pickle.dump(training_histories, open(os.path.join(training_results_path, f'model_training_histories_pcaica_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
+pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_performances_pcaica_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
 # pickle.dump(models, open(os.path.join(training_results_path, f'models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
 

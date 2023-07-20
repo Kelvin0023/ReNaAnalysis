@@ -262,9 +262,9 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     best_model_from_training = None
     best_model_folds = None
     best_test_auc = - np.inf
-    test_auc = []
-    test_acc = []
-    test_loss = []
+    test_auc_folds = []
+    test_acc_folds = []
+    test_loss_folds = []
     # test_iterator = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
     test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
 
@@ -343,15 +343,15 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
 
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc, test_loss, test_acc))
-        test_auc.append(test_auc)
-        test_loss.append(test_loss)
-        test_acc.append(test_acc)
+        test_auc_folds.append(test_auc)
+        test_loss_folds.append(test_loss)
+        test_acc_folds.append(test_acc)
         best_models_from_folds.append(best_model_from_training)
         if test_auc > best_test_auc:
             best_test_auc = test_auc
             best_model_folds = copy.deepcopy(best_model_from_training)
 
-    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds, 'auc_test': test_auc, 'acc_test': test_acc, 'loss_test': test_loss}
+    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds, 'auc_test': test_auc_folds, 'acc_test': test_acc_folds, 'loss_test': test_loss_folds}
     if plot_histories:
         for i in range(n_folds):
             history = {'loss_train': training_histories_folds['loss_train'][i],
@@ -365,7 +365,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
             seached_params = None
             plot_training_history(history, seached_params, i)
 
-    return best_model_folds, best_models_from_folds, training_histories_folds, criterion, last_activation, test_auc, test_loss, test_acc
+    return best_model_folds, best_models_from_folds, training_histories_folds, criterion, last_activation, test_auc_folds, test_loss_folds, test_acc_folds
 
 def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1,

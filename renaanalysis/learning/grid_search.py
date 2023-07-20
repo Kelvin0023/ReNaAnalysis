@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 
@@ -193,7 +194,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
             print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}, ')
 
             hashable_params = tuple(params.items())
-            locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss, 'folds test auc': training_histories['auc_test']}
+            locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds train loss': folds_train_loss, 'folds test auc': training_histories['auc_test']}
             total_training_histories[hashable_params] = training_histories
             models_param[hashable_params] = models
             if not os.path.exists('HT_grid'):
@@ -229,22 +230,24 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
     eeg_fs = mmarray['eeg'].sampling_rate
     param_grid = ParameterGrid(grid_search_params)
 
-    total_training_histories = {}
+    param_training_histories = {}
     models_param = {}
     param_performance = {}
 
     mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=test_size, random_seed=random_seed)
-    model_counter = 0
-    model_counter_param_dict = {}
-    for params in param_grid:
-        print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
+    mmarray.train_test_split(test_size=0.1, random_seed=random_seed)
+    mmarray.training_val_split(n_folds, val_size=0.1, random_seed=random_seed)
+
+    model_param_dict = {}
+    for param_index, params in enumerate(param_grid):
+        print(f"Grid search params: {params}. Searching {len(param_training_histories) + 1} of {len(param_grid)}")
         if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
             model = RecurrentHierarchicalTransformer(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
                                             depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                             pool=params['pool'], patch_embed_dim=params['patch_embed_dim'], dim_head=params['dim_head'],
                                             emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], dropout=params['dropout'],
                                             output=params['output'])
-            best_models_folds, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal_ordered_batches(
+            best_model_folds, best_models_from_folds, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal_ordered_batches(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix,
                                                                                              verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
@@ -253,16 +256,14 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
             print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}, ')
 
             hashable_params = tuple(params.items())
-            param_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds trian loss': folds_train_loss, 'folds test auc': training_histories['auc_test']}
-            total_training_histories[hashable_params] = training_histories
-            models_param[hashable_params] = best_models_folds
+            param_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds train loss': folds_train_loss, 'folds test auc': training_histories['auc_test']}
+            param_training_histories[hashable_params] = training_histories
+            models_param[hashable_params] = best_models_from_folds
 
-            for i in range(n_folds):
-                model_name = 'rht' + '_'.join([f'{key}_{value}' for key, value in params.items()]) + f'_fold_{i}'
-                model_counter_param_dict[model_counter] = (model_name, param_performance[hashable_params], total_training_histories[hashable_params])
-                torch.save(best_models_folds[i], os.path.join(results_path, '{model_counter}.pt'))
-                pickle.dump(model_counter_param_dict, open(os.path.join(results_path, 'model_counter_param_dict.pkl'), 'wb'))
-                model_counter += 1
+            model_param_dict[json.dumps(params)] = param_index, param_performance[hashable_params], training_histories, best_models_from_folds
+            torch.save(best_model_folds, os.path.join(results_path, f'{param_index}.pt'))
+            pickle.dump(model_param_dict, open(os.path.join(results_path, 'model_param_dict.p'), 'wb'))
+
         elif task_name == TaskName.PreTrain:
             raise NotImplementedError
             # model = HierarchicalTransformerContrastivePretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
@@ -283,5 +284,5 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
             #     os.mkdir('HT_grid_pretrain')
             # for i in range(n_folds):
             #     torch.save(models[i], os.path.join(model_save_dir, test_name + f"_lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt"))
-
-    return param_performance, total_training_histories, models_param
+    mmarray.save_to_path(os.path.join(results_path, 'mmarray.p'))
+    return param_performance, param_training_histories, models_param

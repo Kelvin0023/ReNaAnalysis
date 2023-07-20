@@ -265,12 +265,27 @@ def _calculate_gaze_angles(gaze_vector, head_rotation_xy_degree):
     return angles_deg
 
 
-def i_dt_is_fixation(gaze_angles_degree_glitched_nan, gaze_point_window_start_index, gaze_point_window_end_index, dispersion_threshold_degree):
-    gaze_angle_window_diff = np.diff(gaze_angles_degree_glitched_nan[gaze_point_window_start_index:gaze_point_window_end_index])
-    return not np.any(gaze_angle_window_diff[np.logical_not(np.isnan(gaze_angle_window_diff))] > dispersion_threshold_degree)
+def i_dt_is_fixation(gaze_angles_degree, gaze_point_window_start_index, gaze_point_window_end_index, dispersion_threshold_degree):
+    dispersion = compute_dispersion(gaze_angles_degree[gaze_point_window_start_index:gaze_point_window_end_index])
+    return not dispersion > dispersion_threshold_degree
+
+def compute_dispersion(angles):
+    """
+    computes dispersion within an index window
+    @param gaze_angles_degree:
+    @param gaze_point_window_start_index:
+    @param gaze_point_window_end_index:
+    @return:
+    """
+    # mean_angle = np.mean(angles)
+    # squared_diff_sum = np.sum((angle - mean_angle) ** 2 for angle in angles)
+    # variance = squared_diff_sum / len(angles)
+    # dispersion = np.sqrt(variance)
+
+    return np.std(angles)
 
 def fixation_detection_i_dt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", gaze_status=None,
-                            fixation_min_duraiton_second=0.1, fixation_velocity_threshold=30, dispersion_threshold_degree=0.5,
+                            fixation_min_duraiton_second=0.1, dispersion_threshold_degree=0.5,
                             glitch_threshold=1000, saccade_min_sample=2, head_rotation_xy_degree=None):
     '''
     gaze event detection based on Displacement Threshold Identification (I-DT)
@@ -322,21 +337,17 @@ def fixation_detection_i_dt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
         #     continue
         # yaw_diff = yaw - last_gaze_point[1]
         # pitch_diff = pitch - last_gaze_point[2]
-        while gaze_timestamps[offset] - gaze_timestamps[onset] < fixation_min_duraiton_second:
+        while offset < len(gaze_timestamps) and gaze_timestamps[offset] - gaze_timestamps[onset] < fixation_min_duraiton_second:
             offset += 1
-            if offset >= len(gaze_timestamps):
-                break
         if np.any(np.isnan(gaze_angles_degree[onset:offset])):
             onset = offset
             continue
         if not i_dt_is_fixation(gaze_angles_degree, onset, offset, dispersion_threshold_degree):
             onset += 1
-        else:
+        else:  # if the interval is a fixation, we find the offset of the fixation by iterating unitl the first non-fixation point
             offset += 1
-            while i_dt_is_fixation(gaze_angles_degree, onset, offset, dispersion_threshold_degree) and not np.isnan(gaze_angles_degree[offset]):
+            while offset < len(gaze_timestamps) and i_dt_is_fixation(gaze_angles_degree, onset, offset, dispersion_threshold_degree) and not np.isnan(gaze_angles_degree[offset]):
                 offset += 1
-                if offset >= len(gaze_timestamps):
-                    break
             offset -= 1
 
             if len(fixations) > 0:
@@ -363,7 +374,8 @@ def fixation_detection_i_dt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
 
             fixation_duration = gaze_timestamps[offset] - gaze_timestamps[onset]
             fix_gaze_angles = gaze_angles_degree[onset:offset]
-            dispersion = np.max(fix_gaze_angles, axis=0) - np.min(fix_gaze_angles, axis=0)
+            # dispersion = np.max(fix_gaze_angles, axis=0) - np.min(fix_gaze_angles, axis=0)
+            dispersion = compute_dispersion(fix_gaze_angles)
 
             fixations.append(Fixation(fixation_duration, dispersion, this_saccade, None,
                                       onset, offset,
@@ -372,22 +384,22 @@ def fixation_detection_i_dt(gaze_xyz, gaze_timestamps, gaze_xy_format="ratio", g
             onset = offset
 
     # plot a interval of saccades and fixations along with the velocity and acceleration
-    starting_index = 0
-    num_points = 500
-
-    end_index = starting_index + num_points
-    plt.figure().set_figwidth(100)
-    plt.plot(np.arange(starting_index, end_index), velocities[starting_index:end_index], label='velocity')
-    plt.scatter(np.arange(starting_index, end_index), velocities[starting_index:end_index])
-
-    plotting_saccades = [saccade for saccade in saccades if starting_index < saccade.offset < end_index]
-    plt.scatter([saccade.peak for saccade in plotting_saccades], [velocities[saccade.peak] for saccade in plotting_saccades], color='cyan', label='a saccade velocity peak', marker='X')
-    [plt.axvspan(saccade.onset, saccade.offset, facecolor='g', alpha=0.2) for saccade in plotting_saccades]
-
-    plotting_fixations = [fixation for fixation in fixations if starting_index < fixation.offset < end_index]
-    [plt.axvspan(fixation.onset, fixation.offset, facecolor='r', alpha=0.2) for fixation in plotting_fixations]
-    plt.legend()
-    plt.show()
+    # starting_index = 500
+    # num_points = 1000
+    #
+    # end_index = starting_index + num_points
+    # plt.figure().set_figwidth(300)
+    # plt.plot(np.arange(starting_index, end_index), velocities[starting_index:end_index], label='velocity')
+    # plt.scatter(np.arange(starting_index, end_index), velocities[starting_index:end_index])
+    #
+    # plotting_saccades = [saccade for saccade in saccades if starting_index < saccade.offset < end_index]
+    # plt.scatter([saccade.peak for saccade in plotting_saccades], [velocities[saccade.peak] for saccade in plotting_saccades], color='cyan', label='a saccade velocity peak', marker='X')
+    # [plt.axvspan(saccade.onset, saccade.offset, facecolor='g', alpha=0.2) for saccade in plotting_saccades]
+    #
+    # plotting_fixations = [fixation for fixation in fixations if starting_index < fixation.offset < end_index]
+    # [plt.axvspan(fixation.onset, fixation.offset, facecolor='r', alpha=0.2) for fixation in plotting_fixations]
+    # plt.legend()
+    # plt.show()
 
     glitch_precentage = np.sum(events == -1) / len(events)
     for s in saccades:
@@ -520,11 +532,12 @@ def fixation_detection_i_vt(gaze_xyz, gaze_timestamps, gaze_status=None,
         if gaze_timestamps[offset] - gaze_timestamps[onset] < fixation_min_duraiton_second:  # don't detect for short intervals
             continue
         if offset - onset > fixation_min_sample:  # if the entire interval is invalid, then we do NOT add it to fixation
-            dispersion = np.max(fix_gaze_angles, axis=0) - np.min(fix_gaze_angles, axis=0)
+            # dispersion = np.max(fix_gaze_angles, axis=0) - np.min(fix_gaze_angles, axis=0)
+            dispersion = compute_dispersion(fix_gaze_angles)
             fixations.append(Fixation(duration, dispersion, saccades[i], saccades[i + 1], onset, offset, gaze_timestamps[onset], gaze_timestamps[offset], detection_alg=detection_alg))
     # plot a interval of saccades and fixations along with the velocity and acceleration
-    # starting_index = 2000
-    # num_points = 3000
+    # starting_index = 0
+    # num_points = 500
     #
     # end_index = starting_index + num_points
     # zero_crossing_indices = [x for x in acceleration_zero_crossings if starting_index < x < end_index]
