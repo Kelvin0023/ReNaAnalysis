@@ -45,26 +45,20 @@ def rollout(depth, attentions, discard_ratio, head_fusion, token_shape, merge_sa
 
     mask = result[:, 0, 1:]
     # normalize by sample
-    # for i in range(batch_size):
-    #     mask[i] = mask[i] / torch.max(mask[i])
-    mask =  mask / mask.max(dim=-1, keepdim=True).values
-
-    if merge_samples:
-        mask = mask.mean(axis=0)
-        mask = mask.reshape(token_shape)
-    else:
-        mask = mask.reshape(batch_size, *token_shape)
+    for i in range(batch_size):
+        mask[i] = mask[i] / torch.max(mask[i])
+    # mask =  mask / mask.max(dim=-1, keepdim=True).values
+    mask = mask.reshape(batch_size, *token_shape)
     return mask
 
 
 class VITAttentionRollout:
-    def __init__(self, model, device, attention_layer_class, token_shape, head_fusion="mean", discard_ratio=0.9, merge_samples=False):
+    def __init__(self, model, device, attention_layer_class, token_shape, head_fusion="mean", discard_ratio=0.9):
         self.model = model
         self.device = device
         self.head_fusion = head_fusion
         self.discard_ratio = discard_ratio
         self.token_shape = token_shape
-        self.merge_samples  = merge_samples
 
         self.attention_layer_count = 0
         for name, module in self.model.named_modules():
@@ -93,4 +87,4 @@ class VITAttentionRollout:
             input_tensor = (input_tensor.to(self.device), )
         output = self.model(*input_tensor)
 
-        return rollout(depth, self.attention_depths_list, self.discard_ratio, self.head_fusion, token_shape=self.token_shape, merge_samples=self.merge_samples).detach().cpu().numpy()
+        return rollout(depth, self.attention_depths_list, self.discard_ratio, self.head_fusion, token_shape=self.token_shape).detach().cpu().numpy()
