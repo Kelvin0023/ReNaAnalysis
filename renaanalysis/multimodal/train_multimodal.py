@@ -113,7 +113,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         #                                  _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
 
         test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
-            _run_one_epoch_classification(model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+            _run_one_epoch_classification(best_model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
@@ -247,7 +247,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device, include_metainfo=True, reset_model=True)  # reset the memory of the recurrent model
+    criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device, include_metainfo=True)  # reset the memory of the recurrent model
     # X_test, Y_test = mmarray.get_test_set()
     model.reset()  # reset model memories
 
@@ -256,15 +256,16 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     val_losses_folds = []
     val_accs_folds = []
     val_aucs_folds = []
-    models = []
+    best_models_from_folds = []
 
     model_copy = None
+    best_model_from_training = None
+    best_model_folds = None
+    best_test_auc = - np.inf
     test_auc = []
     test_acc = []
     test_loss = []
     # test_iterator = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
-    mmarray.train_test_split(test_size=0.1, random_seed=random_seed)
-    mmarray.training_val_split(n_folds, val_size=0.1, random_seed=random_seed)
     test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
 
     for f_index in range(n_folds):
@@ -323,7 +324,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
                 # best_loss = val_losses[-1]
                 best_auc = val_auc
                 patience_counter = 0
-                best_model = copy.deepcopy(model_copy)
+                best_model_from_training = copy.deepcopy(model_copy)
             else:
                 patience_counter += 1
                 if patience_counter > patience:
@@ -337,15 +338,18 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
         val_losses_folds.append(val_losses)
         val_aucs_folds.append(val_aucs)
 
-        test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
-            _run_one_epoch_classification(model, test_iterator, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+        test_auc, test_loss, test_acc, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
+            _run_one_epoch_classification(best_model_from_training, test_iterator, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
         if verbose >= 1:
-            print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
-        test_auc.append(test_auc_model)
-        test_loss.append(test_loss_model)
-        test_acc.append(test_acc_model)
-        models.append(best_model)
+            print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc, test_loss, test_acc))
+        test_auc.append(test_auc)
+        test_loss.append(test_loss)
+        test_acc.append(test_acc)
+        best_models_from_folds.append(best_model_from_training)
+        if test_auc > best_test_auc:
+            best_test_auc = test_auc
+            best_model_folds = copy.deepcopy(best_model_from_training)
 
     training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'auc_val': val_aucs_folds, 'auc_test': test_auc, 'acc_test': test_acc, 'loss_test': test_loss}
     if plot_histories:
@@ -361,7 +365,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
             seached_params = None
             plot_training_history(history, seached_params, i)
 
-    return models, training_histories_folds, criterion, last_activation, test_auc, test_loss, test_acc
+    return best_model_folds, best_models_from_folds, training_histories_folds, criterion, last_activation, test_auc, test_loss, test_acc
 
 def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1,
