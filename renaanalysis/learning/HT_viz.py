@@ -462,7 +462,7 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
         for i, (batch_data) in enumerate(test_iterator):
             y = batch_data[-1]
             batch_inputs = batch_data[:-1]
-            print(f"Rolling out attention for batch {i} of {len(test_iterator)}")
+            print(f"Rolling out attention for batch {i+1} of {len(test_iterator)}")
             for roll_depth in range(model.depth):
                 with torch.no_grad():
                     roll = rollout(depth=roll_depth, input_tensor=batch_inputs)

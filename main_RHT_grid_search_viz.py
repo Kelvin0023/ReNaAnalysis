@@ -97,9 +97,9 @@ if plot_ht_viz:
     #                       note='', load_saved_rollout=False, head_fusion=head_fusion,
     #                       discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True)
 
-    ht_viz_multimodal(best_model, mmarray, rollout_data_root,
+    ht_eeg_viz_multimodal_batch(best_model, mmarray, attention_layer_class, device, rollout_data_root,
            note='', load_saved_rollout=False, head_fusion='max',
-           discard_ratio=0.9, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica, attention_layer_class=attention_layer_class, use_meta_info=True)
+           discard_ratio=0.9,is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=128)
 
 # visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
 # # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
