@@ -25,12 +25,13 @@ eeg_resample_rate = 200
 
 reject = 'auto'  # whether to apply auto rejection
 # reject = None  # whether to apply auto rejection
-# data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
-data_root = 'D:/Dataset/auditory_oddball'
+data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
+# data_root = 'D:/Dataset/auditory_oddball'
 # data_root = 'J:\TUEH\edf'
 dataset_name = 'auditory_oddball'
 # dataset_name = 'TUH'
-mmarray_fn = f'{dataset_name}_mmarray.p'
+# mmarray_fn = f'{dataset_name}_mmarray_smote_no-pica.p'
+mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
 task_name = TaskName.TrainClassifier
 subject_pick = None
 subject_group_picks = ['001']

@@ -13,7 +13,7 @@ from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
 # user parameters
-n_folds = 1
+n_folds = 3
 is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
