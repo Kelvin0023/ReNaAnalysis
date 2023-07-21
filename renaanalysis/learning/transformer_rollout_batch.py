@@ -4,13 +4,13 @@ import numpy as np
 from renaanalysis.learning.HT import Attention
 
 
-def rollout(depth, attentions, discard_ratio, head_fusion, token_shape, merge_samples):
+def rollout(depth, attentions, discard_ratio, head_fusion, token_shape):
     batch_size = attentions[0].size(0)
     device = attentions[0].device
     result = torch.eye(attentions[0].size(-1)).to(device)
     result = result.repeat(batch_size, 1, 1)
     with torch.no_grad():
-        for i, attention in enumerate(attentions):
+        for depth_index, attention in enumerate(attentions):
             if head_fusion == "mean":
                 attention_heads_fused = attention.mean(axis=1)
             elif head_fusion == "max":
@@ -37,7 +37,7 @@ def rollout(depth, attentions, discard_ratio, head_fusion, token_shape, merge_sa
                 a_norm = a[i] / a[i].sum(dim=-1)
             a = a_norm
             result = torch.matmul(a, result)
-            if i == depth:
+            if depth_index == depth:
                 break
 
     # Look at the total attention between the class token,
