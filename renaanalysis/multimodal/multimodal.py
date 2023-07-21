@@ -365,13 +365,38 @@ class MultiModalArrays:
             return rtn
 
     def get_class_weight(self, convert_to_tensor=False, device=None):
+        """
+        An example of one-hot encoded label array, the original labels are [0, 6]
+        The corresponding cw is:
+                     Count
+        0 -> [1, 0]  100
+        6 -> [0, 1]  200
+        cw:  [3, 1.5]
+        because pytorch treat [1, 0] as the first class and [0, 1] as the second class. However, the
+        count for unique one-hot encoded label came out of np.unique is in the reverse order [0, 1] and [1, 0].
+        the count needs to be reversed accordingly.
+
+        TODO check when adding new classes
+        @param convert_to_tensor:
+        @param device:
+        @return:
+        """
         assert self.labels_array is not None, "Class weight needs labels array but labels is not provided"
-        unique_classes, counts = np.unique(self.labels_array, return_counts=True)
+        encoded_labels = self._encoder(self.labels_array)
+        if len(encoded_labels.shape) == 2:
+            unique_classes, counts = np.unique(self._encoder(self.labels_array), return_counts=True, axis=0)
+            counts = counts[::-1]  # refer to docstring
+        elif len(encoded_labels.shape) == 1:
+            unique_classes, counts = np.unique(self._encoder(self.labels_array), return_counts=True)
+        else:
+            raise ValueError("encoded labels should be either 1d or 2d array")
+        # labels_as_strings = np.array([str(label) for label in unique_classes])
+        # counts = counts[np.flip(np.argsort(labels_as_strings))]
         class_proportions = counts / len(self.labels_array)
         class_weights = 1/class_proportions
         if convert_to_tensor:
             class_weights = torch.tensor(class_weights, dtype=torch.float32, device=device)
-        return class_weights
+        return class_weights # reverse the class weights because
 
     def encode_labels(self):
         pass  # TODO
