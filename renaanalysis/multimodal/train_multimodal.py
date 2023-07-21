@@ -275,8 +275,8 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
-        train_iterator, val_iterator = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device, task_name=task_name, return_metainfo=True)
-        # train_iterator, val_iterator = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True)
+        # train_iterator, val_iterator = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device, task_name=task_name, return_metainfo=True)
+        train_iterator, val_iterator = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
