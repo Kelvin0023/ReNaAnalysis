@@ -1,5 +1,6 @@
 import pickle
 import os
+import time
 import warnings
 
 import mne
@@ -84,10 +85,11 @@ if is_plot_epochs:
         #        exg_resample_rate,
         #        eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
         #        discard_ratio=0.9, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica, X_original=x_test_original)
+        t_start = time.perf_counter()
         ht_eeg_viz_multimodal_batch(best_model, mmarray, Attention, device, rollout_data_root,
                               note='', load_saved_rollout=False, head_fusion=head_fusion,
                               discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True)
-
+        print("ht viz batched took {} seconds".format(time.perf_counter() - t_start))
     else:
         visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
         # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
