@@ -111,7 +111,7 @@ class MultiModalArrays:
     """
     def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None):
         """
-
+        mmarray will assume the ordered set of labels correpond to each event in event_viz_colors
         @param physio_arrays:
         @param labels_array:
         @param dataset_name:
@@ -125,13 +125,18 @@ class MultiModalArrays:
         self.physio_arrays = physio_arrays
         self.labels_array = labels_array
         self.dataset_name = dataset_name
+
         self.event_viz_colors = event_viz_colors
+
         self._physio_types = [parray.physio_type for parray in physio_arrays]
         self._physio_types_arrays = dict(zip(self._physio_types, self.physio_arrays))
         self.rebalance_method = rebalance_method
 
         self.event_names = list(event_viz_colors.keys()) if event_viz_colors is not None else None
 
+        if self.labels_array is not None:
+            self.event_ids = {label: e_name for label, e_name in zip(self.event_names, set(self.labels_array))}
+            self.event_id_viz_colors = {self.event_ids[label]: color for label, color in self.event_viz_colors.items()}
         self.test_indices = None
         self.train_indices = None
         self.training_val_split_indices = None
@@ -345,7 +350,7 @@ class MultiModalArrays:
         @return: a random sample from each of the physio arrays
         """
         random_sample_index = np.random.randint(0, len(self.physio_arrays[0]))
-        rtn = [(parray.array[random_sample_index][None, :]) for parray in self.physio_arrays]
+        rtn = [(parray[random_sample_index][None, :]) for parray in self.physio_arrays]
         rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn] if convert_to_tensor else rtn
         rtn = rtn if len(rtn) > 1 else rtn[0]
 
@@ -360,13 +365,38 @@ class MultiModalArrays:
             return rtn
 
     def get_class_weight(self, convert_to_tensor=False, device=None):
+        """
+        An example of one-hot encoded label array, the original labels are [0, 6]
+        The corresponding cw is:
+                     Count
+        0 -> [1, 0]  100
+        6 -> [0, 1]  200
+        cw:  [3, 1.5]
+        because pytorch treat [1, 0] as the first class and [0, 1] as the second class. However, the
+        count for unique one-hot encoded label came out of np.unique is in the reverse order [0, 1] and [1, 0].
+        the count needs to be reversed accordingly.
+
+        TODO check when adding new classes
+        @param convert_to_tensor:
+        @param device:
+        @return:
+        """
         assert self.labels_array is not None, "Class weight needs labels array but labels is not provided"
-        unique_classes, counts = np.unique(self.labels_array, return_counts=True)
+        encoded_labels = self._encoder(self.labels_array)
+        if len(encoded_labels.shape) == 2:
+            unique_classes, counts = np.unique(self._encoder(self.labels_array), return_counts=True, axis=0)
+            counts = counts[::-1]  # refer to docstring
+        elif len(encoded_labels.shape) == 1:
+            unique_classes, counts = np.unique(self._encoder(self.labels_array), return_counts=True)
+        else:
+            raise ValueError("encoded labels should be either 1d or 2d array")
+        # labels_as_strings = np.array([str(label) for label in unique_classes])
+        # counts = counts[np.flip(np.argsort(labels_as_strings))]
         class_proportions = counts / len(self.labels_array)
         class_weights = 1/class_proportions
         if convert_to_tensor:
             class_weights = torch.tensor(class_weights, dtype=torch.float32, device=device)
-        return class_weights
+        return class_weights # reverse the class weights because
 
     def encode_labels(self):
         pass  # TODO
@@ -387,7 +417,7 @@ class MultiModalArrays:
             self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
 
 
-    def get_label_encoder_criterion_for_model(self, model, device=None, reset_model=False, include_metainfo=False):
+    def get_label_encoder_criterion_for_model(self, model, device=None, include_metainfo=False):
         """
         this function must be called
 
@@ -402,7 +432,6 @@ class MultiModalArrays:
             model.eval()
             rand_input= rand_input if isinstance(rand_input, tuple) else (rand_input,)
             output_shape = model.to(device)(*rand_input).shape[1]
-            if reset_model: model.reset()
 
         self.create_label_encoder(output_shape)
         if output_shape == 1:
@@ -478,6 +507,8 @@ class MultiModalArrays:
         run_meta = self.physio_arrays[0].get_meta_info_by_name('run')
 
         all_sample_indices = np.arange(self.get_num_samples())
+        # all_sample_indices = np.random.permutation(all_sample_indices)  # TODO testing with shuffled batches
+
         subject_run_samples = {(subject, run): all_sample_indices[np.logical_and(subject_meta==subject, run_meta==run)] for subject, run in itertools.product(np.unique(subject_meta), np.unique(run_meta))}
 
         test_batch_sample_indices = np.empty((0, batch_size), dtype=int)
@@ -489,23 +520,23 @@ class MultiModalArrays:
             if n_batches == 0:
                 warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
                 continue
-            test_n_batches = math.floor(test_size * n_batches)
-            val_n_batches = math.floor(val_size * n_batches)
-            if test_n_batches == 0 or val_n_batches == 0:
+            n_test_batches = math.floor(test_size * n_batches)
+            n_val_batches = math.floor(val_size * n_batches)
+            if n_test_batches == 0 or n_val_batches == 0:
                 warnings.warn(f"Subject {subject} run {run} have too few samples to create enough batches for test and val.{n_batches =}. Ignored.")
                 # TODO maybe when this subject&run doesn't have enough samples, we can add it to the next subject&run
                 continue
             batch_indices = sample_indices[:n_batches * batch_size].reshape(batch_size, -1).T  # n_batches x batch_size
             print(f"Generated {n_batches} batches for subject {subject} run {run}. Last {len(sample_indices) - batch_size * n_batches} samples are ignored.")
 
-            test_start_index = np.random.randint(0, n_batches - test_n_batches)
-            test_batch_indices = np.arange(test_start_index, test_start_index + test_n_batches)
+            test_start_index = np.random.randint(0, n_batches - n_test_batches)
+            test_batch_indices = np.arange(test_start_index, test_start_index + n_test_batches)
             test_batch_sample_indices = np.concatenate([test_batch_sample_indices, batch_indices[test_batch_indices]])
 
             for fold in range(n_folds):
-                val_start_index = np.random.choice([np.random.randint(0, test_start_index - val_n_batches)] if test_start_index > val_n_batches else [] +
-                                                    [np.random.randint(test_start_index + test_n_batches, n_batches - val_n_batches)] if test_start_index + test_n_batches < n_batches - val_n_batches else [])
-                val_batch_indices = np.arange(val_start_index, val_start_index + val_n_batches)
+                val_start_index = np.random.choice([np.random.randint(0, test_start_index - n_val_batches)] if test_start_index > n_val_batches else [] +
+                                                    [np.random.randint(test_start_index + n_test_batches, n_batches - n_val_batches)] if test_start_index + n_test_batches < n_batches - n_val_batches else [])
+                val_batch_indices = np.arange(val_start_index, val_start_index + n_val_batches)
 
                 val_batch_sample_indices[fold] = np.concatenate([val_batch_sample_indices[fold], batch_indices[val_batch_indices]])
                 train_batch_sample_indices[fold] = np.concatenate([train_batch_sample_indices[fold], np.delete(batch_indices, np.concatenate([val_batch_indices, test_batch_indices]), axis=0)])

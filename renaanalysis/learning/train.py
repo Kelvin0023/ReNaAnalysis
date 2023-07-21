@@ -619,7 +619,8 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
             y_pred = model(*x)
 
             y_tensor = y.to(device)
-            y_pred = last_activation(y_pred)
+            if not isinstance(criterion, nn.CrossEntropyLoss):
+                y_pred = last_activation(y_pred)
             classification_loss = criterion(y_pred, y_tensor)
 
         if mode == 'train' and l2_weight > 0:

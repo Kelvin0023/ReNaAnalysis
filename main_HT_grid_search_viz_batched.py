@@ -1,5 +1,6 @@
 import pickle
 import os
+import time
 import warnings
 
 import mne
@@ -9,12 +10,12 @@ from sklearn.metrics import roc_curve, auc
 from torch import nn
 import torch
 
-from renaanalysis.learning.HT_viz import ht_viz
+from renaanalysis.learning.HT_viz import ht_viz, ht_eeg_viz_multimodal_batch
 from renaanalysis.utils.utils import remove_value
 from renaanalysis.learning.train import eval_test
 from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_samples
 from renaanalysis.params.params import *
-from renaanalysis.learning.HT import HierarchicalTransformer
+from renaanalysis.learning.HT import HierarchicalTransformer, Attention
 
 search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_head"]
 metric = 'folds test auc'
@@ -23,15 +24,21 @@ is_plot_train_history = False
 is_plot_ROC = True
 is_plot_topomap = True
 is_plot_epochs = True
+device ='cuda:0' if torch.cuda.is_available() else 'cpu'
 
 viz_pca_ica = True
+
+mmarray = pickle.load(open(f'{export_data_root}/auditory_oddball_mmarray_smote_pica.p', 'rb'))
+
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 nfolds = 1
-mmarray = pickle.load(open(f'{export_data_root}/auditory_oddball_mmarray.p', 'rb'))
 x_test, y_test = mmarray.get_test_set(device='cuda:0' if torch.cuda.is_available() else 'cpu')
-criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(list(models.values())[0][0], device='cuda:0' if torch.cuda.is_available() else 'cpu')
+# get the un-pca-ica version of the data
+x_test_original = mmarray['eeg'].array[mmarray.test_indices]
+
+criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(list(models.values())[0][0], device='cuda:0' if torch.cuda.is_available() else 'cpu', include_metainfo=True)
 is_pca_ica = 'pca' in mmarray['eeg'].data_processor.keys() or 'ica' in mmarray['eeg'].data_processor.keys()
 if is_pca_ica != viz_pca_ica:
     warnings.warn('The mmarry stored is different with the one desired for visualization')
@@ -43,6 +50,7 @@ event_names =  ["Distractor", "Target"]
 head_fusion = 'mean'
 channel_fusion = 'sum'  # TODO when plotting the cross window actiavtion
 sample_fusion = 'sum'  # TODO
+discard_ratio = 0.9
 
 
 print('\n'.join([f"{str(x)}, {y[metric]}" for x, y in locking_performance.items()]))
@@ -74,17 +82,22 @@ if is_plot_epochs:
     model = best_model
     if viz_all_epoch:
         visualize_eeg_samples(x_test, y_test, colors, this_picks)
-        ht_viz(model, x_test, y_test, _encoder, event_names, rollout_data_root,
-               best_model.window_duration,
-               exg_resample_rate,
-               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
-               discard_ratio=0.9, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)
+        # ht_viz(model, x_test, y_test, _encoder, event_names, rollout_data_root,
+        #        best_model.window_duration,
+        #        exg_resample_rate,
+        #        eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+        #        discard_ratio=0.9, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica, X_original=x_test_original)
+        t_start = time.perf_counter()
+        ht_eeg_viz_multimodal_batch(best_model, mmarray, Attention, device, rollout_data_root,
+                              note='', load_saved_rollout=False, head_fusion=head_fusion,
+                              discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=256)
+        print("ht viz batched took {} seconds".format(time.perf_counter() - t_start))
     else:
         visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
         # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
         ht_viz(model, x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], _encoder, event_names, rollout_data_root, best_model.window_duration,
                exg_resample_rate,
-               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=True, head_fusion='max',
                discard_ratio=0.1, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)
 
 

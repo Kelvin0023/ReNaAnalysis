@@ -12,7 +12,7 @@ from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 from renaanalysis.eye.EyeUtils import temporal_filter_fixation
 from renaanalysis.eye.eyetracking import Fixation, Saccade, GazeRayIntersect
-from renaanalysis.utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_target
+from renaanalysis.utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_at_time
 from renaanalysis.params.params import *
 from renaanalysis.utils.TorchUtils import prepare_image_for_sim_score
 from renaanalysis.utils.utils import visualize_pupil_epochs, visualize_eeg_epochs
@@ -134,7 +134,7 @@ def visualize_gaze_events(events, block_id=None, gaze_intersect_y=0.1, IDT_fix_h
 
     if generate_video is not None and block_id is not None:
         generate_block_video(image_folder=generate_video, block_id=block_id, block_start_time=block_start_timestamp,
-                             block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects, fix_ivt=fix_idt_head, fix_ivt_head=fix_ivt_head, fix_patch_sim=fix_patch_sim, video_fix_alg=video_fix_alg)
+                             block_end_time=block_end_timestamp, gaze_ray_intersects=gaze_ray_intersects, fix_idt_head=fix_idt_head, fix_ivt_head=fix_ivt_head, fix_patch_sim=fix_patch_sim, video_fix_alg=video_fix_alg)
 
 
 def add_bounding_box(a, x, y, width, height, color):
@@ -162,7 +162,24 @@ def draw_fixations(ax, events, event_filter, fix_y, include_item_index=True):
             ax.text((f_onset_ts + f_offset_ts) / 2, fix_y, f'{f_item_index}')
     return filtered_events
 
-def generate_block_video(image_folder, block_id, block_start_time, block_end_time, gaze_ray_intersects, fix_ivt, fix_ivt_head, fix_patch_sim, video_fix_alg, is_add_patch_sim=False, is_flipping_y=False):
+def generate_block_video(image_folder, block_id, block_start_time, block_end_time, gaze_ray_intersects, fix_idt_head, fix_ivt_head, fix_patch_sim, video_fix_alg, is_add_patch_sim=False, is_flipping_y=False):
+    """
+    When video_fix_alg is None, it will generate a video with all the fixations marked with circles. It will
+    add the circle if there is only one fix event in this frame, and the fix event has a dtn type, in other
+    words, only fixation on distractor/target/novelty will be marked with the video
+    @param image_folder:
+    @param block_id:
+    @param block_start_time:
+    @param block_end_time:
+    @param gaze_ray_intersects:
+    @param fix_idt_head:
+    @param fix_ivt_head:
+    @param fix_patch_sim:
+    @param video_fix_alg:
+    @param is_add_patch_sim:
+    @param is_flipping_y:
+    @return:
+    """
     gaze_info_file = os.path.join(image_folder, 'GazeInfo.csv')
     video_name = f'BlockVideo_{block_id}-FixationAlgorithm_{video_fix_alg}.mp4'
 
@@ -196,7 +213,7 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
     # ivt_head_color = 255 * np.array(cmap(2/3))
     # patch_sim_size = 30
     # patch_sim_color = 255 * np.array(cmap(1))
-    fix_dict = {'I-VT': fix_ivt, 'I-VT-Head': fix_ivt_head, 'Patch-Sim': fix_patch_sim}
+    fix_dict = {'I-DT': fix_idt_head, 'I-VT': fix_ivt_head, 'Patch-Sim': fix_patch_sim}
 
     cmap = matplotlib.cm.get_cmap('summer')
     fovea_color = 255 * np.array(cmap(1/3))
@@ -245,7 +262,7 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
         if is_flipping_y: gaze_y = image_size[y_axis] - gaze_y  # because CV's y zero is at the bottom of the screen
         center = gaze_x, gaze_y
 
-        gaze_intersect_this_frame = get_overlapping_events_single_target(timestamp, gaze_ray_intersects)
+        gaze_intersect_this_frame = get_overlapping_events_single_at_time(timestamp, gaze_ray_intersects)
         if len(gaze_intersect_this_frame) == 1:
             e = gaze_intersect_this_frame[0]
             intersect_index = e.item_index
@@ -291,7 +308,7 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
                                                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, center_color, 1,
                                                                    cv2.LINE_AA)
         if video_fix_alg is not None:
-            img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_dict[video_fix_alg], fix_color, fix_circle_size, video_fix_alg)
+            img_modified = add_fix_detection_circle(img_modified, center, timestamp, fix_dict[video_fix_alg], center_color_dict, fix_circle_size, video_fix_alg)
 
 
         images_with_bb.append(img_modified)
@@ -332,14 +349,29 @@ def generate_block_video(image_folder, block_id, block_start_time, block_end_tim
     plt.xlabel("Time (seconds)")
     plt.show()
 
-def add_fix_detection_circle(img_modified, center, timestamp, fix_events, marker_color, marker_radius, alg):
-    fix_this_frame = get_overlapping_events_single_target(timestamp, fix_events)
+def add_fix_detection_circle(img_modified, center, timestamp, fix_events, center_color_dict, marker_radius, alg):
+    """
+    will only add the circle if there is only one fix event in this frame, and the fix event has a dtn type, in other
+    words, only fixation on distractor/target/novelty will be marked with the video
+    @param img_modified:
+    @param center:
+    @param timestamp:
+    @param fix_events:
+    @param center_color_dict:
+    @param marker_radius:
+    @param alg:
+    @return:
+    """
+    fix_this_frame = get_overlapping_events_single_at_time(timestamp, fix_events)
     if len(fix_this_frame) == 1:
-        img_modified = cv2.circle(img_modified, center, marker_radius, marker_color, 2)
-        img_modified = cv2.putText(img_modified, f'Fix:{alg}',
-                                   center + np.array([15, -30]),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, marker_color, 1,
-                                   cv2.LINE_AA)
+        fix_event = fix_this_frame[0]
+        if fix_event.dtn is not None:
+            center_color = center_color_dict[fix_event.dtn]
+            img_modified = cv2.circle(img_modified, center, marker_radius, center_color, 2)
+            img_modified = cv2.putText(img_modified, f'Fix:{alg}',
+                                       center + np.array([15, -30]),
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, center_color, 1,
+                                       cv2.LINE_AA)
     elif len(fix_this_frame) == 0:
         pass
     else:
