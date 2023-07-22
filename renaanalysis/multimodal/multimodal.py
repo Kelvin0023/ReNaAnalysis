@@ -77,6 +77,30 @@ class PhysioArray:
             else:
                 self.meta_info_encoded[name] = value
 
+    def concatenate(self, other_physio_array):
+        """
+        concatenate two physio arrays, assuming they have the same meta info
+        @param other_physio_array:
+        @return:
+        """
+        assert np.all(self.meta_info.keys() == other_physio_array.meta_info.keys()), 'both arrays must have the same meta info keys'
+        assert self.physio_type == other_physio_array.physio_type, 'both arrays must have the same physio type'
+        assert self.array.shape[1:-1] == other_physio_array.array.shape[1:-1], 'both arrays must have the same number of channels and time stamps'
+        if self.array_preprocessed is not None and other_physio_array.array_preprocessed is not None:
+            assert self.array_preprocessed.shape[1:-1] == other_physio_array.array_preprocessed.shape[1:-1], 'both arrays must have the same number of channels and time stamps'
+            self.array_preprocessed = np.concatenate([self.array_preprocessed, other_physio_array.array_preprocessed])
+        else:
+            assert self.array_preprocessed is None and other_physio_array.array_preprocessed is None, 'both preprocessed arrays must have the same number of channels and time stamps'
+        assert self.data_processor.keys() == other_physio_array.data_processor.keys(), 'both arrays must have the same data processor'
+        # assert self.data_processor.values() == other_physio_array.data_processor.values(), 'both arrays must have the same data processor'
+        self.array = np.concatenate([self.array, other_physio_array.array])
+        for name, value in other_physio_array.meta_info.items():
+            self.meta_info[name] = np.concatenate([self.meta_info[name], value])
+        if self.meta_info_encoded is not None and other_physio_array.meta_info_encoded is not None:
+            for name, value in other_physio_array.meta_info_encoded.items():
+                self.meta_info_encoded[name] = np.concatenate([self.meta_info_encoded[name], value])
+        return self
+
     def get_meta_info_by_name(self, meta_info_name):
         return self.meta_info[meta_info_name]
 
@@ -296,6 +320,40 @@ class MultiModalArrays:
             assert len(np.unique(self.labels_array[self.test_indices])) == len(self.event_names), "number of unique labels is not the same as number of event names"
         else:
             self.train_indices, self.test_indices = train_test_split(list(range(self.physio_arrays[0].array.shape[0])), test_size=test_size, random_state=random_seed, stratify=self.labels_array)
+        self.save()
+
+    def set_training_val_set(self, train_indices, val_indices):
+        """
+        set the train indices
+        @param train_indices:
+        @return:
+        """
+        self.training_val_split_indices = []
+        if isinstance(train_indices, list) and isinstance(val_indices, list):
+            assert len(train_indices) == len(val_indices), 'train and val must have the same number of folds'
+            for i in range(len(train_indices)):
+                self.training_val_split_indices.append((np.array(train_indices[i]) if isinstance(train_indices[i], list) else train_indices[i], np.array(val_indices[i]) if isinstance(val_indices[i], list) else val_indices[i]))
+        else:
+            self.training_val_split_indices.append((np.array(train_indices), np.array(val_indices)))
+        self.save()
+
+
+    def set_train_indices(self, train_indices):
+        """
+        set the train indices
+        @param train_indices:
+        @return:
+        """
+        self.train_indices = train_indices
+        self.save()
+
+    def set_test_indices(self, test_indices):
+        """
+        set the test indices
+        @param test_indices:
+        @return:
+        """
+        self.test_indices = test_indices
         self.save()
 
     def get_test_set(self, encode_y=False, convert_to_tensor=False, device=None, return_metainfo=False):

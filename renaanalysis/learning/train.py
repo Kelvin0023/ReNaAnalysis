@@ -792,6 +792,7 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
     y_all_pred = None
     num_standard_errors = 0
     num_target_errors = 0
+    num_epochs = 0
     for x, y in dataloader:
         if mode == 'train':
             optimizer.zero_grad()
@@ -800,6 +801,7 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
             aug_data = aug_data.to(device)
             x = torch.cat((x, aug_data), dim=0)
             y = torch.cat((y, aug_labels), dim=0)
+            num_epochs += y.shape[0]
 
         mini_batch_i += 1
         if verbose >= 1:
@@ -822,11 +824,11 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
             y_pred = last_activation(y_pred)
             classification_loss = criterion(y_pred, y_tensor)
 
-        if mode == 'train' and l2_weight > 0:
-            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
-        else:
-            l2_penalty = 0
-        loss = classification_loss + l2_penalty
+        # if mode == 'train' and l2_weight > 0:
+        #     l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+        # else:
+        #     l2_penalty = 0
+        loss = classification_loss
         if mode == 'train':
             loss.backward()
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
@@ -849,7 +851,7 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
     if verbose >= 1: pbar.close()
-    return np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
+    return np.mean(batch_losses), num_correct_preds / num_epochs if mode == 'train' else num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
 
 def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.PreTrain, verbose=1, check_param=1):
     """

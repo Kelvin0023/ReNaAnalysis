@@ -440,7 +440,7 @@ class ContrastiveLoss(nn.Module):
         negative_in_target = (unmasked_tokens == negatives).all(-1)
         targets = torch.cat([unmasked_tokens, negatives], dim=-2)
 
-        logits = F.cosine_similarity(contextual_output, targets, dim=-1) / self.temperature
+        logits = torch.abs(F.cosine_similarity(contextual_output, targets, dim=-1) / self.temperature)
         if negative_in_target.any():
             logits[:, :, 1:][negative_in_target] = float("-inf")
 
