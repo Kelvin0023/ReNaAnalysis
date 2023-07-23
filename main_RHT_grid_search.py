@@ -40,12 +40,14 @@ grid_search_params = {
 
     "patch_embed_dim": [128],
 
-    "dim_head": [64],
+    # "dim_head": [64],
+    "dim_head": [128],
     "attn_dropout": [0.0],
     "emb_dropout": [0.1],
     "dropout": [0.1],
 
     "lr": [1e-4],
+    # "lr": [1e-3],
     "l2_weight": [1e-5],
 
     # "lr_scheduler_type": ['cosine'],
