@@ -83,6 +83,42 @@ class Attention(nn.Module):
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out), attention
 
+class Attention(nn.Module):
+    def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
+        super().__init__()
+        inner_dim = dim_head * heads
+        project_out = not (heads == 1 and dim_head == dim)
+
+        self.heads = heads
+        self.scale = dim_head ** -0.5
+        self.conv_layers = nn.Sequential([
+            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(1, 10), stride=(1, 2)),
+            nn.
+        ])
+
+        self.attend = nn.Softmax(dim=-1)
+        self.dropout = nn.Dropout(dropout)
+
+        self.to_qkv = nn.Linear(dim, inner_dim * 2, bias=False)
+
+        self.to_out = nn.Sequential(
+            nn.Linear(inner_dim, dim),
+            nn.Dropout(dropout)
+        ) if project_out else nn.Identity()
+
+    def forward(self, x):
+        qk = self.to_qk(x).chunk(2, dim=-1)
+        q, k = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qk)
+
+        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+
+        attention = self.attend(dots)
+        attention = self.dropout(attention)  # TODO
+
+        out = torch.matmul(attention, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
+        return self.to_out(out), attention
+
 
 class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
@@ -351,6 +387,120 @@ class HierarchicalTransformer(nn.Module):
     # def get_grid_size(self):
     #     return self.grid_size
 
+class HierarchicalConvalueTransformer(nn.Module):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi',
+                 pos_embed_mode='learnable'):
+    # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
+    #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
+        """
+
+        # a token is a time slice of data on a single channel
+
+        @param num_timesteps: int: number of timesteps in each sample
+        @param num_channels: int: number of channels of the input data
+        @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
+        note that 'single' only works when the number of classes is 2.
+        @param pos_embed_mode: str: can be 'learnable' or 'sinusoidal'. If 'learnable', the positional embedding is learned.
+        If 'sinusoidal', the positional embedding is sinusoidal. The sinusoidal positional embedding requires meta_info to be passed in with forward
+        """
+        if output == 'single':
+            assert num_classes == 2, 'output can only be single when num_classes is 2'
+        super().__init__()
+        self.depth = depth
+        self.num_heads = num_heads
+        self.window_duration = window_duration
+
+        self.num_channels = num_channels
+        self.num_timesteps = num_timesteps
+        self.patch_embed_dim = patch_embed_dim
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
+
+        self.grid_dims = self.num_channels, self.num_windows
+        self.num_patches = self.num_channels * self.num_windows
+
+        assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
+        # self.to_patch_embedding = nn.Sequential(
+        #     Rearrange('b c (nw ps) -> b (c nw) (ps)', nw=self.num_windows, ps=self.patch_length),
+        #     nn.Linear(self.patch_length, patch_embed_dim),
+        # )
+        self.to_patch_embedding = nn.Sequential(
+            Rearrange('b eegc t -> b 1 eegc t', eegc=self.num_channels, t=self.num_timesteps),
+            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
+            # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
+        )
+        # self.to_patch_embedding = ConvFeatureExtractionModel(self.extraction_layers, dropout=emb_dropout)
+        # x = torch.randn(10, self.num_channels, self.num_timesteps)
+
+        self.pos_embed_mode = pos_embed_mode
+        self.learnable_pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        self.sinusoidal_pos_embedding = SinusoidalPositionalEmbedding(patch_embed_dim)
+
+        self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
+        self.dropout = nn.Dropout(emb_dropout)
+
+        self.transformer = Transformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
+
+        self.pool = pool
+        self.to_latent = nn.Identity()
+
+        if output == 'single':
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, 1))
+        else:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, num_classes))
+
+    def forward(self, x_eeg, *args, **kwargs):
+            x = self.encode(x_eeg, *args, **kwargs)
+            return self.mlp_head(x)
+
+    def encode(self, x_eeg, *args, **kwargs):
+        x = self.to_patch_embedding(x_eeg)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        b, n, _ = x.shape
+
+        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
+
+        if self.pos_embed_mode == 'sinusoidal':
+            channel_pos = args[4]  # batch_size x num_channels
+            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
+
+            pos_embed = time_pos_embed + channel_pos_embed
+            cls_tokens_pos_embedding = repeat(self.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+            pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
+
+        elif self.pos_embed_mode == 'learnable':
+            pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
+        else:
+            raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
+
+        x += pos_embed
+        x = self.dropout(x)
+
+        x, att_matrix = self.transformer(x)
+        # att_matrix = att_matrix[:, :, 1:, 1:]
+        # att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
+        # att_matrix = torch.sum(att_matrix, dim=2)
+        # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
+        x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
+        x = self.to_latent(x)
+        return x
+
+    def prepare_data(self, x):
+        return x
+
 class HierarchicalTransformerContrastivePretrain(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
                  patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', p_t=0.1, p_c=0.2, mask_t_span=2, mask_c_span=5):
@@ -408,6 +558,13 @@ def viz_ht(model: HierarchicalTransformer, x_eeg, y, label_encoder):
     pickle.dump(x_eeg, open(os.path.join('HT/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb'))
     pickle.dump(y, open(os.path.join('HT/RSVP-itemonset-locked', 'y.pkl'), 'wb'))
     pickle.dump(label_encoder, open(os.path.join('HT/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb'))
+
+class SimularityLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred_tokens, original_tokens):
+        return torch.mean(torch.sum(-F.cosine_similarity(pred_tokens.permute(0, 2, 3, 1), original_tokens.permute(0, 2, 3, 1), dim=-1), dim=(1, 2)))
 
 class ContrastiveLoss(nn.Module):
     def __init__(self, temperature, n_neg):

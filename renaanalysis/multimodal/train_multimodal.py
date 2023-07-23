@@ -6,7 +6,7 @@ import torch
 from torch.optim import lr_scheduler
 from torch.utils.data import TensorDataset, DataLoader
 
-from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, ContrastiveLoss
+from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, ContrastiveLoss, SimularityLoss
 from renaanalysis.learning.train import _run_one_epoch_classification, eval_test, _run_one_epoch_self_sup, \
     _run_one_epoch_classification_augmented, eval_test_augmented
 from renaanalysis.params.params import batch_size, epochs, patience, TaskName
@@ -167,7 +167,8 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     assert isinstance(model, HierarchicalTransformerContrastivePretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
-    criterion = ContrastiveLoss(temperature, n_neg)
+    # criterion = ContrastiveLoss(temperature, n_neg)
+    criterion = SimularityLoss()
     X_test, _ = mmarray.get_test_set()
 
     last_activation = None
