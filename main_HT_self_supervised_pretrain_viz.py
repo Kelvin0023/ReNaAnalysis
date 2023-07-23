@@ -1,18 +1,20 @@
 import pickle
 import os
+import warnings
 
 import mne
 import numpy as np
 from matplotlib import pyplot as plt
 from einops import rearrange, repeat
 from matplotlib.colors import LinearSegmentedColormap
+from numpy import inf
 from torch import nn
 import torch
 
 from renaanalysis.learning.HT import ContrastiveLoss
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
-from renaanalysis.learning.train import eval
+from renaanalysis.learning.train import eval_test
 from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_samples, \
     plot_training_loss_history
 from renaanalysis.params.params import *
@@ -25,25 +27,24 @@ is_pca_ica = False
 is_plot_train_history = True
 is_plot_ROC = False
 is_plot_topomap = False
+is_plot_epochs = False
 is_compare_epochs = False
 viz_sim = True
 
-training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr.p', 'rb'))
-locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr.p', 'rb'))
-models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr.p', 'rb'))
+viz_pca_ica = False
+training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain.p', 'rb'))
+locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain.p', 'rb'))
+models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain.p', 'rb'))
 nfolds = 1
-y_test = pickle.load(open(f'{export_data_root}/y_test.p', 'rb'))
-y_train = pickle.load(open(f'{export_data_root}/y_train.p', 'rb'))
-x_eeg_pca_ica_test = pickle.load(open(f'{export_data_root}/x_eeg_pca_ica_test.p', 'rb'))
-x_eeg_test = pickle.load(open(f'{export_data_root}/x_eeg_test.p', 'rb'))
-x_eeg_test = np.asarray(x_eeg_test, dtype='float32')
-label_encoder = pickle.load(open(f'{export_data_root}/label_encoder.p', 'rb'))
-if is_pca_ica:
-    pca = pickle.load(open(f'{export_data_root}/pca_object.p', 'rb'))
-    ica = pickle.load(open(f'{export_data_root}/ica_object.p', 'rb'))
-criterion = nn.CrossEntropyLoss()
-last_activation = nn.Sigmoid()
-_encoder = lambda y: label_encoder.transform(y.reshape(-1, 1)).toarray()
+mmarray = pickle.load(open(f'{export_data_root}/auditory_oddball_mmarray.p', 'rb'))
+x_test, y_test = mmarray.get_test_set(device='cuda:0' if torch.cuda.is_available() else 'cpu')
+x_test = torch.Tensor(x_test)
+y_test = torch.Tensor(y_test)
+is_pca_ica = 'pca' in mmarray['eeg'].data_processor.keys() or 'ica' in mmarray['eeg'].data_processor.keys()
+if is_pca_ica != viz_pca_ica:
+    warnings.warn('The mmarry stored is different with the one desired for visualization')
+pca = mmarray['eeg'].data_processor['pca'] if 'pca' in mmarray['eeg'].data_processor.keys() else None
+ica = mmarray['eeg'].data_processor['ica'] if 'ica' in mmarray['eeg'].data_processor.keys() else None
 exg_resample_rate = 200
 event_names = ["Distractor", "Target"]
 head_fusion = 'mean'
@@ -53,28 +54,51 @@ sample_fusion = 'sum'  # TODO
 
 print('\n'.join([f"{str(x)}, {y[metric]}" for x, y in locking_performance.items()]))
 
+# find the model with best test auc
+# best_loss = inf
+# for params, model_performance in locking_performance.items():
+#     for i in range(nfolds):
+#         if model_performance['folds test loss'][i] < best_loss:
+#             model_idx = [params, i]
+#             best_auc = model_performance['folds test auc'][i]
+
 # viz each layer
 if viz_sim:
-    loss = ContrastiveLoss(0.1, 20)
     for params, model_list in models.items():
+        params = dict(params)
+        loss = ContrastiveLoss(temperature=params['temperature'], n_neg=params['n_neg'])
         for i in range(len(model_list)):
-            device = 'cuda:0' if model_list[i].to_patch_embedding[1].bias.is_cuda else 'cpu'
-            x = model_list[i].to_patch_embedding(torch.from_numpy(x_eeg_test[0:10]).to(device))
-            if model_list[i].training_mode == 'self-sup pretrain':
-                x, original_x, mask_t, mask_c = model_list[i].mask_layer(x)
+            device = 'cuda:0' if model_list[i].HierarchicalTransformer.to_patch_embedding[1].bias.is_cuda else 'cpu'
+            x = model_list[i].HierarchicalTransformer.to_patch_embedding(x_test[0:200].to(device))
+            x, original_x, mask_t, mask_c = model_list[i].mask_layer(x)
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
             b, n, _ = x.shape
 
-            cls_tokens = repeat(model_list[i].cls_token, '1 1 d -> b 1 d', b=b)
+            cls_tokens = repeat(model_list[i].HierarchicalTransformer.cls_token, '1 1 d -> b 1 d', b=b)
             x = torch.cat((cls_tokens, x), dim=1)
-            x += model_list[i].pos_embedding[:, :(n + 1)]
-            x = model_list[i].dropout(x)
+            x += model_list[i].HierarchicalTransformer.pos_embedding[:, :(n + 1)]
+            x = model_list[i].HierarchicalTransformer.dropout(x)
 
-            x, att_matrix = model_list[i].transformer(x)
-            x = model_list[i].to_latent(x[:, 1:].transpose(1, 2).view(original_x.shape))
-            sim = F.cosine_similarity(x.permute(0, 2, 3, 1), original_x.permute(0, 2, 3, 1), dim=-1)
+            x, att_matrix = model_list[i].HierarchicalTransformer.transformer(x)
+            x = model_list[i].HierarchicalTransformer.to_latent(x[:, 1:].transpose(1, 2).view(original_x.shape))
+            sim = torch.abs(F.cosine_similarity(x.permute(0, 2, 3, 1), original_x.permute(0, 2, 3, 1), dim=-1).cpu())
             sim_array = sim.cpu().detach().numpy()
+            sim_score = []
+            masked_token = []
+            # for idx, epoch in enumerate(sim):
+            #     c_masked = torch.sum(mask_c[idx])
+            #     t_masked = torch.sum(mask_t[idx])
+            #     total_value = torch.sum(epoch[mask_c[idx]]) + torch.sum(epoch.T[mask_t[idx]]) - torch.sum(epoch[mask_c[idx]].T[mask_t[idx]])
+            #     total_masked = c_masked * 9 + t_masked * 64 - c_masked * t_masked
+            #     sim_score.append((total_value / total_masked).item())
+            #     masked_token.append(total_masked.item())
+            # plt.scatter(masked_token, sim_score, marker='o')
+            # plt.xlabel('masked token')
+            # plt.ylabel('similarity score')
+            # plt.title('sim_score vs masked token')
+            #
+            # plt.show()
             for idx, epoch in enumerate(sim_array):
                 cmap_colors = [(0.0, 'blue'), (1.0, 'red')]
                 custom_cmap = LinearSegmentedColormap.from_list('CustomColormap', cmap_colors)
@@ -82,7 +106,8 @@ if viz_sim:
                 plt.colorbar()
                 plt.title(f'Predicted Simularity of epoch {idx}')
                 plt.show()
-            # loss._calculate_similarity(original_x, x)
+
+
 # find the model with best test auc
 best_loss = 0
 for params, model_performance in locking_performance.items():
@@ -92,16 +117,36 @@ for params, model_performance in locking_performance.items():
             best_loss = model_performance['folds test loss'][i]
 
 # plot epoch
-if is_compare_epochs:
+if is_plot_epochs:
+    num_samp = 2
+    viz_all_epoch = True
+    viz_both = False
     rollout_data_root = f'HT_viz'
     eeg_montage = mne.channels.make_standard_montage('biosemi64')
     eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
-    num_channels, num_timesteps = x_eeg_pca_ica_test.shape[1:]
+    num_channels, num_timesteps = x_test.shape[1:]
     best_model = models[model_idx[0]][model_idx[1]]
-    ht_viz(best_model, x_eeg_test[0:10], y_test[0: 10], _encoder, event_names, rollout_data_root, best_model.window_duration,
-           exg_resample_rate,
-           eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
-           discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
+    non_target_indc = np.where(y_test == 0)[0]
+    target_indc = np.where(y_test == 6)[0]
+    viz_indc = np.concatenate((non_target_indc[0:num_samp], target_indc[0:num_samp]))
+    colors = {1: 'red', 7: 'blue'}
+    eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
+    this_picks = ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz']
+    model = best_model
+    if viz_all_epoch:
+        visualize_eeg_samples(x_test, y_test, colors, this_picks)
+        ht_viz(model, x_test, y_test, _encoder, event_names, rollout_data_root,
+               best_model.window_duration,
+               exg_resample_rate,
+               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+               discard_ratio=0.9, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)
+    else:
+        visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
+        # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
+        ht_viz(model, x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], _encoder, event_names, rollout_data_root, best_model.window_duration,
+               exg_resample_rate,
+               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+               discard_ratio=0.1, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)
 
 
 # plot training history
@@ -119,7 +164,7 @@ if is_plot_ROC:
     for params, model_list in models.items():
         for i in range(len(model_list)):
             model = model_list[i]
-            test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval(
+            test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval_test(
                 model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder,
                 test_name='', verbose=1)
             params_dict = dict(params)
@@ -131,9 +176,9 @@ if is_plot_topomap:
     rollout_data_root = f'HT_viz'
     eeg_montage = mne.channels.make_standard_montage('biosemi64')
     eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
-    num_channels, num_timesteps = x_eeg_pca_ica_test.shape[1:]
+    num_channels, num_timesteps = x_test.shape[1:]
     best_model = models[model_idx[0]][model_idx[1]]
-    ht_viz(best_model, x_eeg_test, y_test, _encoder, event_names, rollout_data_root, best_model.window_duration, exg_resample_rate,
+    ht_viz(best_model, x_test, y_test, _encoder, event_names, rollout_data_root, best_model.window_duration, exg_resample_rate,
                    eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max', discard_ratio=0.9, batch_size=64, X_pca_ica=x_eeg_pca_ica_test, pca=pca, ica=ica)
 
 

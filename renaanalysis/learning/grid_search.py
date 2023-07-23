@@ -181,7 +181,8 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
 
             hashable_params = tuple(params.items())
             locking_performance[hashable_params] = {'folds val loss': folds_val_loss,
-                                                    'folds trian loss': folds_train_loss}
+                                                    'folds trian loss': folds_train_loss,
+                                                    'folds test loss': training_histories['loss_test']}
             total_training_histories[hashable_params] = training_histories
             models_param[hashable_params] = models
             if not os.path.exists('HT_grid_pretrain'):

@@ -13,16 +13,19 @@ from renaanalysis.params.params import batch_size
 
 
 class Conformer(nn.Sequential):
-    def __init__(self, n_kernals=40, n_channels=22, emb_size=40, depth=6, n_classes=4):
+    def __init__(self, n_kernals=40, n_channels=22, emb_size=40, depth=6, n_classes=4, sequence_length=1000):
         super().__init__(
             PatchEmbed(n_kernels=n_kernals, n_channels=n_channels, emb_size=emb_size),
             TransformerEncoder(depth=depth, emb_size=emb_size),
-            ClassificationHead(emb_size=emb_size, n_classes=n_classes)
+            ClassificationHead(emb_size=emb_size, n_classes=n_classes, sequence_length=sequence_length)
         )
+
+    def forward(self, x, *args, **kwargs):
+        return super().forward(x)  # not using meta info passed through args and kwargs
 
 
 class ClassificationHead(nn.Sequential):
-    def __init__(self, emb_size, n_classes):
+    def __init__(self, emb_size, n_classes, sequence_length=1000):
         super().__init__()
 
         # global average pooling
@@ -32,13 +35,13 @@ class ClassificationHead(nn.Sequential):
             nn.Linear(emb_size, n_classes)
         )
         self.fc = nn.Sequential(
-            nn.Linear(2440, 256),
+            nn.Linear(emb_size * math.floor((sequence_length-99)/15+1), 256),
             nn.ELU(),
             nn.Dropout(0.5),
             nn.Linear(256, 32),
             nn.ELU(),
             nn.Dropout(0.3),
-            nn.Linear(32, 4)
+            nn.Linear(32, n_classes)
         )
 
     def forward(self, x):
@@ -64,7 +67,7 @@ class PatchEmbed(nn.Module):
             Rearrange('b e (h) (w) -> b (h w) e'),
         )
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         x = self.layers(x)
         x = self.projection(x)
         return x

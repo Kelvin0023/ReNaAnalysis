@@ -4,10 +4,13 @@ import warnings
 
 import mne
 import numpy as np
+from einops import rearrange
 from matplotlib import pyplot as plt
+from mne.viz import plot_topomap
 from sklearn.metrics import roc_curve, auc
 from torch import nn
 import torch
+import torch.nn.functional as F
 
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
@@ -23,6 +26,7 @@ is_plot_train_history = False
 is_plot_ROC = True
 is_plot_topomap = True
 is_plot_epochs = True
+is_plot_pos_embedding = True
 
 viz_pca_ica = True
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
@@ -55,6 +59,64 @@ for params, model_performance in locking_performance.items():
             model_idx = [params, i]
             best_auc = model_performance['folds test auc'][i]
 
+best_model = models[model_idx[0]][model_idx[1]]
+
+# plot pos_embedding
+if is_plot_pos_embedding:
+    pos_embedding = best_model.pos_embedding
+    pos_embedding = torch.squeeze(pos_embedding).detach().cpu()[1:]
+    # pos_embedding = rearrange(pos_embedding[1:], '(c t) (h w) -> (c h) (w t)', c=64, t=9, h=16, w=8)
+    # plt.imshow(pos_embedding[0:64], cmap='viridis')
+    # plt.colorbar()
+    # plt.title(f'pos_embedding')
+    # plt.show()
+
+    pos_embedding = pos_embedding.reshape((64, 9, -1))
+    eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
+    eeg_montage = mne.channels.make_standard_montage('biosemi64')
+    info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))
+    info.set_montage(eeg_montage)
+    # for row in pos_embedding:
+    #     for column in row:
+    #         tiled_vector = column.unsqueeze(0).unsqueeze(0).repeat(64, 9, 1)
+    #         sim = F.cosine_similarity(tiled_vector, pos_embedding, dim=-1)
+    #         sim_array = sim.numpy()
+    #         # plt.imshow(sim_array, cmap='viridis')
+    #         # plt.colorbar()
+    #         # plt.title(f'pos_embedding')
+    #         # plt.show()
+    #         fig = plt.figure(figsize=(22, 10), constrained_layout=True)
+    #         axes = fig.subplots(1, 9, sharey=True)
+    #         for window in range(9):
+    #             plot_topomap(sim_array[:, window], info, axes=axes[window], show=False, res=512,
+    #                      vlim=(np.min(sim_array[:, window]), np.max(sim_array[:, window])))
+    #             axes[window].set_title(
+    #                 f"{int((window) * best_model.window_duration * 1e3)}-{int((window+1) * best_model.window_duration * 1e3)}ms")
+    #
+    #         fig.suptitle(f"EEG topomap", fontsize='x-large')
+    #         plt.show()
+    for row in pos_embedding:
+        fig = plt.figure(figsize=(22, 10), constrained_layout=True)
+        axes = fig.subplots(1, 9, sharey=True)
+        for idx, column in enumerate(row):
+            tiled_vector = column.unsqueeze(0).unsqueeze(0).repeat(64, 9, 1)
+            sim = F.cosine_similarity(tiled_vector, pos_embedding, dim=-1)
+            sim_array = sim.numpy()
+            # plt.imshow(sim_array, cmap='viridis')
+            # plt.colorbar()
+            # plt.title(f'pos_embedding')
+            # plt.show()
+            # for window in range(9):
+            #     plot_topomap(sim_array[:, window], info, axes=axes[window], show=False, res=512,
+            #              vlim=(np.min(sim_array[:, window]), np.max(sim_array[:, window])))
+            #     axes[window].set_title(
+            #         f"{int((window) * best_model.window_duration * 1e3)}-{int((window+1) * best_model.window_duration * 1e3)}ms")
+            plot_topomap(np.sum(sim_array, axis=1), info, axes=axes[idx], show=False, res=512,
+                         vlim=(np.min(np.sum(sim_array, axis=1)), np.max(np.sum(sim_array, axis=1))))
+
+        fig.suptitle(f"EEG topomap", fontsize='x-large')
+        plt.show()
+
 # plot epoch
 if is_plot_epochs:
     num_samp = 2
@@ -64,27 +126,27 @@ if is_plot_epochs:
     eeg_montage = mne.channels.make_standard_montage('biosemi64')
     eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
     num_channels, num_timesteps = x_test.shape[1:]
-    best_model = models[model_idx[0]][model_idx[1]]
     non_target_indc = np.where(y_test == 0)[0]
     target_indc = np.where(y_test == 6)[0]
     viz_indc = np.concatenate((non_target_indc[0:num_samp], target_indc[0:num_samp]))
     colors = {0: 'red', 6: 'blue'}
     eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
     this_picks = ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz']
-    model = best_model
     if viz_all_epoch:
         visualize_eeg_samples(x_test, y_test, colors, this_picks)
+        x_test = x_test[:128]
+        y_test = y_test[:128]
         ht_viz(model, x_test, y_test, _encoder, event_names, rollout_data_root,
                best_model.window_duration,
                exg_resample_rate,
-               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=True, head_fusion='max',
                discard_ratio=0.9, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)
     else:
         visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
         # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
         ht_viz(model, x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], _encoder, event_names, rollout_data_root, best_model.window_duration,
                exg_resample_rate,
-               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
+               eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=True, head_fusion='max',
                discard_ratio=0.1, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)
 
 

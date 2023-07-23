@@ -34,7 +34,7 @@ dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray_class-weight_pica.p'
 rebalance_method = 'class_weight'
 
-task_name = TaskName.TrainClassifier
+task_name = TaskName.PreTrain
 subject_pick = None
 subject_group_picks = ['001']
 
@@ -92,12 +92,12 @@ grid_search_params = {
     "feedforward_mlp_dim": [32],
 
     # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [128],
+    "patch_embed_dim": [128, 200],
 
     "pos_embed_mode": ['learnable'],
     # "pos_embed_mode": ['sinusoidal'],
 
-    "dim_head": [64],
+    "dim_head": [64, 128],
 
     # "attn_dropout": [0.5],
     "attn_dropout": [0.0],
@@ -113,9 +113,9 @@ grid_search_params = {
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
     'temperature' : [0.1],
-    'n_neg': [1],
+    'n_neg': [20],
     'p_t': [0.1],
-    'p_c': [0.25],
+    'p_c': [0.15],
     'mask_t_span': [1],
     'mask_c_span': [5]
 }
