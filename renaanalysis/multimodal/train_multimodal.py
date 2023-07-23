@@ -253,7 +253,6 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device, include_metainfo=True)  # reset the memory of the recurrent model
-    # X_test, Y_test = mmarray.get_test_set()
     model.reset()  # reset model memories
 
     train_losses_folds = []
@@ -300,6 +299,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
         # for param in model_copy.parameters():
         #     prev_para.append(param.cpu().detach().numpy())
             train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(model_copy, train_iterator, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            model_copy.reset()
             if is_plot_conf_matrix:
                 train_predicted_labels_all = np.argmax(train_y_all_pred, axis=1)
                 train_true_label_all = np.argmax(train_y_all, axis=1)
@@ -309,6 +309,8 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
             val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_iterator, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            model_copy.reset()
+
             if is_plot_conf_matrix:
                 val_predicted_labels_all = np.argmax(val_y_all_pred, axis=1)
                 val_true_label_all = np.argmax(val_y_all, axis=1)
