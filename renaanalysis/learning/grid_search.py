@@ -206,7 +206,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
 
 
 def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int, results_path, is_pca_ica=False,
-                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, val_size = 0.1, test_size=0.1):
+                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, val_size = 0.1, test_size=0.1, batch_size=16, epochs=5000, patience=30):
     """
 
     @param grid_search_params:
@@ -251,7 +251,7 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
             best_model_folds, best_models_from_folds, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal_ordered_batches(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix,
-                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
+                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed, epochs=epochs, patience=patience)
             folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
             folds_val_auc = mean_max_sublists(training_histories['auc_val'])
             print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}, ')

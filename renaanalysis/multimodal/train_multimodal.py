@@ -243,7 +243,7 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
 
 def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6,
-                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None):
+                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30):
     """
 
     """
