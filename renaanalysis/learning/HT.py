@@ -5,7 +5,7 @@ import pickle
 import torch
 from torch import nn
 
-from einops import rearrange, repeat
+from einops import rearrange, repeat, einops
 from einops.layers.torch import Rearrange
 import torch.nn.utils.rnn as rnn_utils
 import torch.nn.functional as F
@@ -83,7 +83,25 @@ class Attention(nn.Module):
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out), attention
 
-class Attention(nn.Module):
+class Convalue(nn.Module):
+    def __init__(self, conv_channels=8, heads=8):
+        super().__init__()
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=conv_channels, kernel_size=(1, 10), stride=(1, 3)),
+            nn.Conv2d(in_channels=conv_channels, out_channels=conv_channels * 2, kernel_size=(1, 10), stride=(1, 2))
+        )
+        self.heads = heads
+
+    def forward(self, x):
+        x = rearrange(x, 'b t d -> b 1 t d')
+        x = repeat(x, 'b c t d -> (b h) c t d', h=self.heads)
+        x = self.conv_layers(x)
+        x = rearrange(x, '(b h) c t d -> b h t (c d)', h=self.heads)
+        return x
+
+
+
+class ConvalueAttention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
         super().__init__()
         inner_dim = dim_head * heads
@@ -91,24 +109,22 @@ class Attention(nn.Module):
 
         self.heads = heads
         self.scale = dim_head ** -0.5
-        self.conv_layers = nn.Sequential([
-            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(1, 10), stride=(1, 2)),
-            nn.
-        ])
+        self.conv_layers = Convalue(conv_channels=2, heads=heads)
 
         self.attend = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
 
-        self.to_qkv = nn.Linear(dim, inner_dim * 2, bias=False)
+        self.to_qk = nn.Linear(dim, inner_dim * 2, bias=False)
 
         self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, dim),
+            nn.Linear(512, dim),
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
     def forward(self, x):
         qk = self.to_qk(x).chunk(2, dim=-1)
         q, k = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qk)
+        v = self.conv_layers(x)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
@@ -127,6 +143,23 @@ class Transformer(nn.Module):
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
                 PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
+                PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
+            ]))
+
+    def forward(self, x):
+        for prenorm_attention, prenorm_feedforward in self.layers:
+            out, attention = prenorm_attention(x)
+            x = out + x
+            x = prenorm_feedforward(x) + x
+        return x, attention  # last layer
+
+class ConvalueTransformer(nn.Module):
+    def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
+        super().__init__()
+        self.layers = nn.ModuleList([])
+        for _ in range(depth):
+            self.layers.append(nn.ModuleList([
+                PreNorm(dim, ConvalueAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
                 PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
 
@@ -440,7 +473,7 @@ class HierarchicalConvalueTransformer(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.transformer = Transformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
+        self.transformer = ConvalueTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
 
         self.pool = pool
         self.to_latent = nn.Identity()
@@ -460,6 +493,7 @@ class HierarchicalConvalueTransformer(nn.Module):
 
     def encode(self, x_eeg, *args, **kwargs):
         x = self.to_patch_embedding(x_eeg)
+        # x = rearrange(x_eeg, 'b c (t w) -> b (c w) t', t=self.patch_length)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
         b, n, _ = x.shape
