@@ -31,7 +31,7 @@ data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 dataset_name = 'auditory_oddball'
 # dataset_name = 'TUH'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
-mmarray_fn = f'{dataset_name}_mmarray_class-weight_pica.p'
+mmarray_fn = f'{dataset_name}_mmarray_class-weight_no-pica.p'
 rebalance_method = 'class_weight'
 
 task_name = TaskName.PreTrain

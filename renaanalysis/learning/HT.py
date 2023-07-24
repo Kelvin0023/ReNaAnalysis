@@ -91,10 +91,10 @@ class Attention(nn.Module):
 
         self.heads = heads
         self.scale = dim_head ** -0.5
-        self.conv_layers = nn.Sequential([
-            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(1, 10), stride=(1, 2)),
-            nn.
-        ])
+        # self.conv_layers = nn.Sequential([
+        #     nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(1, 10), stride=(1, 2)),
+        #     nn.
+        # ])
 
         self.attend = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
@@ -107,7 +107,7 @@ class Attention(nn.Module):
         ) if project_out else nn.Identity()
 
     def forward(self, x):
-        qk = self.to_qk(x).chunk(2, dim=-1)
+        qk = self.to_qkv(x).chunk(2, dim=-1)
         q, k = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qk)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
