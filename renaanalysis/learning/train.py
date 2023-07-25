@@ -28,7 +28,7 @@ from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
     export_data_root, TaskName
-from renaanalysis.utils.training_utils import count_standard_error, count_target_error
+from renaanalysis.utils.training_utils import count_standard_error, count_target_error, get_class_weight
 from renaanalysis.utils.data_utils import rebalance_classes, mean_max_sublists, \
     mean_min_sublists
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
@@ -552,7 +552,8 @@ def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTr
 
     return models, training_histories_folds, criterion, last_activation
 
-def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
+def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, mode, rebalance_method, l2_weight=1e-5, device=None, test_name='',
+                                  task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
     """
 
     @param model:
@@ -619,9 +620,15 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
             y_pred = model(*x)
 
             y_tensor = y.to(device)
-            if not isinstance(criterion, nn.CrossEntropyLoss):
+            if isinstance(criterion, nn.CrossEntropyLoss):
+                if rebalance_method == 'class_weight':
+                    class_weight = get_class_weight(y_tensor)
+                    classification_loss = criterion.__class__(weight=class_weight)(y_pred, y_tensor)
+                else:
+                    classification_loss = criterion(y_pred, y_tensor)
+            else:  # BCELoss does not apply class weights
                 y_pred = last_activation(y_pred)
-            classification_loss = criterion(y_pred, y_tensor)
+                classification_loss = criterion(y_pred, y_tensor)
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])

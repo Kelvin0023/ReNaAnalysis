@@ -34,7 +34,8 @@ dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray_class-weight_no-pica.p'
 rebalance_method = 'class_weight'
 
-task_name = TaskName.PreTrain
+# task_name = TaskName.PreTrain
+task_name = TaskName.TrainClassifier
 subject_pick = None
 subject_group_picks = ['001']
 

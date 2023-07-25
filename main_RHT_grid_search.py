@@ -33,15 +33,17 @@ if not os.path.exists(training_results_path):
     os.mkdir(training_results_path)
 
 grid_search_params = {
+    # "depth": [6],
     "depth": [4],
     "num_heads": [8],
     "pool": ['cls'],
-    "feedforward_mlp_dim": [256],
+    # "feedforward_mlp_dim": [256],
+    "feedforward_mlp_dim": [32],
 
     "patch_embed_dim": [128],
 
-    # "dim_head": [64],
-    "dim_head": [128],
+    "dim_head": [64],
+    # "dim_head": [128],
     "attn_dropout": [0.0],
     "emb_dropout": [0.1],
     "dropout": [0.1],

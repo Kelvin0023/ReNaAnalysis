@@ -88,6 +88,10 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         # """
         b, qlen, dpatch = x.shape
 
+
+        '''
+        
+        
         if mems is not None:
             mem_x, mem_r_t, mem_r_c, mem_r_p = mems
             x_with_mems = torch.cat([mem_x, x], dim=1)
@@ -164,18 +168,19 @@ class RecurrentGeneralizedPFAttention(nn.Module):
 
         out = torch.torch.einsum('ijbn,jbnd->ibnd', (attention, v))
         out = rearrange(out, 'n b h d -> b n (h d)')
-
+        
+        '''
         # vanilla attention
-        # qkv = self.to_qkv(x).chunk(3, dim=-1)
-        # q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads), qkv)
-        #
-        # dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
-        #
-        # attention = self.softmax(dots)
-        # attention = self.drop_attention(attention)  # TODO
-        #
-        # out = torch.matmul(attention, v)
-        # out = rearrange(out, 'b h n d -> b n (h d)')
+        qkv = self.to_qkv(x).chunk(3, dim=-1)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads), qkv)
+
+        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+
+        attention = self.softmax(dots)
+        attention = self.drop_attention(attention)  # TODO
+
+        out = torch.matmul(attention, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
 
         return self.to_out(out), rearrange(attention, 'q k b h -> b h q k')
 
@@ -378,7 +383,7 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=3):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=0):
         """
 
         # a token is a time slice of data on a single channel
@@ -418,7 +423,7 @@ class RecurrentHierarchicalTransformer(nn.Module):
         self.cls_token_pos_embedding = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.mem_len = self.num_channels * self.num_windows * mem_len + 1  # +1 for cls token
+        self.mem_len = (self.num_channels * self.num_windows * mem_len + 1 ) if mem_len != 0 else 0  # +1 for cls token
         self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=attn_dropout, dropout=dropout, mem_len=self.mem_len)
 
         self.pool = pool
@@ -453,8 +458,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
         # get discretized time for each token
         discretized_start_times = args[2]  // self.window_duration
-        # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
-        time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
+        time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
+        # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
 
         # compute channel positions that are voxel discretized
         channel_pos = args[4]  # batch_size x num_channels
@@ -494,8 +499,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
         # x += self.learnablepos_embedding[:, :(ntoken + 1)]
 
-        # x += time_pos_embed
-        # x += channel_pos_embed
+        x += time_pos_embed
+        x += channel_pos_embed
 
         x = self.dropout(x)
 

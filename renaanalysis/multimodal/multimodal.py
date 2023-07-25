@@ -442,10 +442,10 @@ class MultiModalArrays:
         assert self.labels_array is not None, "Class weight needs labels array but labels is not provided"
         encoded_labels = self._encoder(self.labels_array)
         if len(encoded_labels.shape) == 2:
-            unique_classes, counts = np.unique(self._encoder(self.labels_array), return_counts=True, axis=0)
+            unique_classes, counts = np.unique(encoded_labels, return_counts=True, axis=0)
             counts = counts[::-1]  # refer to docstring
         elif len(encoded_labels.shape) == 1:
-            unique_classes, counts = np.unique(self._encoder(self.labels_array), return_counts=True)
+            unique_classes, counts = np.unique(encoded_labels, return_counts=True)
         else:
             raise ValueError("encoded labels should be either 1d or 2d array")
         # labels_as_strings = np.array([str(label) for label in unique_classes])
@@ -496,8 +496,7 @@ class MultiModalArrays:
             criterion = nn.BCELoss(reduction='mean')
             last_activation = nn.Sigmoid()
         else:
-            criterion = nn.CrossEntropyLoss(
-                weight=self.get_class_weight(True, device) if self.rebalance_method == 'class_weight' else None)
+            criterion = nn.CrossEntropyLoss(weight=self.get_class_weight(True, device) if self.rebalance_method == 'class_weight' else None)
             last_activation = nn.Softmax(dim=1)
         self.save()
 
@@ -575,6 +574,11 @@ class MultiModalArrays:
 
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size
+            n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
+            sample_indices = np.concatenate([sample_indices, [None] * n_add])
+            n_batches = len(sample_indices) / batch_size
+            assert n_batches.is_integer()
+            n_batches = int(n_batches)
             if n_batches == 0:
                 warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
                 continue
