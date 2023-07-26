@@ -89,9 +89,9 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         b, qlen, dpatch = x.shape
 
 
-        '''
-        
-        
+        # '''
+        #
+        #
         if mems is not None:
             mem_x, mem_r_t, mem_r_c, mem_r_p = mems
             x_with_mems = torch.cat([mem_x, x], dim=1)
@@ -181,6 +181,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
 
         out = torch.matmul(attention, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
+        '''
 
         return self.to_out(out), rearrange(attention, 'q k b h -> b h q k')
 
@@ -499,8 +500,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
         # x += self.learnablepos_embedding[:, :(ntoken + 1)]
 
-        x += time_pos_embed
-        x += channel_pos_embed
+        # x += time_pos_embed
+        # x += channel_pos_embed
 
         x = self.dropout(x)
 
