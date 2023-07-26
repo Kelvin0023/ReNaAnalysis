@@ -57,5 +57,5 @@ for eeg_start, eeg_end in zip(eeg_start_indices, eeg_end_indices):
 
 dtn_eeg_stream = mne.filter.resample(dtn_eeg_stream, down=2**4)
 dtn_eeg_timestamps = dtn_eeg_timestamps[::2**4]
-out_data = {'Example-BioSemi-Midline': (dtn_eeg_stream, dtn_eeg_timestamps), 'Example-DTN': (dtn_stream[None, :], dtn_timestamps)}
+out_data = {'Example-BioSemi-Midline': (dtn_eeg_stream, dtn_eeg_timestamps), 'Example-EventMarker': (dtn_stream[None, :], dtn_timestamps)}
 pickle.dump(out_data, open(r'D:\PycharmProjects\RenaLabApp\examples/erp-example.p', 'wb'))
