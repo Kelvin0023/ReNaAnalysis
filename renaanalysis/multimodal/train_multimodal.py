@@ -14,7 +14,7 @@ from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_his
 
 
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
-                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1,
+                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1, test_size=0.1,
                                      lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None):
     """
 
@@ -26,8 +26,6 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
 
     criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device, include_metainfo=True)
 
-    test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
-    # test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
 
     # X = model.prepare_data(X)
 
@@ -42,12 +40,18 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     test_auc = []
     test_acc = []
     test_loss = []
+
+    mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
     mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
+    test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
+
     # mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=0.1, random_seed=random_seed)
+    # test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
 
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
+
         train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=True,random_seed=random_seed, device=device, return_metainfo=True)
         # train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True)
 

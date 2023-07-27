@@ -147,7 +147,6 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
         #         pickle.dump(x_eeg_pca_ica_test, f)
         #     with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
         #         pickle.dump(x_eeg_test, f)
-    mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
     eeg_num_channels, eeg_num_timesteps = mmarray['eeg'].get_pca_ica_array().shape[1:] if is_pca_ica else mmarray['eeg'].array.shape[1:]
     eeg_fs = mmarray['eeg'].sampling_rate
     param_grid = ParameterGrid(grid_search_params)
@@ -165,7 +164,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
                                             dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
             models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
-                                                                                            is_plot_conf_matrix=is_plot_confusion_matrix,
+                                                                                            is_plot_conf_matrix=is_plot_confusion_matrix, test_size=test_size,
                                                                                              verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
 
         elif task_name == TaskName.PreTrain:
