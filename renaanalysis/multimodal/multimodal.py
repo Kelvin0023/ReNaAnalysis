@@ -133,7 +133,7 @@ class MultiModalArrays:
     """
 
     """
-    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None):
+    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None, experiment_info: dict=None):
         """
         mmarray will assume the ordered set of labels correpond to each event in event_viz_colors
         @param physio_arrays:
@@ -155,6 +155,7 @@ class MultiModalArrays:
         self._physio_types = [parray.physio_type for parray in physio_arrays]
         self._physio_types_arrays = dict(zip(self._physio_types, self.physio_arrays))
         self.rebalance_method = rebalance_method
+        self.experiment_info = experiment_info
 
         self.event_names = list(event_viz_colors.keys()) if event_viz_colors is not None else None
 
@@ -198,6 +199,9 @@ class MultiModalArrays:
 
     def get_num_samples(self):
         return len(self.physio_arrays[0])
+
+    def get_indices_by_subject_run(self, subject, run):
+        return [i for i, (s, r) in enumerate(zip(self.experiment_info['subject_id'], self.experiment_info['run'])) if s == subject and r == run]
 
     def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, task_name=TaskName.TrainClassifier, return_metainfo=False):
         """

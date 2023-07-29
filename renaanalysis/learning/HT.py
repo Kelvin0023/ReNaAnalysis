@@ -628,20 +628,42 @@ class ContrastiveLoss(nn.Module):
         contextual_output = contextual_output.unsqueeze(-2)
         unmasked_tokens = unmasked_tokens.unsqueeze(-2)
 
-        negative_in_target = (unmasked_tokens == negatives).all(-1)
-        targets = torch.cat([unmasked_tokens, negatives], dim=-2)
+        negative_in_target = (contextual_output == negatives).all(-1)
+        targets = torch.cat([contextual_output, negatives], dim=-2)
 
-        logits = torch.abs(F.cosine_similarity(contextual_output, targets, dim=-1) / self.temperature)
+        logits = F.cosine_similarity(unmasked_tokens, targets, dim=-1) / self.temperature
         if negative_in_target.any():
             logits[:, :, 1:][negative_in_target] = float("-inf")
 
         return logits.view(-1, logits.shape[-1])
 
-    def forward(self, pred_tokens, original_tokens):
+    def _calculate_distance(self, unmasked_tokens, contextual_output, negatives):
+        contextual_output = contextual_output.unsqueeze(-2)
+        unmasked_tokens = unmasked_tokens.unsqueeze(-2)
+
+        negative_in_target = (contextual_output == negatives).all(-1)
+        targets = torch.cat([contextual_output, negatives], dim=-2)
+
+        num_logits = targets.shape[-2]
+        logits = rearrange(-torch.norm(unmasked_tokens - targets, dim=-1) / self.temperature, 'b t l -> b (t l)')
+        min = logits.min(dim=-1, keepdim=True)[0]
+        max = logits.max(dim=-1, keepdim=True)[0]
+        logits = rearrange(2 / self.temperature * ((logits - min) / (max - min)) - 1 / self.temperature, 'b (t l) -> b t l', l=num_logits)
+        if negative_in_target.any():
+            logits[:, :, 1:][negative_in_target] = float("-inf")
+
+        return logits.view(-1, logits.shape[-1])
+
+    def forward(self, pred_tokens, original_tokens, metric='simularity'):
         batch_size, token_dim, num_channels, num_windows = pred_tokens.shape
-        negt_tokens = self._generate_negatives(original_tokens)
+        negt_tokens = self._generate_negatives(pred_tokens)
         pred_tokens = pred_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)
         original_tokens = original_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)
-        logits = self._calculate_similarity(original_tokens, pred_tokens, negt_tokens)
+        if metric == 'simularity':
+            logits = self._calculate_similarity(original_tokens, pred_tokens, negt_tokens)
+        elif metric == 'distance':
+            logits = self._calculate_distance(original_tokens, pred_tokens, negt_tokens)
+        elif metric == 'both':
+            logits = self._calculate_similarity(original_tokens, pred_tokens, negt_tokens) + self._calculate_distance(original_tokens, pred_tokens, negt_tokens)
         labels = torch.zeros(logits.shape[0], device=logits.device, dtype=torch.long)
         return self.loss_fn(logits, labels)

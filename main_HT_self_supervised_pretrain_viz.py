@@ -7,7 +7,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 from einops import rearrange, repeat
 from matplotlib.colors import LinearSegmentedColormap
+from mne.decoding import UnsupervisedSpatialFilter
 from numpy import inf
+from sklearn.decomposition import PCA
 from torch import nn
 import torch
 
@@ -32,9 +34,9 @@ is_compare_epochs = False
 viz_sim = True
 
 viz_pca_ica = False
-training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain.p', 'rb'))
-locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain.p', 'rb'))
-models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain.p', 'rb'))
+training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'rb'))
+locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'rb'))
+models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'rb'))
 nfolds = 1
 mmarray = pickle.load(open(f'{export_data_root}/auditory_oddball_mmarray.p', 'rb'))
 x_test, y_test = mmarray.get_test_set(device='cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -77,7 +79,28 @@ if viz_sim:
 
             cls_tokens = repeat(model_list[i].HierarchicalTransformer.cls_token, '1 1 d -> b 1 d', b=b)
             x = torch.cat((cls_tokens, x), dim=1)
-            x += model_list[i].HierarchicalTransformer.pos_embedding[:, :(n + 1)]
+            # if self.HierarchicalTransformer.pos_embed_mode == 'sinusoidal':
+            #     channel_pos = args[4]  # batch_size x num_channels
+            #     assert channel_pos.shape[
+            #                1] == self.HierarchicalTransformer.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            #     time_pos = torch.stack(
+            #         [torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in
+            #          range(b)])  # batch_size x num_windows  # use sample-relative time positions
+            #
+            #     time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+            #     channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1,
+            #                                                                                        self.num_windows, 1)
+            #     time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            #     channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
+            #
+            #     pos_embed = time_pos_embed + channel_pos_embed
+            #     cls_tokens_pos_embedding = repeat(self.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+            #     pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
+
+            # elif self.pos_embed_mode == 'learnable':
+            pos_embed = model_list[i].HierarchicalTransformer.learnable_pos_embedding[:, :(n + 1)]
+
+            x += pos_embed
             x = model_list[i].HierarchicalTransformer.dropout(x)
 
             x, att_matrix = model_list[i].HierarchicalTransformer.transformer(x)
@@ -86,6 +109,50 @@ if viz_sim:
             sim_array = sim.cpu().detach().numpy()
             sim_score = []
             masked_token = []
+            pca_data = rearrange(x, 'b d c t -> b (c t) d').cpu().detach()
+            original = rearrange(original_x, 'b d c t -> b (c t) d').cpu().detach()
+            for i in range(len(pca_data)):
+                pca = PCA(n_components=2)
+                pca_result = pca.fit_transform(pca_data[i])
+                pca_result_original = pca.fit_transform(original[i])
+
+                this_mask_c = repeat(mask_c[i][:, None], 'c 1 -> c t', t=mask_t.shape[-1])
+                this_mask_t = repeat(mask_t[i][None, :], '1 t -> c t', c=mask_c.shape[-1])
+
+                this_mask = np.logical_or(this_mask_c, this_mask_t).reshape(-1).to(bool)
+
+                pca_masked = pca_result[this_mask]
+                pca_unmasked = pca_result[torch.logical_not(this_mask)]
+                pca_masked_original = pca_result_original[this_mask]
+                pca_unmasked_original = pca_result_original[torch.logical_not(this_mask)]
+                # plt.imshow(this_mask)
+                # plt.show()
+                #
+                fig, axs = plt.subplots(1, 2)
+                axs[0].scatter(pca_masked_original[:, 0], pca_masked_original[:, 1], label='masked token pcs', color='blue',
+                               sizes=[2] * len(pca_masked_original))
+                axs[0].scatter(pca_unmasked_original[:, 0], pca_unmasked_original[:, 1], label='unmasked token pcs', color='orange',
+                               sizes=[2] * len(pca_unmasked_original))
+                axs[0].set_title(f"PCA of original tokens for epoch {i}")
+                axs[0].legend()
+                axs[1].scatter(pca_masked[:, 0], pca_masked[:, 1], label='masked token pcs', color='blue',
+                            sizes=[2] * len(pca_masked))
+                axs[1].scatter(pca_unmasked[:, 0], pca_unmasked[:, 1], label='unmasked token pcs', color='orange',
+                            sizes=[2] * len(pca_unmasked))
+                axs[1].set_title(f"PCA of tokens for epoch {i}")
+                axs[1].legend()
+                fig.show()
+
+                fig, axs = plt.subplots(1, 2)
+                cmap_colors = [(0.0, 'blue'), (1.0, 'red')]
+                custom_cmap = LinearSegmentedColormap.from_list('CustomColormap', cmap_colors)
+                axs[0].imshow(this_mask.reshape(mask_c.shape[-1], mask_t.shape[-1]))
+                axs[0].set_title(f'Mask of epoch {i}')
+                axs[1].imshow(sim_array[i], cmap=custom_cmap)
+                axs[1].set_title(f'Predicted Simularity of epoch {i}')
+                fig.show()
+                if i == 10:
+                    break
             # for idx, epoch in enumerate(sim):
             #     c_masked = torch.sum(mask_c[idx])
             #     t_masked = torch.sum(mask_t[idx])
