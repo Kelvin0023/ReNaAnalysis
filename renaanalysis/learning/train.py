@@ -911,7 +911,7 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
             x = x if isinstance(x[0], tuple) else (x[0],)
             pred_tokens, orig_tokens, mask_t, mask_c = model(*x)
             # y_tensor = y.to(device)
-            classification_loss = criterion(pred_tokens, orig_tokens)
+            classification_loss = criterion(pred_tokens, orig_tokens, metric='both')
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
