@@ -50,7 +50,7 @@ class FeedForward(nn.Module):
 
 
 class RecurrentGeneralizedPFAttention(nn.Module):
-    def __init__(self, embedding_dim, num_heads=8, dim_head=64, drop_attention=0., dropout=0.1):
+    def __init__(self, embedding_dim, num_heads=8, dim_head=64, drop_attention=0., dropout=0.1, pos_embed_activation=None):
         super().__init__()
         all_heads_dim = dim_head * num_heads
         project_out = not (num_heads == 1 and dim_head == embedding_dim)
@@ -69,9 +69,18 @@ class RecurrentGeneralizedPFAttention(nn.Module):
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
-        self.k_r_time_net = nn.Linear(embedding_dim, all_heads_dim, bias=False)
-        self.k_r_channel_net = nn.Linear(embedding_dim, all_heads_dim, bias=False)
-        self.k_r_participant_net = nn.Linear(embedding_dim, all_heads_dim, bias=False)
+        self.k_r_time_net = nn.Sequential(
+            nn.Linear(embedding_dim, all_heads_dim, bias=False),
+            # nn.GELU()
+        )
+        self.k_r_channel_net = nn.Sequential(
+            nn.Linear(embedding_dim, all_heads_dim, bias=False),
+            # nn.GELU()
+        )
+        self.k_r_participant_net = nn.Sequential(
+            nn.Linear(embedding_dim, all_heads_dim, bias=False),
+            # nn.GELU()
+        )
 
     # def forward(self, x, r_t, r_c, bias_time_e, bias_time_r, bias_channel_r, bias_channel_e):
     def forward(self, x, r_t, r_c, r_p, bias_pf, mems):
@@ -89,11 +98,10 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         b, qlen, dpatch = x.shape
 
 
-        # '''
-        #
-        #
         if mems is not None:
             mem_x, mem_r_t, mem_r_c, mem_r_p = mems
+            if b != mem_x.shape[0]:
+                mem_x, mem_r_t, mem_r_c, mem_r_p = mem_x[:b], mem_r_t[:b], mem_r_c[:b], mem_r_p[:b]
             x_with_mems = torch.cat([mem_x, x], dim=1)
             r_t = torch.cat([mem_r_t, r_t], dim=1)
             r_c = torch.cat([mem_r_c, r_c], dim=1)
@@ -145,7 +153,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         BD_p = self._rel_shift(BD_p)
 
         # dots = AC + (BD_t + BD_c) / 2.  # times 0.5 to normalize across multiple positional features
-        dots = AC + (BD_t + BD_c + BD_p) / 3.  # times 0.5 to normalize across multiple positional features
+        dots = AC + (BD_t + BD_c + BD_p) / 3. # times 0.5 to normalize across multiple positional features
 
         # transformer-xl attention ########################################################################
         # r = r_t + r_c
@@ -288,7 +296,7 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
                 # PreNorm(dim, RecurrentSpatialTemporalAttention(dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
-                PreNorm(dim, RecurrentGeneralizedPFAttention(dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),  # TODO
+                PreNorm(dim, RecurrentGeneralizedPFAttention(dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
                 PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
         self.num_heads = num_heads
@@ -317,6 +325,7 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         """
         if self.mems is None:
             self.init_mems()
+        b = x.size(0)
         qlen = x.size(1)
         klen = self.mem_len + qlen
         layer_outs_rs = []
@@ -329,7 +338,7 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
             x = out + x  # residual connection
             x = prenorm_feedforward(x) + x  # residual connection
             layer_outs_rs.append((x, r_t, r_c, r_p))
-        self.update_mems(layer_outs_rs, qlen)
+        self.update_mems(layer_outs_rs, qlen, b)
         return x, attention  # last layer
 
     def init_mems(self):
@@ -346,7 +355,7 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         else:
             self.mems = None
 
-    def update_mems(self, layer_outs_rs, qlen):
+    def update_mems(self, layer_outs_rs, qlen, b):
         """
         There are `mlen + qlen` steps that can be cached into mems
         For the next step, the last `ext_len` of the `qlen` tokens
@@ -360,12 +369,14 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         if self.mems is None: return
         assert len(layer_outs_rs) == len(self.mems)
         cur_mem_len = self.mems[0][0].size(1) if self.mems[0][0].numel() != 0 else 0
+        b_mismatch = len(self.mems[0][0]) - b  # check the batch size
         with torch.no_grad():
             new_mems = []
             end_idx = cur_mem_len + max(0, qlen)
             beg_idx = max(0, end_idx - self.mem_len)
-
             for layer_index in range(len(layer_outs_rs)):
+                if b_mismatch != 0:
+                    layer_outs_rs[layer_index] = [torch.concatenate((self.mems[layer_index][embed_index][-b_mismatch:], layer_outs_rs[layer_index][embed_index]), dim=0) for embed_index in range(self.num_embeds)]
                 cat = [torch.cat([self.mems[layer_index][embed_index], layer_outs_rs[layer_index][embed_index]], dim=1) for embed_index in range(self.num_embeds)]
                 new_mems.append([c[:, beg_idx:end_idx].detach() for c in cat])
         self.mems = new_mems
@@ -384,7 +395,7 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=0):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1):
         """
 
         # a token is a time slice of data on a single channel

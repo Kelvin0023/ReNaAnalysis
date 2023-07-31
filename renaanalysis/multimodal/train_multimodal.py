@@ -15,7 +15,7 @@ from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_his
 
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1, test_size=0.1,
-                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None):
+                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30, batch_size=16):
     """
 
     """
@@ -41,19 +41,19 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     test_acc = []
     test_loss = []
 
-    mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
-    mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
-    test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
+    # mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
+    # mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
+    # test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
 
-    # mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=0.1, random_seed=random_seed)
-    # test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
+    mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=0.1, random_seed=random_seed)
+    test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True, shuffle_within_batches=True)
 
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
 
-        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=True,random_seed=random_seed, device=device, return_metainfo=True)
-        # train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True)
+        # train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=True,random_seed=random_seed, device=device, return_metainfo=True)
+        train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True, shuffle_within_batches=True)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
@@ -248,7 +248,8 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
 
 def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6,
-                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30):
+                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None,
+                                                     epochs=5000, patience=30, batch_size=16):
     """
 
     """

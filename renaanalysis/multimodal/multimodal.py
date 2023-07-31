@@ -607,7 +607,7 @@ class MultiModalArrays:
         self.train_batch_sample_indices = np.array(train_batch_sample_indices)
         self.save()
 
-    def get_train_val_ordered_batch_iterator_fold(self, fold, device, return_metainfo=False):
+    def get_train_val_ordered_batch_iterator_fold(self, fold, device, return_metainfo=False, shuffle_within_batches=False):
         """
         get a batch iterator for a specific fold
         @param fold:
@@ -621,13 +621,13 @@ class MultiModalArrays:
 
         labels_encoded = self._encoder(self.labels_array)
 
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo), \
-            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo)
+        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo, shuffle_within_batches), \
+            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo, shuffle_within_batches)
 
-    def get_test_ordered_batch_iterator(self, device, return_metainfo=False):
+    def get_test_ordered_batch_iterator(self, device, return_metainfo=False, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
         labels_encoded = self._encoder(self.labels_array)
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.test_batch_sample_indices, device, return_metainfo)
+        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.test_batch_sample_indices, device, return_metainfo, shuffle_within_batches=shuffle_within_batches)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)
