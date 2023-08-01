@@ -34,6 +34,17 @@ class PreNorm(nn.Module):
         return self.fn(self.norm(x), **kwargs)
 
 
+class PrePostNorm(nn.Module):
+    def __init__(self, dim, fn):
+        super().__init__()
+        self.post_norm = nn.LayerNorm(dim)
+        self.pre_norm = nn.LayerNorm(dim)
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        return self.post_norm(self.fn(self.pre_norm(x), **kwargs))
+
+
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
         super().__init__()
@@ -81,6 +92,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
             nn.Linear(embedding_dim, all_heads_dim, bias=False),
             # nn.GELU()
         )
+        self.layer_norm = nn.LayerNorm(embedding_dim)
 
     # def forward(self, x, r_t, r_c, bias_time_e, bias_time_r, bias_channel_r, bias_channel_e):
     def forward(self, x, r_t, r_c, r_p, bias_pf, mems):
@@ -103,6 +115,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
             if b != mem_x.shape[0]:
                 mem_x, mem_r_t, mem_r_c, mem_r_p = mem_x[:b], mem_r_t[:b], mem_r_c[:b], mem_r_p[:b]
             x_with_mems = torch.cat([mem_x, x], dim=1)
+            # x_with_mems = self.layer_norm(torch.cat([mem_x, x], dim=1))
             r_t = torch.cat([mem_r_t, r_t], dim=1)
             r_c = torch.cat([mem_r_c, r_c], dim=1)
             r_p = torch.cat([mem_r_p, r_p], dim=1)
@@ -112,6 +125,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
             Ex_Wq = Ex_Wq[-qlen:]
         else:
             qkv = self.to_qkv(x).chunk(3, dim=-1)
+            # qkv = self.to_qkv(self.layer_norm(x)).chunk(3, dim=-1)
             Ex_Wq, Ex_Wke, v = map(lambda t: rearrange(t, 'b n (h d) -> n b h d', h=self.num_heads), qkv)
         klen = Ex_Wke.shape[0]
 
@@ -154,6 +168,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
 
         # dots = AC + (BD_t + BD_c) / 2.  # times 0.5 to normalize across multiple positional features
         dots = AC + (BD_t + BD_c + BD_p) / 3. # times 0.5 to normalize across multiple positional features
+        dots.mul_(self.scale)  # scale down the dot product
 
         # transformer-xl attention ########################################################################
         # r = r_t + r_c
@@ -288,7 +303,7 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
     self.mems
      [  [layerouts, r_t, r_c, r_p] ]
     """
-    def __init__(self, dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=0., dropout=0.1, mem_len=0):
+    def __init__(self, embedding_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=0., dropout=0.1, mem_len=0):
         super().__init__()
 
         self.depth = depth
@@ -296,8 +311,8 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
                 # PreNorm(dim, RecurrentSpatialTemporalAttention(dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
-                PreNorm(dim, RecurrentGeneralizedPFAttention(dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
-                PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
+                RecurrentGeneralizedPFAttention(embedding_dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout),
+                PreNorm(embedding_dim, FeedForward(embedding_dim, feedforward_mlp_dim, dropout=dropout))  # use pre norm
             ]))
         self.num_heads = num_heads
         self.dim_head = dim_head
@@ -315,6 +330,8 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         self.mem_len = mem_len
         self.num_embeds = 4  # x, r_t, r_c, r_p
 
+        self.layer_norm = nn.LayerNorm(embedding_dim)
+
     def forward(self, x, r_t, r_c, r_p):
         """
 
@@ -330,13 +347,14 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         klen = self.mem_len + qlen
         layer_outs_rs = []
         layer_outs_rs.append((x, r_t, r_c, r_p))
-        for i, (prenorm_attention, prenorm_feedforward) in enumerate(self.layers):
+        for i, (attention_layer, prenorm_ff) in enumerate(self.layers):
             mems_i = None if self.mems is None else self.mems[i]  # memory at ith layer
 
             # out, attention = prenorm_attention(x, r_t=r_t, r_c=r_c, bias_time_e=self.bias_time_e, bias_time_r=self.bias_time_r, bias_channel_r=self.bias_channel_r, bias_channel_e=self.bias_channel_e)
-            out, attention = prenorm_attention(x, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=mems_i)
+            out, attention = attention_layer(x, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=mems_i)
             x = out + x  # residual connection
-            x = prenorm_feedforward(x) + x  # residual connection
+            x = prenorm_ff(x) + x  # residual connection
+            x = self.layer_norm(x)
             layer_outs_rs.append((x, r_t, r_c, r_p))
         self.update_mems(layer_outs_rs, qlen, b)
         return x, attention  # last layer
