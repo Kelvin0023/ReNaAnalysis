@@ -45,6 +45,22 @@ class PrePostNorm(nn.Module):
         return self.post_norm(self.fn(self.pre_norm(x), **kwargs))
 
 
+class FeedForwardResidualPostNorm(nn.Module):
+    def __init__(self, dim, hidden_dim, dropout=0.):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, dim),
+            nn.Dropout(dropout)
+        )
+        self.lnorm = nn.LayerNorm(dim)
+
+    def forward(self, x):
+        return self.lnorm(self.net(x) + x)
+
+
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
         super().__init__()
@@ -58,6 +74,7 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
 
 
 class RecurrentGeneralizedPFAttention(nn.Module):
@@ -166,8 +183,9 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         # BD_p = torch.cat([BD_p, BD_p_repeats], dim=1)  # ntoken, batch_size, num_heads, dim_head
         BD_p = self._rel_shift(BD_p)
 
-        # dots = AC + (BD_t + BD_c) / 2.  # times 0.5 to normalize across multiple positional features
-        dots = AC + (BD_t + BD_c + BD_p) / 3. # times 0.5 to normalize across multiple positional features
+        BD_ = (BD_t + BD_c + BD_p)
+        BD_.mul_(1/3)
+        dots = AC + BD_ # times 0.5 to normalize across multiple positional features
         dots.mul_(self.scale)  # scale down the dot product
 
         # transformer-xl attention ########################################################################
@@ -219,85 +237,6 @@ class RecurrentGeneralizedPFAttention(nn.Module):
 
         return x
 
-# class RecurrentSpatialTemporalAttention(nn.Module):
-#     def __init__(self, embedding_dim, num_heads=8, dim_head=64, drop_attention=0., dropout=0.1):
-#         super().__init__()
-#         all_heads_dim = dim_head * num_heads
-#         project_out = not (num_heads == 1 and dim_head == embedding_dim)
-#
-#         self.dim_head = dim_head
-#         self.num_heads = num_heads
-#         self.scale = dim_head ** -0.5
-#
-#         self.softmax = nn.Softmax(dim=-1)
-#         self.drop_attention = nn.Dropout(drop_attention)
-#
-#         self.to_qkv = nn.Linear(embedding_dim, all_heads_dim * 3, bias=False)
-#
-#         self.to_out = nn.Sequential(
-#             nn.Linear(all_heads_dim, embedding_dim),
-#             nn.Dropout(dropout)
-#         ) if project_out else nn.Identity()
-#
-#         self.k_r_time_net = nn.Linear(embedding_dim, all_heads_dim, bias=False)
-#         self.k_r_channel_net = nn.Linear(embedding_dim, all_heads_dim, bias=False)
-#
-#     def forward(self, x, r_t, r_c, bias_time_e, bias_time_r, bias_channel_r, bias_channel_e):
-#         """
-#
-#         @param x:
-#         @param r_t:
-#         @param r_c:
-#         @param bias_time_e:  num_head x dim_head
-#         @param bias_time_r:  num_head x dim_head
-#         @param bias_channel_r:  num_head x dim_head
-#         @param bias_channel_e:  num_head x dim_head
-#         @return:
-#         # """
-#         b, ntoken, dpatch = x.shape
-#         qkv = self.to_qkv(x).chunk(3, dim=-1)
-#         Ex_Wq, Ek_Wke, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads), qkv)
-#
-#         Ex_Wq = Ex_Wq.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
-#         Ek_Wke = Ek_Wke.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
-#         v = v.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
-#
-#         Ex_Wq_e_biased = Ex_Wq + bias_time_e + bias_channel_e  # batch_size, n query, num_heads, dim_head
-#
-#         A = torch.einsum('ibhd,jbhd->ijbh', Ex_Wq_e_biased, Ek_Wke)  # n query, n query, batch_size, num_heads
-#
-#         W_kr_R_t = self.k_r_time_net(r_t).view(ntoken, b, self.num_heads, self.dim_head)
-#         W_kr_R_c = self.k_r_channel_net(r_c).view(ntoken, b, self.num_heads, self.dim_head)
-#
-#         Ex_Wq_r_biased = Ex_Wq + bias_time_r + bias_channel_r  # batch_size, n query, num_heads, dim_head
-#
-#         B = torch.einsum('ibhd,jbhd->ijbh', Ex_Wq_r_biased, W_kr_R_t)  # n query, n query, batch_size, num_heads
-#
-#         C = torch.einsum('ibhd,jbhd->ijbh', Ex_Wq_r_biased, W_kr_R_c)  # n query, n query, batch_size, num_heads
-#
-#         # dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
-#         dots = (A + B + C) * self.scale
-#
-#         attention = self.softmax(dots)
-#         attention = self.drop_attention(attention)  # n query, n query, batch_size, num_heads
-#
-#         out = torch.torch.einsum('ijbn,jbnd->ibnd', (attention, v))
-#         out = rearrange(out, 'n b h d -> b n (h d)')
-#
-#         # qkv = self.to_qkv(x).chunk(3, dim=-1)
-#         # q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads), qkv)
-#         #
-#         # dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
-#         #
-#         # attention = self.softmax(dots)
-#         # attention = self.drop_attention(attention)  # TODO
-#         #
-#         # out = torch.matmul(attention, v)
-#         # out = rearrange(out, 'b h n d -> b n (h d)')
-#
-#         return self.to_out(out), attention
-
-
 class RecurrentGeneralizedPFTransformer(nn.Module):
     """
     self.mems
@@ -310,18 +249,12 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                # PreNorm(dim, RecurrentSpatialTemporalAttention(dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
-                RecurrentGeneralizedPFAttention(embedding_dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout),
-                PreNorm(embedding_dim, FeedForward(embedding_dim, feedforward_mlp_dim, dropout=dropout))  # use pre norm
+                PreNorm(embedding_dim, RecurrentGeneralizedPFAttention(embedding_dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
+                # RecurrentGeneralizedPFAttention(embedding_dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout),
+                PreNorm(embedding_dim, FeedForward(embedding_dim, feedforward_mlp_dim, dropout=dropout))  # use pre norm for the attention output residual
             ]))
         self.num_heads = num_heads
         self.dim_head = dim_head
-        # bias terms representing the absolute positional embedding of <positional feature> times the query weights
-        # these bias terms are shared across all layers
-        # self.bias_time_e = nn.Parameter(torch.randn(self.num_heads, self.dim_head))
-        # self.bias_time_r = nn.Parameter(torch.randn(self.num_heads, self.dim_head))
-        # self.bias_channel_r = nn.Parameter(torch.randn(self.num_heads, self.dim_head))
-        # self.bias_channel_e = nn.Parameter(torch.randn(self.num_heads, self.dim_head))
         self.bias_pf = nn.Parameter(torch.randn(self.num_heads, self.dim_head))
 
         # self.weight_init()
@@ -329,8 +262,6 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         self.mems = None
         self.mem_len = mem_len
         self.num_embeds = 4  # x, r_t, r_c, r_p
-
-        self.layer_norm = nn.LayerNorm(embedding_dim)
 
     def forward(self, x, r_t, r_c, r_p):
         """
@@ -346,16 +277,19 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         qlen = x.size(1)
         klen = self.mem_len + qlen
         layer_outs_rs = []
-        layer_outs_rs.append((x, r_t, r_c, r_p))
-        for i, (attention_layer, prenorm_ff) in enumerate(self.layers):
+        if self.mem_len > 0: layer_outs_rs.append((x, r_t, r_c, r_p))
+        for i, (attention_layer, prenorm_ff_residual_postnorm) in enumerate(self.layers):
             mems_i = None if self.mems is None else self.mems[i]  # memory at ith layer
-
             # out, attention = prenorm_attention(x, r_t=r_t, r_c=r_c, bias_time_e=self.bias_time_e, bias_time_r=self.bias_time_r, bias_channel_r=self.bias_channel_r, bias_channel_e=self.bias_channel_e)
             out, attention = attention_layer(x, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=mems_i)
             x = out + x  # residual connection
-            x = prenorm_ff(x) + x  # residual connection
-            x = self.layer_norm(x)
-            layer_outs_rs.append((x, r_t, r_c, r_p))
+
+
+            # x = prenorm_ff_residual_postnorm(x)  # residual connection
+
+            x = prenorm_ff_residual_postnorm(x) + x
+
+            if self.mem_len > 0: layer_outs_rs.append((x, r_t, r_c, r_p))
         self.update_mems(layer_outs_rs, qlen, b)
         return x, attention  # last layer
 
@@ -413,7 +347,7 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=0):
         """
 
         # a token is a time slice of data on a single channel
@@ -488,8 +422,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
         # get discretized time for each token
         discretized_start_times = args[2]  // self.window_duration
-        time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
-        # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
+        # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
+        time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
 
         # compute channel positions that are voxel discretized
         channel_pos = args[4]  # batch_size x num_channels
