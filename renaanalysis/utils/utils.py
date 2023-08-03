@@ -422,7 +422,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0
             else:
                 plt.show()
     if is_plot_PSD:
-        epochs.compute_psd(fmin=1, fmax=40).plot()
+        epochs.compute_psd(fmin=1, fmax=120).plot()
 
     # get the min and max for plotting the topomap
     if is_plot_topo_map:

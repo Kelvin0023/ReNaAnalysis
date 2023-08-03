@@ -19,7 +19,7 @@ is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 
 eeg_resample_rate = 200
 
@@ -97,8 +97,8 @@ grid_search_params = {
     # "patch_embed_dim": [64, 128, 256],
     "patch_embed_dim": [128],
 
-    "pos_embed_mode": ['learnable'],
-    # "pos_embed_mode": ['sinusoidal'],
+    # "pos_embed_mode": ['learnable'],
+    "pos_embed_mode": ['sinusoidal'],
 
     "dim_head": [128],
 
@@ -155,10 +155,10 @@ locking_performance, training_histories, models = grid_search_ht_eeg(grid_search
 #                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 if task_name == TaskName.PreTrain:
     pickle.dump(training_histories,
-                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'wb'))
+                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_sim.p', 'wb'))
     pickle.dump(locking_performance,
-                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'wb'))
+                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_sim.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_sim.p', 'wb'))
 else:
     pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
     pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))

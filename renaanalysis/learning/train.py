@@ -574,12 +574,12 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         # determine which layer to require grad
         if task_name == TaskName.PretrainedClassifierFineTune:
             for param in model.parameters():
-                param.requires_grad = False
-            for param in model.transformer.parameters():
                 param.requires_grad = True
-            for param in model.mlp_head.parameters():
-                param.requires_grad = True
-            model.cls_token.requires_grad = True
+            # for param in model.transformer.parameters():
+            #     param.requires_grad = True
+            # for param in model.mlp_head.parameters():
+            #     param.requires_grad = True
+            # model.cls_token.requires_grad = True
     elif mode == 'val':
         model.eval()
     else:
@@ -776,12 +776,12 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
         # determine which layer to require grad
         if task_name == TaskName.PretrainedClassifierFineTune:
             for param in model.parameters():
-                param.requires_grad = False
-            for param in model.transformer.parameters():
                 param.requires_grad = True
-            for param in model.mlp_head.parameters():
-                param.requires_grad = True
-            model.cls_token.requires_grad = True
+            # for param in model.transformer.parameters():
+            #     param.requires_grad = True
+            # for param in model.mlp_head.parameters():
+            #     param.requires_grad = True
+            # model.cls_token.requires_grad = True
     elif mode == 'val':
         model.eval()
     else:
@@ -911,7 +911,7 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
             x = x if isinstance(x[0], tuple) else (x[0],)
             pred_tokens, orig_tokens, mask_t, mask_c = model(*x)
             # y_tensor = y.to(device)
-            classification_loss = criterion(pred_tokens, orig_tokens, metric='both')
+            classification_loss = criterion(pred_tokens, orig_tokens, metric='similarity')
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])

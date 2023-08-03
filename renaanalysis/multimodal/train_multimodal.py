@@ -6,7 +6,7 @@ import torch
 from torch.optim import lr_scheduler
 from torch.utils.data import TensorDataset, DataLoader
 
-from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, SimularityLoss
+from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, SimularityLoss, ContrastiveLoss
 from renaanalysis.learning.train import _run_one_epoch_classification, eval_test, _run_one_epoch_self_sup, \
     _run_one_epoch_classification_augmented
 from renaanalysis.params.params import batch_size, epochs, patience, TaskName
@@ -149,7 +149,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     return models, training_histories_folds, criterion, last_activation, test_auc, test_loss, test_acc
 
 def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=TaskName.PreTrain, n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6,
-                            lr_scheduler_type='exponential', temperature=1, n_neg=20, val_size=0.1, is_plot_conf_matrix=False,
+                            lr_scheduler_type='exponential', temperature=1, n_neg=20, test_size=0.1, val_size=0.1, is_plot_conf_matrix=False,
                             plot_histories=True, random_seed=None):
 
     """
@@ -172,7 +172,10 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
 
     assert isinstance(model, HierarchicalTransformerContrastivePretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
     criterion = ContrastiveLoss(temperature, n_neg)
-    X_test, _ = mmarray.get_test_set()
+    mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
+    # X_test, _ = mmarray.get_test_set()
+    test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True,
+                                                  device=device)
 
     last_activation = None
 

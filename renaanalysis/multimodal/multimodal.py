@@ -266,17 +266,51 @@ class MultiModalArrays:
             training_indices, val_indices = self.training_val_split_indices[fold_index]
             x_train = []
             x_val = []
+
+            labels = []
             for parray in self.physio_arrays:
                 x_train.append(torch.Tensor(parray[training_indices]).to(device))
                 x_val.append(torch.Tensor(parray[val_indices]).to(device))
-            if len(x_train) == 1:
+
+                # meta_info_train.append({name: values[training_indices] for name, values in parray.meta_info.items()})
+                # meta_info_val.append({name: values[val_indices] for name, values in parray.meta_info.items()})
+            meta_info_train = [{name: torch.Tensor(value[training_indices]).to(device) for name, value in
+                                darray.meta_info_encoded.items()} for darray in self.physio_arrays]
+            meta_info_val = [
+                {name: torch.Tensor(value[val_indices]).to(device) for name, value in darray.meta_info_encoded.items()}
+                for darray in self.physio_arrays]
+
+            meta_info_train = [v for d in meta_info_train for k, v in d.items()]
+            meta_info_val = [v for d in meta_info_val for k, v in d.items()]
+
+            n_train, n_val = len(x_train[0]), len(x_val[0])
+            if len(meta_info_train) > 0 and len(meta_info_train[0]) != n_train and return_metainfo:
+                warnings.warn(
+                    "get_dataloader_fold: return_metainfo is not supported for SMOTE. The meta info will be duplicated using the first sample's")
+                meta_info_train = [v[0].repeat(n_train, *([1] * (len(v.shape) - 1))) for v in meta_info_train]
+                meta_info_val = [v[0].repeat(n_val, *([1] * (len(v.shape) - 1))) for v in meta_info_val]
+
+            if len(x_train) == 1:  # how many input modalities
                 dataset_class = TensorDataset
-                x_train = x_train[0]
-                x_val = x_val[0]
             else:
                 dataset_class = MultiInputDataset
-            train_dataset = dataset_class(x_train)
-            val_dataset = dataset_class(x_val)
+            train_set = (*x_train, *meta_info_train) if return_metainfo else (*x_train,)
+            val_set = (*x_val, *meta_info_val) if return_metainfo else (*x_val,)
+            train_dataset = dataset_class(*train_set)
+            val_dataset = dataset_class(*val_set)
+            # x_train = []
+            # x_val = []
+            # for parray in self.physio_arrays:
+            #     x_train.append(torch.Tensor(parray[training_indices]).to(device))
+            #     x_val.append(torch.Tensor(parray[val_indices]).to(device))
+            # if len(x_train) == 1:
+            #     dataset_class = TensorDataset
+            #     x_train = x_train[0]
+            #     x_val = x_val[0]
+            # else:
+            #     dataset_class = MultiInputDataset
+            # train_dataset = dataset_class(x_train)
+            # val_dataset = dataset_class(x_val)
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
@@ -378,6 +412,11 @@ class MultiModalArrays:
             else:
                 x_test.append(parray[self.test_indices])
 
+        meta_info = [{name: value[self.test_indices] for name, value in darray.meta_info_encoded.items()} for darray in
+                     self.physio_arrays]
+        meta_info = {k: v for d in meta_info for k, v in d.items()}
+        if convert_to_tensor:
+            meta_info = {k: torch.Tensor(v).to(device) for k, v in meta_info.items()}
 
         if self.labels_array is not None:
             y_test = self.labels_array[self.test_indices]
@@ -385,15 +424,10 @@ class MultiModalArrays:
                 y_test = self._encoder(y_test)
             if convert_to_tensor:
                 y_test = torch.Tensor(y_test).to(device)
+            test_set = (*x_test, *list(meta_info.values()), y_test) if return_metainfo else (*x_test, y_test)
         else:
             warnings.warn('labels array is None, make sure label is not needed for this model')
-            y_test = None
-
-        meta_info = [{name: value[self.test_indices] for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
-        meta_info = {k: v for d in meta_info for k, v in d.items()}
-        if convert_to_tensor:
-            meta_info = {k: torch.Tensor(v).to(device) for k, v in meta_info.items()}
-        test_set = (*x_test, *list(meta_info.values()), y_test) if return_metainfo else (*x_test, y_test)
+            test_set = (*x_test, *list(meta_info.values())) if return_metainfo else (*x_test,)
 
         return test_set
 
