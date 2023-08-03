@@ -4,17 +4,18 @@ import warnings
 import numpy as np
 import torch
 from torch.optim import lr_scheduler
+from torch.utils.data import TensorDataset, DataLoader
 
-from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, ContrastiveLoss
+from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, SimularityLoss
 from renaanalysis.learning.train import _run_one_epoch_classification, eval_test, _run_one_epoch_self_sup, \
-    _run_one_epoch_classification_augmented, eval_test_augmented
+    _run_one_epoch_classification_augmented
 from renaanalysis.params.params import batch_size, epochs, patience, TaskName
 from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_history
 
 
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
-                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1,
-                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None):
+                                     n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1, test_size=0.1,
+                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30, batch_size=16):
     """
 
     """
@@ -25,10 +26,6 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
 
     criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device, include_metainfo=True)
 
-    # test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
-
-    mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=0.1, random_seed=random_seed)
-    test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True)
 
     # X = model.prepare_data(X)
 
@@ -43,12 +40,20 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     test_auc = []
     test_acc = []
     test_loss = []
-    mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
+
+    # mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
+    # mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
+    # test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True, device=device)
+
+    mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=0.1, random_seed=random_seed)
+    test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, return_metainfo=True, shuffle_within_batches=True)
+
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
+
         # train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=True,random_seed=random_seed, device=device, return_metainfo=True)
-        train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True)
+        train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True, shuffle_within_batches=True)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
@@ -70,7 +75,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         # prev_para = []
         # for param in model_copy.parameters():
         #     prev_para.append(param.cpu().detach().numpy())
-            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(model_copy, train_dataloader, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(model_copy, train_dataloader, criterion, last_activation, optimizer, rebalance_method=mmarray.rebalance_method, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
             if is_plot_conf_matrix:
                 train_predicted_labels_all = np.argmax(train_y_all_pred, axis=1)
                 train_true_label_all = np.argmax(train_y_all, axis=1)
@@ -79,7 +84,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
                 viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
-            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_dataloader, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_dataloader, criterion, last_activation, optimizer, rebalance_method=mmarray.rebalance_method, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
             if is_plot_conf_matrix:
                 val_predicted_labels_all = np.argmax(val_y_all_pred, axis=1)
                 val_true_label_all = np.argmax(val_y_all, axis=1)
@@ -117,7 +122,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         #                                  _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
 
         test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
-            _run_one_epoch_classification(best_model, test_dataloader, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+            _run_one_epoch_classification(best_model, test_dataloader, criterion, last_activation, rebalance_method=mmarray.rebalance_method, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
@@ -242,7 +247,8 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
 
 def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6,
-                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None):
+                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None,
+                                                     epochs=5000, patience=30, batch_size=16):
     """
 
     """
@@ -252,7 +258,6 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device, include_metainfo=True)  # reset the memory of the recurrent model
-    # X_test, Y_test = mmarray.get_test_set()
     model.reset()  # reset model memories
 
     train_losses_folds = []
@@ -298,7 +303,8 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
         # prev_para = []
         # for param in model_copy.parameters():
         #     prev_para.append(param.cpu().detach().numpy())
-            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(model_copy, train_iterator, criterion, last_activation, optimizer, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(model_copy, train_iterator, criterion, last_activation, optimizer, rebalance_method=mmarray.rebalance_method, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            model_copy.reset()
             if is_plot_conf_matrix:
                 train_predicted_labels_all = np.argmax(train_y_all_pred, axis=1)
                 train_true_label_all = np.argmax(train_y_all, axis=1)
@@ -307,7 +313,9 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
                 viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
-            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_iterator, criterion, last_activation, optimizer, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_iterator, criterion, last_activation, optimizer, rebalance_method=mmarray.rebalance_method, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            model_copy.reset()
+
             if is_plot_conf_matrix:
                 val_predicted_labels_all = np.argmax(val_y_all_pred, axis=1)
                 val_true_label_all = np.argmax(val_y_all, axis=1)
@@ -343,7 +351,7 @@ def train_test_classifier_multimodal_ordered_batches(mmarray, model, test_name="
         val_aucs_folds.append(val_aucs)
 
         test_auc, test_loss, test_acc, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
-            _run_one_epoch_classification(best_model_from_training, test_iterator, criterion, last_activation, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+            _run_one_epoch_classification(best_model_from_training, test_iterator, criterion, last_activation, rebalance_method=mmarray.rebalance_method, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc, test_loss, test_acc))
@@ -383,7 +391,7 @@ def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainC
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device)
-    X_test, Y_test = mmarray.get_test_set()
+    # X_test, Y_test = mmarray.get_test_set()
     # X = model.prepare_data(X)
 
     train_losses_folds = []
@@ -393,15 +401,46 @@ def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainC
     models = []
 
     model_copy = None
-    test_acc = []
-    test_loss = []
-    mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
+    train_indices = []
+    val_indices = []
+    for i in range(n_folds):
+        subject_indices = np.where(mmarray['eeg'].meta_info['subject_id'] == i+1)[0]
+
+        train_indices.append(subject_indices[subject_indices < 2592])
+        val_indices.append(subject_indices[subject_indices >= 2592])
+        # train_indices.append()
+    mmarray.set_training_val_set(train_indices=train_indices, val_indices=val_indices)
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
-        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device)
+        # train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device)
+        assert mmarray._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
+        training_indices, val_indices = mmarray.training_val_split_indices[f_index]
+        x_train = []
+        x_val = []
+        y_train = mmarray.labels_array[training_indices]
+        y_val = mmarray.labels_array[val_indices]
 
-        optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
+        labels = []
+        for parray in mmarray.physio_arrays:
+            this_x_train, this_y_train = parray[training_indices], y_train
+            x_train.append(torch.Tensor(this_x_train).to(device))
+            x_val.append(torch.Tensor(parray[val_indices]).to(device))
+
+            labels.append(this_y_train)  # just for assertion
+
+        assert np.all([label_set == labels[0] for label_set in labels])
+        y_train = labels[0]
+        y_train_encoded = mmarray._encoder(y_train)
+        y_val_encoded = mmarray._encoder(y_val)
+        y_train_encoded = torch.Tensor(y_train_encoded)
+        y_val_encoded = torch.Tensor(y_val_encoded)
+        train_dataset = TensorDataset(*x_train, y_train_encoded)
+        val_dataset = TensorDataset(*x_val, y_val_encoded)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+
+        optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr, betas=(0.5, 0.999))
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
         scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
@@ -461,25 +500,17 @@ def train_test_augmented(mmarray, model, test_name="", task_name=TaskName.TrainC
         train_losses_folds.append(train_losses)
         val_accs_folds.append(val_accs)
         val_losses_folds.append(val_losses)
-        test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred = eval_test_augmented(best_model, X_test, Y_test, criterion, last_activation,
-                                         _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
-        if verbose >= 1:
-            print("Tested Fold {}: test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_loss_model, test_acc_model))
-        test_loss.append(test_loss_model)
-        test_acc.append(test_acc_model)
         models.append(best_model)
 
-    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds, 'acc_test': test_acc, 'loss_test': test_loss}
+    training_histories_folds = {'loss_train': train_losses_folds, 'acc_train': train_accs_folds, 'loss_val': val_losses_folds, 'acc_val': val_accs_folds}
     if plot_histories:
         for i in range(n_folds):
             history = {'loss_train': training_histories_folds['loss_train'][i],
                        'acc_train': training_histories_folds['acc_train'][i],
                        'loss_val': training_histories_folds['loss_val'][i],
-                       'acc_val': training_histories_folds['acc_val'][i],
-                       'acc_test': training_histories_folds['acc_test'][i],
-                       'loss_test': training_histories_folds['loss_test'][i]}
+                       'acc_val': training_histories_folds['acc_val'][i]}
             seached_params = None
             plot_training_history(history, seached_params, i, is_plot_auc=False)
 
 
-    return models, training_histories_folds, criterion, last_activation, test_loss, test_acc
+    return models, training_histories_folds, criterion, last_activation

@@ -14,8 +14,8 @@ from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
 # user parameters
-n_folds = 2
-is_pca_ica = True # apply pca and ica on data or not
+n_folds = 1
+is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
@@ -25,16 +25,19 @@ eeg_resample_rate = 200
 
 reject = 'auto'  # whether to apply auto rejection
 # reject = None  # whether to apply auto rejection
-data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
+# data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 # data_root = 'D:/Dataset/auditory_oddball'
-# data_root = 'J:\TUEH\edf'
-dataset_name = 'auditory_oddball'
-# dataset_name = 'TUH'
+data_root = 'J:\TUEH\edf'
+# data_root = 'D:\Dataset\BCICIV_2a'
+# dataset_name = 'auditory_oddball'
+dataset_name = 'TUH'
+# dataset_name = 'BCICIVA'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
-mmarray_fn = f'{dataset_name}_mmarray_class-weight_pica.p'
+mmarray_fn = f'{dataset_name}_mmarray.p'
 rebalance_method = 'class_weight'
 
-task_name = TaskName.TrainClassifier
+task_name = TaskName.PreTrain
+# task_name = TaskName.TrainClassifier
 subject_pick = None
 subject_group_picks = ['001']
 
@@ -97,7 +100,7 @@ grid_search_params = {
     "pos_embed_mode": ['learnable'],
     # "pos_embed_mode": ['sinusoidal'],
 
-    "dim_head": [64],
+    "dim_head": [128],
 
     # "attn_dropout": [0.5],
     "attn_dropout": [0.0],
@@ -113,10 +116,10 @@ grid_search_params = {
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
     'temperature' : [0.1],
-    'n_neg': [1],
+    'n_neg': [20],
     'p_t': [0.1],
-    'p_c': [0.25],
-    'mask_t_span': [1],
+    'p_c': [0.15],
+    'mask_t_span': [2],
     'mask_c_span': [5]
 }
 
@@ -137,8 +140,14 @@ if not os.path.exists(mmarray_path):
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
 
-# define model class
-model_class = Conformer
+# train_indices = []
+# val_indices = []
+# for i in range(9):
+#     for j in range(2):
+#         if j == 0:
+#             train_indices += mmarray.get_indices_by_subject_run(i+1, j+1)
+#         else:
+#             val_indices += mmarray.get_indices_by_subject_run(i+1, j+1)
 
 locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name, is_pca_ica=is_pca_ica,
                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
@@ -146,10 +155,10 @@ locking_performance, training_histories, models = grid_search_ht_eeg(grid_search
 #                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 if task_name == TaskName.PreTrain:
     pickle.dump(training_histories,
-                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
+                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'wb'))
     pickle.dump(locking_performance,
-                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
+                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_both.p', 'wb'))
 else:
     pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
     pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))

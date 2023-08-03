@@ -77,6 +77,30 @@ class PhysioArray:
             else:
                 self.meta_info_encoded[name] = value
 
+    def concatenate(self, other_physio_array):
+        """
+        concatenate two physio arrays, assuming they have the same meta info
+        @param other_physio_array:
+        @return:
+        """
+        assert np.all(self.meta_info.keys() == other_physio_array.meta_info.keys()), 'both arrays must have the same meta info keys'
+        assert self.physio_type == other_physio_array.physio_type, 'both arrays must have the same physio type'
+        assert self.array.shape[1:-1] == other_physio_array.array.shape[1:-1], 'both arrays must have the same number of channels and time stamps'
+        if self.array_preprocessed is not None and other_physio_array.array_preprocessed is not None:
+            assert self.array_preprocessed.shape[1:-1] == other_physio_array.array_preprocessed.shape[1:-1], 'both arrays must have the same number of channels and time stamps'
+            self.array_preprocessed = np.concatenate([self.array_preprocessed, other_physio_array.array_preprocessed])
+        else:
+            assert self.array_preprocessed is None and other_physio_array.array_preprocessed is None, 'both preprocessed arrays must have the same number of channels and time stamps'
+        assert self.data_processor.keys() == other_physio_array.data_processor.keys(), 'both arrays must have the same data processor'
+        # assert self.data_processor.values() == other_physio_array.data_processor.values(), 'both arrays must have the same data processor'
+        self.array = np.concatenate([self.array, other_physio_array.array])
+        for name, value in other_physio_array.meta_info.items():
+            self.meta_info[name] = np.concatenate([self.meta_info[name], value])
+        if self.meta_info_encoded is not None and other_physio_array.meta_info_encoded is not None:
+            for name, value in other_physio_array.meta_info_encoded.items():
+                self.meta_info_encoded[name] = np.concatenate([self.meta_info_encoded[name], value])
+        return self
+
     def get_meta_info_by_name(self, meta_info_name):
         return self.meta_info[meta_info_name]
 
@@ -109,7 +133,7 @@ class MultiModalArrays:
     """
 
     """
-    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None):
+    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None, experiment_info: dict=None):
         """
         mmarray will assume the ordered set of labels correpond to each event in event_viz_colors
         @param physio_arrays:
@@ -131,6 +155,7 @@ class MultiModalArrays:
         self._physio_types = [parray.physio_type for parray in physio_arrays]
         self._physio_types_arrays = dict(zip(self._physio_types, self.physio_arrays))
         self.rebalance_method = rebalance_method
+        self.experiment_info = experiment_info
 
         self.event_names = list(event_viz_colors.keys()) if event_viz_colors is not None else None
 
@@ -174,6 +199,9 @@ class MultiModalArrays:
 
     def get_num_samples(self):
         return len(self.physio_arrays[0])
+
+    def get_indices_by_subject_run(self, subject, run):
+        return [i for i, (s, r) in enumerate(zip(self.experiment_info['subject_id'], self.experiment_info['run'])) if s == subject and r == run]
 
     def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, task_name=TaskName.TrainClassifier, return_metainfo=False):
         """
@@ -298,6 +326,40 @@ class MultiModalArrays:
             self.train_indices, self.test_indices = train_test_split(list(range(self.physio_arrays[0].array.shape[0])), test_size=test_size, random_state=random_seed, stratify=self.labels_array)
         self.save()
 
+    def set_training_val_set(self, train_indices, val_indices):
+        """
+        set the train indices
+        @param train_indices:
+        @return:
+        """
+        self.training_val_split_indices = []
+        if isinstance(train_indices, list) and isinstance(val_indices, list):
+            assert len(train_indices) == len(val_indices), 'train and val must have the same number of folds'
+            for i in range(len(train_indices)):
+                self.training_val_split_indices.append((np.array(train_indices[i]) if isinstance(train_indices[i], list) else train_indices[i], np.array(val_indices[i]) if isinstance(val_indices[i], list) else val_indices[i]))
+        else:
+            self.training_val_split_indices.append((np.array(train_indices), np.array(val_indices)))
+        self.save()
+
+
+    def set_train_indices(self, train_indices):
+        """
+        set the train indices
+        @param train_indices:
+        @return:
+        """
+        self.train_indices = train_indices
+        self.save()
+
+    def set_test_indices(self, test_indices):
+        """
+        set the test indices
+        @param test_indices:
+        @return:
+        """
+        self.test_indices = test_indices
+        self.save()
+
     def get_test_set(self, encode_y=False, convert_to_tensor=False, device=None, return_metainfo=False):
         """
         get the test set
@@ -384,10 +446,10 @@ class MultiModalArrays:
         assert self.labels_array is not None, "Class weight needs labels array but labels is not provided"
         encoded_labels = self._encoder(self.labels_array)
         if len(encoded_labels.shape) == 2:
-            unique_classes, counts = np.unique(self._encoder(self.labels_array), return_counts=True, axis=0)
+            unique_classes, counts = np.unique(encoded_labels, return_counts=True, axis=0)
             counts = counts[::-1]  # refer to docstring
         elif len(encoded_labels.shape) == 1:
-            unique_classes, counts = np.unique(self._encoder(self.labels_array), return_counts=True)
+            unique_classes, counts = np.unique(encoded_labels, return_counts=True)
         else:
             raise ValueError("encoded labels should be either 1d or 2d array")
         # labels_as_strings = np.array([str(label) for label in unique_classes])
@@ -438,8 +500,7 @@ class MultiModalArrays:
             criterion = nn.BCELoss(reduction='mean')
             last_activation = nn.Sigmoid()
         else:
-            criterion = nn.CrossEntropyLoss(
-                weight=self.get_class_weight(True, device) if self.rebalance_method == 'class_weight' else None)
+            criterion = nn.CrossEntropyLoss(weight=self.get_class_weight(True, device) if self.rebalance_method == 'class_weight' else None)
             last_activation = nn.Softmax(dim=1)
         self.save()
 
@@ -517,6 +578,11 @@ class MultiModalArrays:
 
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size
+            n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
+            sample_indices = np.concatenate([sample_indices, [None] * n_add])
+            n_batches = len(sample_indices) / batch_size
+            assert n_batches.is_integer()
+            n_batches = int(n_batches)
             if n_batches == 0:
                 warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
                 continue
@@ -545,7 +611,7 @@ class MultiModalArrays:
         self.train_batch_sample_indices = np.array(train_batch_sample_indices)
         self.save()
 
-    def get_train_val_ordered_batch_iterator_fold(self, fold, device, return_metainfo=False):
+    def get_train_val_ordered_batch_iterator_fold(self, fold, device, return_metainfo=False, shuffle_within_batches=False):
         """
         get a batch iterator for a specific fold
         @param fold:
@@ -559,13 +625,13 @@ class MultiModalArrays:
 
         labels_encoded = self._encoder(self.labels_array)
 
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo), \
-            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo)
+        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo, shuffle_within_batches), \
+            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo, shuffle_within_batches)
 
-    def get_test_ordered_batch_iterator(self, device, return_metainfo=False):
+    def get_test_ordered_batch_iterator(self, device, return_metainfo=False, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
         labels_encoded = self._encoder(self.labels_array)
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.test_batch_sample_indices, device, return_metainfo)
+        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.test_batch_sample_indices, device, return_metainfo, shuffle_within_batches=shuffle_within_batches)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)
