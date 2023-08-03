@@ -24,7 +24,7 @@ is_regenerate_epochs = True
 eeg_resample_rate = 200
 
 # reject = 'auto'  # whether to apply auto rejection
-reject = None  # whether to apply auto rejection
+reject = 'auto'  # whether to apply auto rejection
 # data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 # data_root = 'D:/Dataset/auditory_oddball'
 # data_root = 'J:\TUEH\edf'
