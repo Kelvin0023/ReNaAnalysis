@@ -410,7 +410,9 @@ def ht_viz_multimodal(model, mmarray,
 def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, data_root,
                                 note='', head_fusion='max', discard_ratio=0.1,
                                 load_saved_rollout=False, batch_size=512,
-                                is_pca_ica=False, pca=None, ica=None, use_meta_info=False, *args, **kwargs):
+                                is_pca_ica=False, pca=None, ica=None, use_meta_info=False,
+                                use_ordered=False,
+                                *args, **kwargs):
     """
     @param model: can be the model instance or the model class. When class is provided, please give kwargs for model_init_params and model_path
     @param num_channels: number of channels for the model. This can be different from the number of channels in X. If they are different,
@@ -427,7 +429,10 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
         model = model(**kwargs['model_init_params'])
         model.load_state_dict(torch.load(kwargs['model_path']))
     x_test_original = mmarray['eeg'].array[mmarray.test_indices]
-    test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, return_metainfo=use_meta_info,device=device)
+    if use_ordered:
+        test_iterator = mmarray.get_test_ordered_batch_iterator(encode_y=False, return_metainfo=use_meta_info,  device=device)
+    else:
+        test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, return_metainfo=use_meta_info,device=device)
     n_samples = len(test_iterator.dataset)
     event_ids = mmarray.event_ids
     model.to(device)
