@@ -23,7 +23,7 @@ is_regenerate_epochs = True
 
 eeg_resample_rate = 200
 
-# reject = 'auto'  # whether to apply auto rejection
+# reject = None  # whether to apply auto rejection
 reject = 'auto'  # whether to apply auto rejection
 # data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 # data_root = 'D:/Dataset/auditory_oddball'
@@ -35,7 +35,7 @@ dataset_name = 'SIM'
 # dataset_name = 'BCICIVA'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
 
-mmarray_fn = f'{dataset_name}_mmarray.p'
+mmarray_fn = f'{dataset_name}_mmarray_class_weight.p'
 rebalance_method = 'class_weight'
 
 # task_name = TaskName.PreTrain

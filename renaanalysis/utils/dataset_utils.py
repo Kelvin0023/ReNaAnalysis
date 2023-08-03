@@ -27,7 +27,7 @@ from renaanalysis.utils.data_utils import epochs_to_class_samples
 from renaanalysis.multimodal.multimodal import PhysioArray, MultiModalArrays
 from renaanalysis.utils.eeg_utils import is_standard_10_20_name
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
-from renaanalysis.utils.utils import preprocess_standard_eeg, add_annotations_to_raw
+from renaanalysis.utils.utils import preprocess_standard_eeg, add_annotations_to_raw, is_button_after_oddball
 
 TUH_valid_channels = ['A1', 'A2', 'C3', 'C4', 'Cz', 'F3', 'F4', 'F7', 'F8', 'Fp1', 'Fp2', 'Fz', 'O1', 'O2', 'Oz', 'P3', 'P4', 'Pz', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6']
 
@@ -175,13 +175,13 @@ def load_SIM_epochs(fdt_root, colors, epoch_tmin, epoch_tmax, eeg_resample_rate,
         # create stim channel
         standard_stim_annotation_indices = np.argwhere(raw.annotations.description == standard_annotation)[:, 0]
         oddball_stim_annotation_indices = np.argwhere(raw.annotations.description == oddball_annotation)[:, 0]
-        button_stim_annotation_indices = np.argwhere(raw.annotations.description == button_annotation)[:, 0]
+        button_annotation_indices = np.argwhere(raw.annotations.description == button_annotation)[:, 0]
 
         standard_stim_times = raw.annotations.onset[standard_stim_annotation_indices]
         oddball_stim_times = raw.annotations.onset[oddball_stim_annotation_indices]
-        button_stim_times = raw.annotations.onset[button_stim_annotation_indices]
+        button_times = raw.annotations.onset[button_annotation_indices]
 
-        oddball_stim_times_with_response = [x for x in oddball_stim_times if any(np.abs(button_stim_times - x) < response_threshold)]
+        oddball_stim_times_with_response = [x for x in oddball_stim_times if is_button_after_oddball(x, button_times, response_threshold)]
         print(f"participant {subject} run {run} has: {len(standard_stim_times)} standard, {len(oddball_stim_times_with_response)} oddball with response, missed {len(oddball_stim_times) - len(oddball_stim_times_with_response)} oddballs")
 
         oddball_annotations = mne.Annotations(onset=oddball_stim_times_with_response, duration=len(oddball_stim_times_with_response) * [0.0], description=[oddball_w_response_annotation] * len(oddball_stim_times_with_response))

@@ -132,19 +132,20 @@ class RecurrentGeneralizedPFAttention(nn.Module):
             if b != mem_x.shape[0]:
                 mem_x, mem_r_t, mem_r_c, mem_r_p = mem_x[:b], mem_r_t[:b], mem_r_c[:b], mem_r_p[:b]
             x_with_mems = torch.cat([mem_x, x], dim=1)
+            klen = x_with_mems.size(1)
             # x_with_mems = self.layer_norm(torch.cat([mem_x, x], dim=1))
-            r_t = torch.cat([mem_r_t, r_t], dim=1)
-            r_c = torch.cat([mem_r_c, r_c], dim=1)
-            r_p = torch.cat([mem_r_p, r_p], dim=1)
+            r_t = torch.cat([mem_r_t, r_t], dim=1) if r_t.size(1) != klen else r_t
+            r_c = torch.cat([mem_r_c, r_c], dim=1) if r_c.size(1) != klen else r_t
+            r_p = torch.cat([mem_r_p, r_p], dim=1) if r_p.size(1) != klen else r_t
 
             qkv = self.to_qkv(x_with_mems).chunk(3, dim=-1)
             Ex_Wq, Ex_Wke, v = map(lambda t: rearrange(t, 'b n (h d) -> n b h d', h=self.num_heads), qkv)
             Ex_Wq = Ex_Wq[-qlen:]
         else:
+            klen = x.size(1)
             qkv = self.to_qkv(x).chunk(3, dim=-1)
             # qkv = self.to_qkv(self.layer_norm(x)).chunk(3, dim=-1)
             Ex_Wq, Ex_Wke, v = map(lambda t: rearrange(t, 'b n (h d) -> n b h d', h=self.num_heads), qkv)
-        klen = Ex_Wke.shape[0]
 
         # Ex_Wq = Ex_Wq.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
         # Ex_Wke = Ex_Wke.contiguous().view(ntoken, b, self.num_heads, self.dim_head)
@@ -347,7 +348,7 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=0):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1):
         """
 
         # a token is a time slice of data on a single channel
@@ -422,8 +423,12 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
         # get discretized time for each token
         discretized_start_times = args[2]  // self.window_duration
-        time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
+        mem_timesteps = int(self.transformer.mems[0][0].size(1) / self.num_channels) if (self.transformer.mems is not None and torch.numel(self.transformer.mems[0][0]) != 0) else 0
+        mem_num_epochs = mem_timesteps // self.num_windows
+        tlen = mem_timesteps + self.num_windows
+        # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
         # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
+        time_pos = torch.stack([torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
 
         # compute channel positions that are voxel discretized
         channel_pos = args[4]  # batch_size x num_channels
@@ -454,7 +459,10 @@ class RecurrentHierarchicalTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
         cls_tokens_pos_embedding = repeat(self.cls_token_pos_embedding, '1 1 d -> b 1 d', b=b)
 
-        time_pos_embed = torch.cat((cls_tokens_pos_embedding, time_pos_embed), dim=1)
+        # insert cls pos embedding based on the number of mem steps
+        for i in range(mem_num_epochs + 1):
+            time_pos_embed = torch.cat((time_pos_embed[:, :i * ntoken, :], cls_tokens_pos_embedding, time_pos_embed[:, i * ntoken:, :]), dim=1)  # only time pos embedding can be of klen before the transformer
+
         channel_pos_embed = torch.cat((cls_tokens_pos_embedding, channel_pos_embed), dim=1)
         participant_pos_embed = torch.cat((cls_tokens_pos_embedding, participant_pos_embed), dim=1)
 
