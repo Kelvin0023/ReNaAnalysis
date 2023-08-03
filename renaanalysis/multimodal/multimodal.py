@@ -588,14 +588,15 @@ class MultiModalArrays:
 
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size
+            if n_batches == 0:
+                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
+                continue
             n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
             sample_indices = np.concatenate([sample_indices, [None] * n_add])
             n_batches = len(sample_indices) / batch_size
             assert n_batches.is_integer()
             n_batches = int(n_batches)
-            if n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
-                continue
+
             n_test_batches = math.floor(test_size * n_batches)
             n_val_batches = math.floor(val_size * n_batches)
             if n_test_batches == 0 or n_val_batches == 0:

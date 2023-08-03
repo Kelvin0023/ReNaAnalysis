@@ -347,7 +347,7 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=0):
         """
 
         # a token is a time slice of data on a single channel
