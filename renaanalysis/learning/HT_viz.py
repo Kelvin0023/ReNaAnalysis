@@ -423,12 +423,12 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
     @param model_path
     @param model_init_params
     """
-
+    assert os.path.exists(data_root), "Data root does not exist for saving rollouts"
     if isinstance(model, type):
         assert os.path.exists(kwargs['model_path']), "Model path does not exist"
         model = model(**kwargs['model_init_params'])
         model.load_state_dict(torch.load(kwargs['model_path']))
-    x_test_original = mmarray['eeg'].array[mmarray.test_indices]
+    x_test_original = mmarray['eeg'].array[mmarray.get_ordered_test_indices() if use_ordered else mmarray.test_indices]
     if use_ordered:
         test_iterator = mmarray.get_test_ordered_batch_iterator(encode_y=False, return_metainfo=use_meta_info,  device=device)
     else:
@@ -489,7 +489,7 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
         x_eeg_windowed = torch.chunk(x_eeg_from_iterator.to(device), model.num_windows, dim=-1)
         x_eeg_from_iterator = x_eeg_from_iterator.cpu().numpy()
         y_from_iterator = torch.cat(y_from_iterator, dim=0).cpu().numpy()
-
+        y_from_iterator = np.squeeze(y_from_iterator, -1)
         for roll_depth in range(model.depth):
             forward_activation_windowed = torch.empty((n_samples, n_model_chan, model.num_windows, model.patch_length)).to(device)
             for window_i, x_window_data in enumerate(x_eeg_windowed):
