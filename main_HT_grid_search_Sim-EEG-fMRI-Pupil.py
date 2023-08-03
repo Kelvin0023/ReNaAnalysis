@@ -19,25 +19,27 @@ is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 
 eeg_resample_rate = 200
 
-reject = 'auto'  # whether to apply auto rejection
-# reject = None  # whether to apply auto rejection
+# reject = 'auto'  # whether to apply auto rejection
+reject = None  # whether to apply auto rejection
 # data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 # data_root = 'D:/Dataset/auditory_oddball'
-data_root = 'J:\TUEH\edf'
+# data_root = 'J:\TUEH\edf'
 # data_root = 'D:\Dataset\BCICIV_2a'
 # dataset_name = 'auditory_oddball'
-dataset_name = 'TUH'
+data_root = r'D:\Dropbox\Dropbox\EEGDatasets\Linbi_64chan_EEG_dataset_for-Hengda'
+dataset_name = 'SIM'
 # dataset_name = 'BCICIVA'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
+
 mmarray_fn = f'{dataset_name}_mmarray.p'
 rebalance_method = 'class_weight'
 
-task_name = TaskName.PreTrain
-# task_name = TaskName.TrainClassifier
+# task_name = TaskName.PreTrain
+task_name = TaskName.TrainClassifier
 subject_pick = None
 subject_group_picks = ['001']
 

@@ -12,6 +12,9 @@ import math
 import matplotlib.pyplot as plt
 import scipy
 import pickle
+
+from mne.io import read_raw_eeglab
+
 from RenaAnalysis import get_rdf
 
 from mne_bids import (BIDSPath, read_raw_bids)
@@ -22,8 +25,9 @@ from renaanalysis.params.params import eeg_name, pupil_name
 from renaanalysis.utils.Bidict import Bidict
 from renaanalysis.utils.data_utils import epochs_to_class_samples
 from renaanalysis.multimodal.multimodal import PhysioArray, MultiModalArrays
+from renaanalysis.utils.eeg_utils import is_standard_10_20_name
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
-from renaanalysis.utils.utils import preprocess_standard_eeg
+from renaanalysis.utils.utils import preprocess_standard_eeg, add_annotations_to_raw
 
 TUH_valid_channels = ['A1', 'A2', 'C3', 'C4', 'Cz', 'F3', 'F4', 'F7', 'F8', 'Fp1', 'Fp2', 'Fz', 'O1', 'O2', 'Oz', 'P3', 'P4', 'Pz', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6']
 
@@ -134,8 +138,66 @@ class DataSet():
         for hierarchy_key in hierarchy_list:
             pass
 
+def load_SIM_epochs(fdt_root, colors, epoch_tmin, epoch_tmax, eeg_resample_rate, response_threshold=.5, is_merge_event ='drop',
+                    standard_annotation='S  8', oddball_annotation='S 32', button_annotation='Button', oddball_w_response_annotation='oddball_w_response'):
+    """
+    annotation in the raw data:
+    * s32: oddball
+    * s 8: standard
+    * Button: button response
 
+    the epochs generate has two events:
+    * standard
+    * oddball with response: if a button press happens within 0.5s after the oddball event
 
+    @param fdt_root:
+    @param colors:
+    @param epoch_tmin:
+    @param epoch_tmax:
+    @param eeg_resample_rate:
+    @return:
+    """
+    event_id_mapping = {standard_annotation: 1, oddball_w_response_annotation: 2}
+    data_fns = [x for x in os.listdir(fdt_root) if x.endswith('set')]
+    data_paths = [os.path.join(fdt_root, data_fn) for data_fn in data_fns]
+    all_epochs = []
+
+    for data_fn, data_path in zip(data_fns, data_paths):
+        subject = data_fn.split('_')[0].strip('sub')
+        run = data_fn.split('_')[1].strip('run')
+        raw = read_raw_eeglab(data_path)
+        raw = preprocess_standard_eeg(raw, ica_path=os.path.join(os.path.dirname(fdt_root),f'sub{subject}_run{run}_ica.fif'), montage=raw.get_montage(),
+                                      is_running_ica=False, ocular_artifact_mode='proxy', blink_ica_threshold=np.linspace(10, 7, 5),
+                                      eyemovement_ica_threshold=np.linspace(2.5, 2.0, 5))
+        channels_to_drop = [ch for ch in raw.ch_names if not is_standard_10_20_name(ch)]
+        raw.drop_channels(channels_to_drop)  # drop not eeg channels, because this raw has its none eeg channels marked as eeg in channel types
+
+        # create stim channel
+        standard_stim_annotation_indices = np.argwhere(raw.annotations.description == standard_annotation)[:, 0]
+        oddball_stim_annotation_indices = np.argwhere(raw.annotations.description == oddball_annotation)[:, 0]
+        button_stim_annotation_indices = np.argwhere(raw.annotations.description == button_annotation)[:, 0]
+
+        standard_stim_times = raw.annotations.onset[standard_stim_annotation_indices]
+        oddball_stim_times = raw.annotations.onset[oddball_stim_annotation_indices]
+        button_stim_times = raw.annotations.onset[button_stim_annotation_indices]
+
+        oddball_stim_times_with_response = [x for x in oddball_stim_times if any(np.abs(button_stim_times - x) < response_threshold)]
+        print(f"participant {subject} run {run} has: {len(standard_stim_times)} standard, {len(oddball_stim_times_with_response)} oddball with response, missed {len(oddball_stim_times) - len(oddball_stim_times_with_response)} oddballs")
+
+        oddball_annotations = mne.Annotations(onset=oddball_stim_times_with_response, duration=len(oddball_stim_times_with_response) * [0.0], description=[oddball_w_response_annotation] * len(oddball_stim_times_with_response))
+        raw = add_annotations_to_raw(raw, oddball_annotations)
+
+        events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
+
+        this_epoch_tmax = epoch_tmax - 1 / raw.info['sfreq']
+        metadata_dict = {'subject_id': [subject] * len(events), 'run': [run] * len(events), 'epoch_start_times': raw.times[events[:, 0]]}
+        metadata = pd.DataFrame(metadata_dict)
+        epochs = mne.Epochs(raw, events, event_id=event_id, metadata=metadata, tmin=epoch_tmin, tmax=this_epoch_tmax,
+                          baseline=(epoch_tmin, epoch_tmin + (epoch_tmax - epoch_tmin) * 0.1), preload=True,
+                          event_repeated=is_merge_event)
+        all_epochs.append(epochs)
+    all_epochs = mne.concatenate_epochs(all_epochs)
+    return all_epochs
 
 def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_width, datatype, task, suffix, extension, event_label_dict, epoch_tmin, epoch_tmax, baseline_tuple):
     """
@@ -254,6 +316,32 @@ def get_BCI_montage(montage_name, picks=None):
         # Keep the first three rows as they are the fiducial points information
         montage.dig = montage.dig[0:3] + kept_channel_info
     return montage
+
+
+def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=True, export_data_root=None, reject='auto', random_seed=None):
+    loading_start_time = time.perf_counter()
+    event_viz_colors = {
+        "S  8": "blue",
+        "oddball_w_response": "blue"
+    }
+    x_path = os.path.join(export_data_root, 'x_sim.p')
+    y_path = os.path.join(export_data_root, 'y_sim.p')
+    metadata_path = os.path.join(export_data_root, 'metadata_sim.p')
+    if is_regenerate_epochs:
+        epochs = load_SIM_epochs(fdt_root=data_root, colors=event_viz_colors, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax, eeg_resample_rate=eeg_resample_rate)
+        x, y, metadata = epochs_to_class_samples(epochs, list(event_viz_colors.keys()), reject=reject, n_jobs=16, eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, random_seed=random_seed, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax)
+        # add start times to metadata
+        pickle.dump(x, open(x_path, 'wb'))
+        pickle.dump(y, open(y_path, 'wb'))
+        pickle.dump(metadata, open(metadata_path, 'wb'))
+    else:
+        assert os.path.exists(x_path) and os.path.exists(y_path) and os.path.exists(metadata_path), "Data files not found, please regenerate epochs by setting is_regenerate_epochs=True"
+        x = pickle.load(open(x_path, 'rb'))
+        y = pickle.load(open(y_path, 'rb'))
+        metadata = pickle.load(open(metadata_path, 'rb'))
+
+    print(f"Load data took {time.perf_counter() - loading_start_time} seconds")
+    return x, y, metadata, event_viz_colors
 
 def get_BCICIVA_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tmax=3, is_regenerate_epochs=True, export_data_root=None):
     '''
@@ -629,6 +717,9 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         x, y, start_time, metadata = get_TUHG_samples(dataset_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=eeg_resample_rate, subject_picks=subject_picks, subject_group_picks=subject_group_picks)
     elif dataset_name == 'BCICIVA':
         x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
+    elif dataset_name == 'SIM':
+        x, y, metadata, event_viz_colors = get_SIM_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
