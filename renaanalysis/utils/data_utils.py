@@ -198,10 +198,10 @@ def force_square_epochs(epochs, tmin, tmax):
     return square_epochs
 
 
-def epochs_to_class_samples(epochs, event_names, *, picks=None,
+def epochs_to_class_samples(epochs, event_names, picks=None,
                             eeg_viz_picks =eeg_picks,
                             eeg_resample_rate=128, n_jobs=1, reject='auto', plots='sanity-check', colors=None, title='', random_seed=None, low_freq=None, high_freq=None, require_metainfo=True,
-                            is_plot_ERP=True, is_plot_PSD=True, epoch_tmin=1, epoch_tmax=3):
+                            is_plot_ERP=True, is_plot_PSD=True, epoch_tmin=1, epoch_tmax=3, *args, **kwargs):
     """
     script will always z norm along channels for the input
     @param: data_type: can be eeg, pupil or mixed
@@ -222,7 +222,7 @@ def epochs_to_class_samples(epochs, event_names, *, picks=None,
         epochs.resample(eeg_resample_rate, n_jobs=n_jobs)
     if reject == 'auto':
         print("Auto rejecting epochs")
-        ar = AutoReject(n_jobs=n_jobs, verbose=False, random_state=random_seed)
+        ar = AutoReject(n_jobs=n_jobs, verbose=False, random_state=random_seed, *args, **kwargs)
         epochs_clean, log = ar.fit_transform(epochs, return_log=True)
     else:
         epochs_clean = epochs

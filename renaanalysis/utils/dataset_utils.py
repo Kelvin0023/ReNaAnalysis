@@ -318,7 +318,7 @@ def get_BCI_montage(montage_name, picks=None):
     return montage
 
 
-def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=True, export_data_root=None, reject='auto', random_seed=None):
+def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=True, export_data_root=None, reject='auto', random_seed=None, *args, **kwargs):
     loading_start_time = time.perf_counter()
     event_viz_colors = {
         "S  8": "blue",
@@ -330,7 +330,7 @@ def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tma
     if is_regenerate_epochs:
         epochs = load_SIM_epochs(fdt_root=data_root, colors=event_viz_colors, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax, eeg_resample_rate=eeg_resample_rate)
         eeg_viz_picks = [x for x in epochs.ch_names if x.endswith('z')]
-        x, y, metadata = epochs_to_class_samples(epochs, list(event_viz_colors.keys()), reject=reject, n_jobs=16, eeg_viz_picks=eeg_viz_picks, eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, random_seed=random_seed, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax)
+        x, y, metadata = epochs_to_class_samples(epochs, list(event_viz_colors.keys()), reject=reject, n_jobs=16, eeg_viz_picks=eeg_viz_picks, eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, random_seed=random_seed, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax, *args, **kwargs)
         pickle.dump(x, open(x_path, 'wb'))
         pickle.dump(y, open(y_path, 'wb'))
         pickle.dump(metadata, open(metadata_path, 'wb'))
@@ -679,7 +679,7 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
 
 def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate_epochs=False, reject='auto',
                 eeg_resample_rate=200, is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
-                eyetracking_resample_srate=20, rebalance_method='SMOTE', subject_picks=None, subject_group_picks=None, random_seed=None, filename=None):
+                eyetracking_resample_srate=20, rebalance_method='SMOTE', subject_picks=None, subject_group_picks=None, random_seed=None, filename=None, *args, **kwargs):
     """
 
     This function creates several save files, including the data samples obtained from the dataset_root
@@ -719,7 +719,7 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == 'SIM':
-        x, y, metadata, event_viz_colors = get_SIM_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject)
+        x, y, metadata, event_viz_colors = get_SIM_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")

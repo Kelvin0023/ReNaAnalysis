@@ -278,19 +278,16 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         qlen = x.size(1)
         klen = self.mem_len + qlen
         layer_outs_rs = []
-        if self.mem_len > 0: layer_outs_rs.append((x, r_t, r_c, r_p))
+        if self.mem_len > 0: layer_outs_rs.append((x, r_t[:, -qlen:], r_c, r_p))
         for i, (attention_layer, prenorm_ff_residual_postnorm) in enumerate(self.layers):
             mems_i = None if self.mems is None else self.mems[i]  # memory at ith layer
             # out, attention = prenorm_attention(x, r_t=r_t, r_c=r_c, bias_time_e=self.bias_time_e, bias_time_r=self.bias_time_r, bias_channel_r=self.bias_channel_r, bias_channel_e=self.bias_channel_e)
             out, attention = attention_layer(x, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=mems_i)
             x = out + x  # residual connection
 
-
-            # x = prenorm_ff_residual_postnorm(x)  # residual connection
-
             x = prenorm_ff_residual_postnorm(x) + x
 
-            if self.mem_len > 0: layer_outs_rs.append((x, r_t, r_c, r_p))
+            if self.mem_len > 0: layer_outs_rs.append((x, r_t[:, -qlen:], r_c, r_p))  # r_t can be of the same len as t
         self.update_mems(layer_outs_rs, qlen, b)
         return x, attention  # last layer
 
@@ -328,8 +325,10 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
             end_idx = cur_mem_len + max(0, qlen)
             beg_idx = max(0, end_idx - self.mem_len)
             for layer_index in range(len(layer_outs_rs)):
+                # only append mem when 1) mems are empty 2) the number of tokens between the mem and the embeddings matches, when they don't match, it implies the caller is managing the mems for this embedding
                 if b_mismatch != 0:
-                    layer_outs_rs[layer_index] = [torch.concatenate((self.mems[layer_index][embed_index][-b_mismatch:], layer_outs_rs[layer_index][embed_index]), dim=0) for embed_index in range(self.num_embeds)]
+                    layer_outs_rs[layer_index] = [torch.concatenate((self.mems[layer_index][embed_index][-b_mismatch:], layer_outs_rs[layer_index][embed_index]), dim=0)
+                                                  for embed_index in range(self.num_embeds)]
                 cat = [torch.cat([self.mems[layer_index][embed_index], layer_outs_rs[layer_index][embed_index]], dim=1) for embed_index in range(self.num_embeds)]
                 new_mems.append([c[:, beg_idx:end_idx].detach() for c in cat])
         self.mems = new_mems
