@@ -266,8 +266,6 @@ class MultiModalArrays:
             training_indices, val_indices = self.training_val_split_indices[fold_index]
             x_train = []
             x_val = []
-
-            labels = []
             for parray in self.physio_arrays:
                 x_train.append(torch.Tensor(parray[training_indices]).to(device))
                 x_val.append(torch.Tensor(parray[val_indices]).to(device))
@@ -394,12 +392,22 @@ class MultiModalArrays:
         self.test_indices = test_indices
         self.save()
 
-    def get_test_set(self, encode_y=False, convert_to_tensor=False, device=None, return_metainfo=False):
+    def get_ordered_test_indices(self):
+        assert self.test_batch_sample_indices is not None, 'test batch sample indices have not been set, please call training_val_test_split_ordered_by_subject_run'
+        indices = self.test_batch_sample_indices.reshape(-1)
+        indices = indices[indices != None].astype(int)
+        return indices
+
+    def get_test_set(self, encode_y=False, convert_to_tensor=False, device=None, return_metainfo=False, use_ordered=False):
         """
         get the test set
         @return:
         """
-        assert self.test_indices is not None, 'test indices have not been set, please call train_test_split first'
+        assert self.test_indices is not None or self.test_batch_sample_indices is not None, 'test indices have not been set, please call train_test_split first, or training_val_test_split_ordered_by_subject_run'
+        if use_ordered:
+            test_indices = self.get_ordered_test_indices()
+        else:
+            test_indices = self.test_indices
         x_test = []
         for parray in self.physio_arrays:
             is_pca_ica_preprocessed = 'pca' in parray.data_processor.keys() or 'ica' in parray.data_processor.keys()
@@ -408,18 +416,18 @@ class MultiModalArrays:
             else:
                 print("\033[93m  {}\033[00m".format('test set is not pca or ica preprocessed, make sure preprocessing is not needed for this model'))
             if convert_to_tensor:
-                x_test.append(torch.Tensor(parray[self.test_indices]).to(device))
+                x_test.append(torch.Tensor(parray[test_indices]).to(device))
             else:
-                x_test.append(parray[self.test_indices])
+                x_test.append(parray[test_indices])
 
-        meta_info = [{name: value[self.test_indices] for name, value in darray.meta_info_encoded.items()} for darray in
+        meta_info = [{name: value[test_indices] for name, value in darray.meta_info_encoded.items()} for darray in
                      self.physio_arrays]
         meta_info = {k: v for d in meta_info for k, v in d.items()}
         if convert_to_tensor:
             meta_info = {k: torch.Tensor(v).to(device) for k, v in meta_info.items()}
 
         if self.labels_array is not None:
-            y_test = self.labels_array[self.test_indices]
+            y_test = self.labels_array[test_indices]
             if encode_y:
                 y_test = self._encoder(y_test)
             if convert_to_tensor:
@@ -662,10 +670,10 @@ class MultiModalArrays:
         return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo, shuffle_within_batches), \
             OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo, shuffle_within_batches)
 
-    def get_test_ordered_batch_iterator(self, device, return_metainfo=False, shuffle_within_batches=False):
+    def get_test_ordered_batch_iterator(self, device, encode_y=True, return_metainfo=False, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
-        labels_encoded = self._encoder(self.labels_array)
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.test_batch_sample_indices, device, return_metainfo, shuffle_within_batches=shuffle_within_batches)
+        labels = self._encoder(self.labels_array) if encode_y else self.labels_array
+        return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, return_metainfo, shuffle_within_batches=shuffle_within_batches, encode_y=encode_y)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)

@@ -410,7 +410,9 @@ def ht_viz_multimodal(model, mmarray,
 def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, data_root,
                                 note='', head_fusion='max', discard_ratio=0.1,
                                 load_saved_rollout=False, batch_size=512,
-                                is_pca_ica=False, pca=None, ica=None, use_meta_info=False, *args, **kwargs):
+                                is_pca_ica=False, pca=None, ica=None, use_meta_info=False,
+                                use_ordered=False,
+                                *args, **kwargs):
     """
     @param model: can be the model instance or the model class. When class is provided, please give kwargs for model_init_params and model_path
     @param num_channels: number of channels for the model. This can be different from the number of channels in X. If they are different,
@@ -421,13 +423,16 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
     @param model_path
     @param model_init_params
     """
-
+    assert os.path.exists(data_root), "Data root does not exist for saving rollouts"
     if isinstance(model, type):
         assert os.path.exists(kwargs['model_path']), "Model path does not exist"
         model = model(**kwargs['model_init_params'])
         model.load_state_dict(torch.load(kwargs['model_path']))
-    x_test_original = mmarray['eeg'].array[mmarray.test_indices]
-    test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, return_metainfo=use_meta_info,device=device)
+    x_test_original = mmarray['eeg'].array[mmarray.get_ordered_test_indices() if use_ordered else mmarray.test_indices]
+    if use_ordered:
+        test_iterator = mmarray.get_test_ordered_batch_iterator(encode_y=False, return_metainfo=use_meta_info,  device=device)
+    else:
+        test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, return_metainfo=use_meta_info,device=device)
     n_samples = len(test_iterator.dataset)
     event_ids = mmarray.event_ids
     model.to(device)
@@ -484,7 +489,7 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
         x_eeg_windowed = torch.chunk(x_eeg_from_iterator.to(device), model.num_windows, dim=-1)
         x_eeg_from_iterator = x_eeg_from_iterator.cpu().numpy()
         y_from_iterator = torch.cat(y_from_iterator, dim=0).cpu().numpy()
-
+        y_from_iterator = np.squeeze(y_from_iterator, -1)
         for roll_depth in range(model.depth):
             forward_activation_windowed = torch.empty((n_samples, n_model_chan, model.num_windows, model.patch_length)).to(device)
             for window_i, x_window_data in enumerate(x_eeg_windowed):
