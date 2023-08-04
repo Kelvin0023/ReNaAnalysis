@@ -112,7 +112,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(embedding_dim)
 
     # def forward(self, x, r_t, r_c, bias_time_e, bias_time_r, bias_channel_r, bias_channel_e):
-    def forward(self, x, r_t, r_c, r_p, bias_pf, mems):
+    def forward(self, x, r_t, r_c, r_p, bias_pf, mems, qlen):
         """
 
         @param x:
@@ -124,21 +124,20 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         @param bias_channel_e:  num_head x dim_head
         @return:
         # """
-        b, qlen, dpatch = x.shape
-
+        b, _,  dpatch = x.shape
 
         if mems is not None:
             mem_x, mem_r_t, mem_r_c, mem_r_p = mems
             if b != mem_x.shape[0]:
                 mem_x, mem_r_t, mem_r_c, mem_r_p = mem_x[:b], mem_r_t[:b], mem_r_c[:b], mem_r_p[:b]
-            x_with_mems = torch.cat([mem_x, x], dim=1)
-            klen = x_with_mems.size(1)
+            # x_with_mems = torch.cat([mem_x, x], dim=1)
+            klen = x.size(1)
             # x_with_mems = self.layer_norm(torch.cat([mem_x, x], dim=1))
             r_t = torch.cat([mem_r_t, r_t], dim=1) if r_t.size(1) != klen else r_t
             r_c = torch.cat([mem_r_c, r_c], dim=1) if r_c.size(1) != klen else r_t
             r_p = torch.cat([mem_r_p, r_p], dim=1) if r_p.size(1) != klen else r_t
 
-            qkv = self.to_qkv(x_with_mems).chunk(3, dim=-1)
+            qkv = self.to_qkv(x).chunk(3, dim=-1)
             Ex_Wq, Ex_Wke, v = map(lambda t: rearrange(t, 'b n (h d) -> n b h d', h=self.num_heads), qkv)
             Ex_Wq = Ex_Wq[-qlen:]
         else:
@@ -280,11 +279,16 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         layer_outs_rs = []
         if self.mem_len > 0: layer_outs_rs.append((x, r_t[:, -qlen:], r_c, r_p))
         for i, (attention_layer, prenorm_ff_residual_postnorm) in enumerate(self.layers):
-            mems_i = None if self.mems is None else self.mems[i]  # memory at ith layer
+            if self.mems is not None:
+                mem_x, _, _, _ = self.mems[i]
+                if b != mem_x.shape[0]:
+                    mem_x= mem_x[:b]
+                x_with_mems = torch.cat([mem_x, x], dim=1)   # concate x with mem here so they are prenorm together
+                out, attention = attention_layer(x_with_mems, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=self.mems[i], qlen=qlen)
+            else:
+                out, attention = attention_layer(x, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=None, qlen=qlen)
             # out, attention = prenorm_attention(x, r_t=r_t, r_c=r_c, bias_time_e=self.bias_time_e, bias_time_r=self.bias_time_r, bias_channel_r=self.bias_channel_r, bias_channel_e=self.bias_channel_e)
-            out, attention = attention_layer(x, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=mems_i)
             x = out + x  # residual connection
-
             x = prenorm_ff_residual_postnorm(x) + x
 
             if self.mem_len > 0: layer_outs_rs.append((x, r_t[:, -qlen:], r_c, r_p))  # r_t can be of the same len as t
@@ -347,7 +351,7 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=0):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1):
         """
 
         # a token is a time slice of data on a single channel
