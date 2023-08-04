@@ -418,15 +418,15 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
                                 picks=('Fz', 'Cz', 'Oz'), tmin=-0.1, tmax=0.8, *args, **kwargs):
     """
     @param model: can be the model instance or the model class. When class is provided, please give kwargs for model_init_params and model_path
-    @param num_channels: number of channels for the model. This can be different from the number of channels in X. If they are different,
     we assume the model is using dimension reduced data.
-    @param X_pca_ica: if None, assume model is not using dimension reduced data
-
     kwargs:
-    @param model_path
-    @param model_init_params
-    @param topo_map: str: 'forward' or 'attention'
-    @param roll_topo_map_samples: 'all' or 'random'
+    @param use_ordered: bool: whether to use the ordered test indices create from calling mmarray.training_val_test_split_ordered_by_subject_run
+    if false, use the shuffled test indices generated from mmarray.training_val_test_split
+
+    @param topo_map: str: 'forward' or 'attention', whether to plot the forward activation (eeg data scaled by attention) or just the attention
+    @param roll_topo_map_samples: 'all' or 'random': if all, plot all test samples; if random, plot roll_topo_map_n_samples random samples
+    @param roll_topo_map_n_samples: int: number of samples to plot if roll_topo_map_samples is 'random'
+    @param picks: the eeg channel names to plot along with the topomap
     """
     assert topo_map in ['forward', 'attention'], "topo_map must be either 'forward' or 'attention'"
     assert roll_topo_map_samples in ['all', 'random'], "roll_topo_map_samples must be either 'all' or 'random'"
