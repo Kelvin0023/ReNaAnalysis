@@ -327,6 +327,7 @@ def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tma
     x_path = os.path.join(export_data_root, 'x_sim.p')
     y_path = os.path.join(export_data_root, 'y_sim.p')
     metadata_path = os.path.join(export_data_root, 'metadata_sim.p')
+    montage_path = os.path.join(export_data_root, 'montage_sim.p')
     if is_regenerate_epochs:
         epochs = load_SIM_epochs(fdt_root=data_root, colors=event_viz_colors, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax, eeg_resample_rate=eeg_resample_rate)
         eeg_viz_picks = [x for x in epochs.ch_names if x.endswith('z')]
@@ -334,14 +335,17 @@ def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tma
         pickle.dump(x, open(x_path, 'wb'))
         pickle.dump(y, open(y_path, 'wb'))
         pickle.dump(metadata, open(metadata_path, 'wb'))
+        montage = epochs.get_montage()
+        pickle.dump(epochs.montage, open(montage_path, 'wb'))
     else:
         assert os.path.exists(x_path) and os.path.exists(y_path) and os.path.exists(metadata_path), "Data files not found, please regenerate epochs by setting is_regenerate_epochs=True"
         x = pickle.load(open(x_path, 'rb'))
         y = pickle.load(open(y_path, 'rb'))
         metadata = pickle.load(open(metadata_path, 'rb'))
+        montage = pickle.load(open(montage_path, 'rb'))
 
     print(f"Load data took {time.perf_counter() - loading_start_time} seconds")
-    return x, y, metadata, event_viz_colors
+    return x, y, metadata, event_viz_colors, montage
 
 def get_BCICIVA_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tmax=3, is_regenerate_epochs=True, export_data_root=None):
     '''
@@ -719,8 +723,8 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == 'SIM':
-        x, y, metadata, event_viz_colors = get_SIM_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
-        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
+        x, y, metadata, event_viz_colors, montage = get_SIM_samples(dataset_root, eeg_resample_rate=eeg_resample_rate, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name, info={'montage': montage})]
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 

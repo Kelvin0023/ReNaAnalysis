@@ -1,10 +1,11 @@
 import os
 import pickle
 from collections import defaultdict
-from typing import Union
+from typing import Union, Sequence
 
 import mne
 import numpy as np
+import scipy
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
@@ -14,6 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from renaanalysis.learning.HT import HierarchicalTransformer, Attention
 from renaanalysis.learning.transformer_rollout import VITAttentionRollout
+from renaanalysis.utils.viz_utils import get_line_styles
 
 
 def ht_viz_training(X, Y, model, roll_out_cls, encoder, device, epoch, roll_start_epoch=15):
@@ -407,12 +409,13 @@ def ht_viz_multimodal(model, mmarray,
         plt.show()
 
 
-def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, data_root,
+def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, data_root, cls_colors,
                                 note='', head_fusion='max', discard_ratio=0.1,
                                 load_saved_rollout=False, batch_size=512,
                                 is_pca_ica=False, pca=None, ica=None, use_meta_info=False,
-                                use_ordered=False,
-                                *args, **kwargs):
+                                use_ordered=False, eeg_montage=mne.channels.make_standard_montage('biosemi64'), topo_map='forward',
+                                roll_topo_map_samples='all', roll_topo_map_n_samples=10,
+                                picks=('Fz', 'Cz', 'Oz'), tmin=-0.1, tmax=0.8, *args, **kwargs):
     """
     @param model: can be the model instance or the model class. When class is provided, please give kwargs for model_init_params and model_path
     @param num_channels: number of channels for the model. This can be different from the number of channels in X. If they are different,
@@ -422,7 +425,11 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
     kwargs:
     @param model_path
     @param model_init_params
+    @param topo_map: str: 'forward' or 'attention'
+    @param roll_topo_map_samples: 'all' or 'random'
     """
+    assert topo_map in ['forward', 'attention'], "topo_map must be either 'forward' or 'attention'"
+    assert roll_topo_map_samples in ['all', 'random'], "roll_topo_map_samples must be either 'all' or 'random'"
     assert os.path.exists(data_root), "Data root does not exist for saving rollouts"
     if isinstance(model, type):
         assert os.path.exists(kwargs['model_path']), "Model path does not exist"
@@ -435,9 +442,9 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
         test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, return_metainfo=use_meta_info,device=device)
     n_samples = len(test_iterator.dataset)
     event_ids = mmarray.event_ids
+    event_ids_inversed = {v: k for k, v in event_ids.items()}
     model.to(device)
     window_size = model.patch_length
-    eeg_montage = mne.channels.make_standard_montage('biosemi64')
     eeg_channel_names = eeg_montage.ch_names
     n_eeg_chan = len(eeg_channel_names)
     n_model_chan = model.num_channels
@@ -534,53 +541,95 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
     fig.suptitle(f"EEG topomap, {note}", fontsize='x-large')
     plt.show()
 
-    for roll_depth in range(model.depth):
-        this_roll = np.stack(rolls[roll_depth], axis=0)
-        this_activation = activations[roll_depth]
+    if roll_topo_map_samples == 'random':
+        roll_topo_map_pick_samples = np.random.choice(len(x_test_original), roll_topo_map_n_samples)[:, None]
+    else:
+        roll_topo_map_pick_samples = np.arange(len(x_test_original))[None, :]
+    line_markers = get_line_styles(len(picks))
+    for pick_samples in roll_topo_map_pick_samples:
+        for roll_depth in range(model.depth):
+            this_roll = np.stack(rolls[roll_depth], axis=0)[pick_samples]
+            this_activation = activations[roll_depth][pick_samples]
 
-        fig = plt.figure(figsize=(15, 10))
-        # cross_window_activates = mean_ignore_zero(this_roll, axis=1)
-        # cross_window_activates = np.true_divide(this_roll.sum(axis=1), (this_roll != 0).sum(axis=1))
-        across_channel_rolls = np.sum(this_roll, axis=1)  # finding activates across channels
+            fig = plt.figure(figsize=(15, 10))
+            # cross_window_activates = mean_ignore_zero(this_roll, axis=1)
+            # cross_window_activates = np.true_divide(this_roll.sum(axis=1), (this_roll != 0).sum(axis=1))
+            across_channel_rolls = np.sum(this_roll, axis=1)  # finding activates across channels
 
-        plt.boxplot(across_channel_rolls)
-        x_labels = [f"{int((i - 1) * split_window_eeg * 1e3)}ms" for i in range(model.num_windows)]
-        x_ticks = np.arange(0.5, model.num_windows + 0.5, 1)
-        plt.twinx()
-        plt.plot(list(range(1, model.num_windows + 1)), np.sum(across_channel_rolls, axis=0), label=f"Sum across samples")
-        # plt.plot(list(range(1, model.num_windows + 1)), mean_ignore_zero(cross_window_activates, axis=0), label="Max across samples")
+            plt.boxplot(across_channel_rolls)
+            x_labels = [f"{int((i - 1) * split_window_eeg * 1e3)}ms" for i in range(model.num_windows)]
+            x_ticks = np.arange(0.5, model.num_windows + 0.5, 1)
+            plt.twinx()
+            plt.plot(list(range(1, model.num_windows + 1)), np.sum(across_channel_rolls, axis=0), label=f"Sum across samples")
+            # plt.plot(list(range(1, model.num_windows + 1)), mean_ignore_zero(cross_window_activates, axis=0), label="Max across samples")
 
-        plt.xticks(ticks=x_ticks, labels=x_labels)
-        plt.xlabel("100 ms windowed bins")
-        plt.ylabel("Cross-window attention activation")
-        plt.title(f'Cross-window attention, {note}, HT depth {roll_depth+1} of {model.depth}')
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
+            plt.xticks(ticks=x_ticks, labels=x_labels)
+            plt.xlabel("100 ms windowed bins")
+            plt.ylabel("Cross-window attention activation")
+            plt.title(f'Cross-window attention, {note}, HT depth {roll_depth+1} of {model.depth}')
+            plt.legend()
+            plt.tight_layout()
+            plt.show()
 
-        fig = plt.figure(figsize=(22, 10))
-        subfigs = fig.subfigures(2, 1)
+            if roll_topo_map_samples == 'all':
+                fig = plt.figure(figsize=(33, 10), constrained_layout=True)
+                subfigs = fig.subfigures(3, 1)  # two classes
+                class_masks = [(e_name, y_from_iterator == e_id) for class_index, (e_name, e_id) in enumerate(event_ids.items())]
+            else:
+                fig = plt.figure(figsize=(22, 10), constrained_layout=True)
+                subfigs = fig.subfigures(2, 1)
+                class_masks = [(event_ids_inversed[y_from_iterator[pick_samples][0]], [0])]
+            y_ticks_t_plot = np.arange(tmin, tmax, model.window_duration) + model.window_duration / 2
+            y_ticks_labels = [f"{y_tick * 1e3:.0f} ms" for y_tick in y_ticks_t_plot]
 
-        # plot the topomap rollouts
-        for class_index, (e_name, e_id) in enumerate(event_ids.items()):
-            axes = subfigs[class_index].subplots(1, model.num_windows, sharey=True)
-            # y_event = np.squeeze(y_encoder(np.array([e_id])[np.newaxis, :]))
-            activation_class = this_activation[y_from_iterator == e_id]
-            # activation_max = np.max(np.sum(activation_class, axis=0))
-            # activation_min = np.min(np.sum(activation_class, axis=0))
-            for window_i in range(model.num_windows):
-                forward_activation = activation_class[:, :, window_i]
-                forward_activation = np.sum(forward_activation, axis=0)
-                forward_activation = np.mean(forward_activation, axis=1)
-                # activation_max = np.max(forward_activation)
+            # plot the time series of the original data
+            fig_ts = subfigs[-1]
+            ax_ts = fig_ts.subplots(1, 1, sharey=True)
 
-                activation_max = np.max(forward_activation, axis=0)
-                activation_min = np.min(forward_activation, axis=0)
+            # plot the topomap rollouts
+            for class_index, (e_name, c_mask) in enumerate(class_masks):
+                fig_topo = subfigs[class_index]
+                axes = fig_topo.subplots(1, model.num_windows, sharey=True)
+                # y_event = np.squeeze(y_encoder(np.array([e_id])[np.newaxis, :]))
+                if topo_map == 'forward':
+                    activation_class = this_activation[c_mask]
+                else:
+                    activation_class = this_roll[c_mask]
+                # activation_max = np.max(np.sum(activation_class, axis=0))
+                # activation_min = np.min(np.sum(activation_class, axis=0))
+                for window_i in range(model.num_windows):
+                    forward_activation = activation_class[:, :, window_i]
+                    forward_activation = np.sum(forward_activation, axis=0)  # sum across samples
+                    if topo_map == 'forward':
+                        forward_activation = np.mean(forward_activation, axis=1)  # mean across time points in a window
 
-                plot_topomap(forward_activation, info, axes=axes[window_i - 1], show=False, res=512, vlim=(activation_min, activation_max))
-                # plot_topomap(activation, info, axes=axes[window_i - 1], show=False, res=512, vlim=(np.min(this__roll), np.max(this_roll)))
-                axes[window_i - 1].set_title(f"{int((window_i - 1) * split_window_eeg * 1e3)}-{int(window_i * split_window_eeg * 1e3)}ms")
-            subfigs[class_index].suptitle(e_name, )
+                    # activation_max = np.max(forward_activation)
+                    activation_max = np.max(forward_activation, axis=0)
+                    activation_min = np.min(forward_activation, axis=0)
 
-        fig.suptitle(f"Attention to the CLS token: {note}, HT depth {roll_depth+1} of {model.depth}", fontsize='x-large')
-        plt.show()
+                    plot_topomap(forward_activation, info, axes=axes[window_i - 1], show=False, res=512, vlim=(activation_min, activation_max))
+                    # plot_topomap(activation, info, axes=axes[window_i - 1], show=False, res=512, vlim=(np.min(this__roll), np.max(this_roll)))
+                    axes[window_i].set_title(f"{int((window_i - 1) * split_window_eeg * 1e3)}-{int(window_i * split_window_eeg * 1e3)}ms")
+                fig_topo.suptitle(f"{e_name}{f', sample index {pick_samples}' if roll_topo_map_samples == 'random' else ''}")
+
+
+                for pick_i, ch_name in enumerate(picks):
+                    ch_index = eeg_channel_names.index(ch_name)
+                    _x_eeg_cls = x_eeg_from_iterator[pick_samples, ch_index][c_mask]
+                    _x_eeg_cls_mean = np.mean(_x_eeg_cls, axis=0)
+                    time_vector = np.linspace(tmin, tmax, _x_eeg_cls.shape[-1])
+
+                    ax_ts.plot(time_vector, _x_eeg_cls_mean, c=cls_colors[e_name], label=f'{e_name}, {ch_name}, N={len(_x_eeg_cls)}', linestyle=line_markers[pick_i])
+
+                    if len(_x_eeg_cls) > 1:  # plot the shaded sem if there are more than one samples
+                        _x1 = _x_eeg_cls_mean + scipy.stats.sem(_x_eeg_cls, axis=0)
+                        _x2 = _x_eeg_cls_mean - scipy.stats.sem(_x_eeg_cls, axis=0)
+                        ax_ts.fill_between(time_vector, _x1, _x2, where=_x2 <= _x1, facecolor=cls_colors[e_name], interpolate=True, alpha=0.5)
+            ax_ts.set_xlabel('Time (sec)')
+            ax_ts.set_ylabel('z-normed EEG data, shades are SEM')
+            ax_ts.set_xticks(y_ticks_t_plot, y_ticks_labels)
+            ax_ts.set_xlim(tmin, tmax)
+            ax_ts.legend()
+
+            fig.suptitle(f"Attention to the CLS token: {note}, HT depth {roll_depth+1} of {model.depth}", fontsize='x-large')
+            plt.show()

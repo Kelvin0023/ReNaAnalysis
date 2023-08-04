@@ -93,7 +93,7 @@ if is_plot_epochs:
         #        discard_ratio=0.9, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica, X_original=x_test_original)
         t_start = time.perf_counter()
         ht_eeg_viz_multimodal_batch(best_model, mmarray, Attention, device, rollout_data_root,
-                              note='', load_saved_rollout=False, head_fusion=head_fusion,
+                              note='', load_saved_rollout=False, head_fusion=head_fusion, cls_colors=mmarray.event_viz_colors,
                               discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=256, use_ordered=use_ordered)
         print("ht viz batched took {} seconds".format(time.perf_counter() - t_start))
     else:
