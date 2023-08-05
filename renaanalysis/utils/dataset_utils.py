@@ -29,7 +29,7 @@ from renaanalysis.utils.eeg_utils import is_standard_10_20_name
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.utils import preprocess_standard_eeg, add_annotations_to_raw, is_button_after_oddball
 
-TUH_valid_channels = ['A1', 'A2', 'C3', 'C4', 'Cz', 'F3', 'F4', 'F7', 'F8', 'Fp1', 'Fp2', 'Fz', 'O1', 'O2', 'Oz', 'P3', 'P4', 'Pz', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6']
+TUH_valid_channels = ['A1', 'A2', 'C3', 'C4', 'Cz', 'F3', 'F4', 'F7', 'F8', 'Fp1', 'Fp2', 'Fz', 'O1', 'O2', 'P3', 'P4', 'Pz', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6']
 
 def TUH_mapping(channel_name: str):
     if 'EEG' in channel_name:
@@ -439,7 +439,7 @@ def get_DEAP_preprocessed_samples(data_root):
     start_time = sorted_ratings['Start_time'].values
     return x, y, subject_id, start_time, mont1020
 
-def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=None, eeg_resample_rate=200, subject_picks=None):
+def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=None, eeg_resample_rate=200, subject_picks=None, *args, **kwargs):
 
     # Read metadata participant rating
     ratings = pd.read_csv(os.path.join(data_root,'metadata_csv/participant_ratings.csv'))
@@ -484,7 +484,7 @@ def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=N
     all_epochs = mne.concatenate_epochs(subjects)
     x, y, start_time, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=picks,
                                                          reject='auto', n_jobs=16,
-                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
+                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, *args, **kwargs)
 
 def get_DEAP_epoch_label(ratings_data, k):
     if ratings_data['Valence'][k] >= 5 and ratings_data['Arousal'][k] >= 5:
@@ -497,7 +497,7 @@ def get_DEAP_epoch_label(ratings_data, k):
         return 3
 
 
-def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epoch_length=4, picks='eeg', reject='auto', eeg_resample_rate=200, subject_picks=None, subject_group_picks=None):
+def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epoch_length=4, picks='eeg', reject='auto', eeg_resample_rate=200, subject_picks=None, subject_group_picks=None, *args, **kwargs):
     '''
 
     @param data_root: The data root of the TUH EEG Corpus
@@ -577,7 +577,7 @@ def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epo
             for channel_names, data in data_dict.items():
                 data = mne.concatenate_epochs(data)
                 x_dict[num_channels][channel_names], _, metadata_dict[num_channels][channel_names] = epochs_to_class_samples_TUH(data, list(event_viz_colors.keys()), picks=picks, reject='auto', n_jobs=16,
-                                                             eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, title=str(num_channels) + 'channels', eeg_viz_picks=data.ch_names, low_freq=1, high_freq=120, random_seed=random_seed)
+                                                             eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, title=str(num_channels) + 'channels', eeg_viz_picks=data.ch_names, low_freq=1, high_freq=120, random_seed=random_seed, *args, **kwargs)
         pickle.dump(x_dict, open(os.path.join(export_data_root, 'x_TUH.p'), 'wb'))
         pickle.dump(metadata_dict, open(os.path.join(export_data_root, 'metadata_TUH.p'), 'wb'))
     else:
@@ -722,9 +722,9 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         physio_arrays = [PhysioArray(x[0], sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name),
               PhysioArray(x[1], sampling_rate=eyetracking_resample_srate, physio_type=pupil_name, dataset_name=dataset_name)]
     elif dataset_name == "TUH":
-        x_dict, y, metadata_dict, event_viz_colors = get_TUHG_samples(dataset_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=250, subject_picks=subject_picks, subject_group_picks=subject_group_picks)
-        for ch_names, x in x_dict[22].items():
-            metadata = metadata_dict[22][ch_names]
+        x_dict, y, metadata_dict, event_viz_colors = get_TUHG_samples(dataset_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=250, subject_picks=subject_picks, subject_group_picks=subject_group_picks, *args, **kwargs)
+        for ch_names, x in x_dict[21].items():
+            metadata = metadata_dict[21][ch_names]
             physio_arrays = [PhysioArray(x, metadata, sampling_rate=250, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == 'BCICIVA':
         x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)

@@ -51,19 +51,6 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-class FeedForwardTrans(nn.Module):
-    def __init__(self, dim, hidden_dim, dropout=0.):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(dim, hidden_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-        )
-
-    def forward(self, x):
-        return self.net(x)
-
-
 class Attention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
         super().__init__()
@@ -175,42 +162,6 @@ class ConvalueTransformer(nn.Module):
                 PreNorm(dim, ConvalueAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
                 PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
-
-    def forward(self, x):
-        for prenorm_attention, prenorm_feedforward in self.layers:
-            out, attention = prenorm_attention(x)
-            x = out + x
-            x = prenorm_feedforward(x) + x
-        return x, attention  # last layer
-
-class AutoTransEncoder(nn.Module):
-    def __init__(self, depth, dim, heads, dim_head, dropout=0.):
-        super().__init__()
-        self.layers = nn.ModuleList([])
-        for encoder_layer in range(depth):
-            self.layers.append(nn.ModuleList([
-                PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
-                PreNorm(dim, FeedForwardTrans(dim, 2*dim, dropout=dropout))
-            ]))
-            dim = 2*dim
-
-    def forward(self, x):
-        for prenorm_attention, prenorm_feedforward in self.layers:
-            out, attention = prenorm_attention(x)
-            x = out + x
-            x = prenorm_feedforward(x) + x
-        return x, attention  # last layer
-
-class AutoTransDecoder(nn.Module):
-    def __init__(self, depth, dim, heads, dim_head, dropout=0.):
-        super().__init__()
-        self.layers = nn.ModuleList([])
-        for decoder_layer in range(depth):
-            self.layers.append(nn.ModuleList([
-                PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
-                PreNorm(dim, FeedForwardTrans(dim, dim/2, dropout=dropout))
-            ]))
-            dim = dim/2
 
     def forward(self, x):
         for prenorm_attention, prenorm_feedforward in self.layers:
@@ -442,7 +393,7 @@ class HierarchicalTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[4]  # batch_size x num_channels
+            channel_pos = args[-1]  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
@@ -475,117 +426,6 @@ class HierarchicalTransformer(nn.Module):
     def prepare_data(self, x):
         return x
 
-
-class HierarchicalAutoTranscoder(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi',
-                 pos_embed_mode='learnable'):
-        """
-
-        # a token is a time slice of data on a single channel
-
-        @param num_timesteps: int: number of timesteps in each sample
-        @param num_channels: int: number of channels of the input data
-        @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
-        note that 'single' only works when the number of classes is 2.
-        @param pos_embed_mode: str: can be 'learnable' or 'sinusoidal'. If 'learnable', the positional embedding is learned.
-        If 'sinusoidal', the positional embedding is sinusoidal. The sinusoidal positional embedding requires meta_info to be passed in with forward
-        """
-        if output == 'single':
-            assert num_classes == 2, 'output can only be single when num_classes is 2'
-        super().__init__()
-        self.depth = depth
-        self.num_heads = num_heads
-        self.window_duration = window_duration
-
-        self.num_channels = num_channels
-        self.num_timesteps = num_timesteps
-        self.patch_embed_dim = patch_embed_dim
-        self.patch_length = int(window_duration * sampling_rate)
-        self.num_windows = num_timesteps // self.patch_length
-
-        self.num_patches = self.num_channels * self.num_windows
-
-        assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
-        # self.to_patch_embedding = nn.Sequential(
-        #     Rearrange('b c (nw ps) -> b (c nw) (ps)', nw=self.num_windows, ps=self.patch_length),
-        #     nn.Linear(self.patch_length, patch_embed_dim),
-        # )
-        self.to_patch_embedding = nn.Linear(self.patch_length, patch_embed_dim)
-        self.to_time_series = nn.Linear(patch_embed_dim, self.patch_length)
-
-        self.pos_embed_mode = pos_embed_mode
-        self.learnable_pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
-        self.sinusoidal_pos_embedding = SinusoidalPositionalEmbedding(patch_embed_dim)
-
-        self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
-        self.dropout = nn.Dropout(emb_dropout)
-
-        self.encoder = AutoTransEncoder(patch_embed_dim, depth, num_heads, dim_head, attn_dropout)
-        self.decoder = AutoTransDecoder(patch_embed_dim * (2 ** (depth-1)), depth, num_heads, dim_head, attn_dropout)
-
-        self.pool = pool
-        self.to_latent = nn.Identity()
-
-        if output == 'single':
-            self.mlp_head = nn.Sequential(
-                nn.LayerNorm(patch_embed_dim),
-                nn.Linear(patch_embed_dim, 1))
-        else:
-            self.mlp_head = nn.Sequential(
-                nn.LayerNorm(patch_embed_dim),
-                nn.Linear(patch_embed_dim, num_classes))
-
-    def forward(self, x_eeg, *args, **kwargs):
-        x = self.encode(x_eeg, *args, **kwargs)
-        return self.mlp_head(x)
-
-    def encode(self, x, *args, **kwargs):
-        # x = self.to_patch_embedding(x_eeg)
-        b = x.shape[0]
-        x = rearrange(x, 'b c (w l) -> (b c w) l', w=self.num_windows, l=self.patch_length)
-        x = self.to_patch_embedding(x)
-        x = rearrange(x, '(b c w) l -> b c w l', b=b, c=self.num_channels, w=self.num_windows, l=self.patch_embed_dim)
-
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-
-        b, n, _ = x.shape
-
-        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
-
-        if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[4]  # batch_size x num_channels
-            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
-            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
-
-            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
-            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
-            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
-            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
-
-            pos_embed = time_pos_embed + channel_pos_embed
-            cls_tokens_pos_embedding = repeat(self.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
-            pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
-
-        elif self.pos_embed_mode == 'learnable':
-            pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
-        else:
-            raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
-
-        x += pos_embed
-        x = self.dropout(x)
-
-        x_encoded, encoder_att_matrix = self.encoder(x)
-        x, decoder_att_matrix = self.decoder(x_encoded)
-        # x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-        x = rearrange(x, 'b nt ps -> (b nt) ps')
-        x = self.to_time_series(x)
-        x = self.to_latent(x[:, 1:])
-        return x
-
-    def prepare_data(self, x):
-        return x
 
 class HierarchicalConvalueTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
@@ -669,7 +509,7 @@ class HierarchicalConvalueTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[4]  # batch_size x num_channels
+            channel_pos = args[-1]  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
@@ -714,7 +554,7 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
-        self.path_embed_dim = patch_embed_dim
+        self.patch_embed_dim = patch_embed_dim
         self.patch_length = int(window_duration * sampling_rate)
         self.num_windows = num_timesteps // self.patch_length
 
@@ -724,9 +564,9 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
                  patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output)
         self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
                                     t_mask_replacement=torch.nn.Parameter(
-                                        torch.zeros(self.num_channels, self.path_embed_dim), requires_grad=True),
+                                        torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
                                     c_mask_replacement=torch.nn.Parameter(
-                                        torch.zeros(self.num_windows, self.path_embed_dim), requires_grad=True))
+                                        torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True))
     def forward(self, x_eeg, *args, **kwargs):
         x = self.HierarchicalTransformer.to_patch_embedding(x_eeg)
         x, original_x, mask_t, mask_c = self.mask_layer(x)

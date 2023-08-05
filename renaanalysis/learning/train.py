@@ -908,16 +908,16 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
         #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
-            x = x if isinstance(x[0], tuple) else (x[0],)
-            pred_tokens, orig_tokens, mask_t, mask_c = model(*x)
+            x = x if isinstance(x, list) or isinstance(x, tuple) else (x,)
+            pred_series, encoded_tokens, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix = model(*x)
             # y_tensor = y.to(device)
-            classification_loss = criterion(pred_tokens, orig_tokens, metric='similarity')
+            loss = criterion(x[0][:, :, :1000], pred_series)
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
         else:
             l2_penalty = 0
-        loss = classification_loss + l2_penalty
+        loss = loss + l2_penalty
         if mode == 'train':
             loss.backward()
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])

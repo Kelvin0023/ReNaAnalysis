@@ -6,7 +6,9 @@ import torch
 from torch.optim import lr_scheduler
 from torch.utils.data import TensorDataset, DataLoader
 
-from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, SimularityLoss, ContrastiveLoss
+from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, SimularityLoss, ContrastiveLoss, \
+    ReconstructionLoss
+from renaanalysis.learning.HATC import HierarchicalAutoTranscoderPretrain
 from renaanalysis.learning.train import _run_one_epoch_classification, eval_test, _run_one_epoch_self_sup, \
     _run_one_epoch_classification_augmented
 from renaanalysis.params.params import batch_size, epochs, patience, TaskName
@@ -170,8 +172,8 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    assert isinstance(model, HierarchicalTransformerContrastivePretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
-    criterion = ContrastiveLoss(temperature, n_neg)
+    assert isinstance(model, HierarchicalTransformerContrastivePretrain) or isinstance(model, HierarchicalAutoTranscoderPretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
+    criterion = ReconstructionLoss()
     mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
     # X_test, _ = mmarray.get_test_set()
     test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True,
@@ -190,7 +192,7 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
 
-        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, device=device, task_name=task_name)
+        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, return_metainfo=True, device=device, task_name=task_name)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
@@ -235,12 +237,13 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
                     break
         train_losses_folds.append(train_mean_losses)
         val_losses_folds.append(val_mean_losses)
-        test_batch_losses_model, test_mean_loss_model = eval_test(
-            best_model, X_test, None, criterion, None, None,
-            task_name=task_name, verbose=1)
+        test_batch_losses, test_mean_loss = _run_one_epoch_self_sup(best_model, test_dataloader, criterion, optimizer=optimizer,
+                                      mode='val',
+                                      device=device, task_name=task_name, verbose=verbose)
+
         if verbose >= 1:
-            print("Tested Fold {}: test mean loss = {:.8f}".format(f_index, test_mean_loss_model))
-        test_loss.append(test_mean_loss_model)
+            print("Tested Fold {}: test mean loss = {:.8f}".format(f_index, test_mean_loss))
+        test_loss.append(test_mean_loss)
         models.append(best_model)
 
     training_histories_folds = {'loss_train': train_losses_folds, 'loss_val': val_losses_folds, 'loss_test': test_loss}

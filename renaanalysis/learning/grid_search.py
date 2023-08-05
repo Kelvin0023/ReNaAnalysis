@@ -7,6 +7,7 @@ from sklearn.model_selection import ParameterGrid
 
 from renaanalysis.learning.HT import HierarchicalTransformer, HierarchicalTransformerContrastivePretrain, \
     HierarchicalConvalueTransformer
+from renaanalysis.learning.HATC import HierarchicalAutoTranscoder, HierarchicalAutoTranscoderPretrain
 from renaanalysis.learning.RHT import RecurrentHierarchicalTransformer
 from renaanalysis.learning.train import cv_train_test_model, self_supervised_pretrain
 from renaanalysis.multimodal.train_multimodal import train_test_classifier_multimodal, \
@@ -169,9 +170,9 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
                                                                                              verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
 
         elif task_name == TaskName.PreTrain:
-            model = HierarchicalTransformerContrastivePretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
+            model = HierarchicalAutoTranscoderPretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
                                                                depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
-                                                               pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
+                                                               pool=params['pool'], patch_embed_dim=params['patch_embed_dim'], pos_embed_mode=params['pos_embed_mode'],
                                                                dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'],
                                                                p_t=params['p_t'], p_c=params['p_c'], mask_t_span=params['mask_t_span'], mask_c_span=params['mask_c_span'])
             models, training_histories, criterion, last_activation = self_supervised_pretrain_multimodal(mmarray, model, temperature=params['temperature'], n_neg=params['n_neg'], is_plot_conf_matrix=is_plot_confusion_matrix, n_folds=n_folds, test_name=test_name, task_name=task_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)  # use un-dimension reduced EEG data
