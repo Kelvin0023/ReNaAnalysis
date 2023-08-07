@@ -225,7 +225,7 @@ def _make_span_from_seeds(seeds, span, total=None):
     return torch.tensor(inds)
 
 class MaskLayer(nn.Module):
-    def __init__(self, p_t, p_c, c_span, mask_t_span, mask_c_span, t_mask_replacement, c_mask_replacement):
+    def __init__(self, p_t, p_c, c_span, mask_t_span, mask_c_span, t_mask_replacement, c_mask_replacement, is_constant_size=False):
         super(MaskLayer, self).__init__()
         self.p_t = p_t
         self.p_c = p_c
@@ -234,31 +234,54 @@ class MaskLayer(nn.Module):
         self.mask_c_span = mask_c_span
         self.t_mask_replacement = t_mask_replacement
         self.c_mask_replacement = c_mask_replacement
+        if is_constant_size:
+            print("\033[93m  {}\033[00m".format('constant size mask is used, time mask will not have a span'))
+        self.is_constant_size = is_constant_size
 
     def make_t_mask(self, shape, p, span, allow_no_inds=False):
-        mask = torch.zeros(shape, requires_grad=False, dtype=bool)
+        if self.is_constant_size:
+            mask = torch.zeros(shape, dtype=bool)
 
-        for i in range(shape[0]):
-            mask_seeds = list()
-            while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
-                mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
+            for idx, row in enumerate(mask):
+                num_true = int(shape[1] * p)
+                true_indices = torch.random.choice(shape[1], num_true, replace=False)
+                mask[idx, true_indices] = True
 
-            mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
+            return mask
+        else:
+            mask = torch.zeros(shape, requires_grad=False, dtype=bool)
 
-        return mask
+            for i in range(shape[0]):
+                mask_seeds = list()
+                while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
+                    mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
+
+                mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
+
+            return mask
 
     def make_c_mask(self, shape, p, span, allow_no_inds=False):
-        mask = torch.zeros(shape, requires_grad=False, dtype=bool)
-        for i in range(shape[0]):
-            mask_seeds = list()
-            while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
-                mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
-            if self.c_span:
-                mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
-            else:
-                mask[i, mask_seeds] = True
+        if self.is_constant_size:
+            mask = torch.zeros(shape, dtype=bool)
 
-        return mask
+            for idx, row in enumerate(mask):
+                num_true = int(shape[1] * p)
+                true_indices = torch.random.choice(shape[1], num_true, replace=False)
+                mask[idx, true_indices] = True
+
+            return mask
+        else:
+            mask = torch.zeros(shape, requires_grad=False, dtype=bool)
+            for i in range(shape[0]):
+                mask_seeds = list()
+                while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
+                    mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
+                if self.c_span:
+                    mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
+                else:
+                    mask[i, mask_seeds] = True
+
+            return mask
 
     def forward(self, x):
         original_input = torch.clone(x)
@@ -385,8 +408,8 @@ class HierarchicalTransformer(nn.Module):
             fig.show()
 
     def forward(self, x_eeg, *args, **kwargs):
-            x = self.encode(x_eeg, *args, **kwargs)
-            return self.mlp_head(x)
+        x = self.encode(x_eeg, *args, **kwargs)
+        return self.mlp_head(x)
 
     def encode(self, x_eeg, *args, **kwargs):
         x = self.to_patch_embedding(x_eeg)
@@ -567,12 +590,12 @@ class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
         self.encoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, window_duration=window_duration, pool=pool,
-                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output)
+                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode)
         self.decoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth,
                                                num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim,
                                                window_duration=window_duration, pool=pool,
                                                patch_embed_dim=patch_embed_dim, dim_head=dim_head,
-                                               attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output).transformer
+                                               attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode).transformer
         self.to_time_series = nn.Linear(patch_embed_dim, self.patch_length)
         self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
                                     t_mask_replacement=torch.nn.Parameter(

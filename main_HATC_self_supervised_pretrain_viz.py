@@ -14,7 +14,7 @@ from sklearn.decomposition import PCA
 from torch import nn
 import torch
 
-from renaanalysis.learning.HT import ContrastiveLoss
+from renaanalysis.learning.HT import ContrastiveLoss, MaskLayer
 from renaanalysis.learning.HT_viz import ht_viz
 from renaanalysis.utils.utils import remove_value
 from renaanalysis.learning.train import eval_test
@@ -35,9 +35,9 @@ is_compare_epochs = False
 viz_sim = True
 
 viz_pca_ica = False
-training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HATC_TUH_sim.p', 'rb'))
-locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HATC_TUH_sim.p', 'rb'))
-models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HATC_TUH_sim.p', 'rb'))
+training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_TUH.p', 'rb'))
+locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_TUH.p', 'rb'))
+models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_TUH.p', 'rb'))
 nfolds = 1
 mmarray = pickle.load(open(f'{export_data_root}/TUH_mmarray.p', 'rb'))
 test_dataloader = mmarray.get_test_dataloader(batch_size=32, device='cuda:0' if torch.cuda.is_available() else 'cpu', return_metainfo=True)
@@ -68,9 +68,13 @@ viz_epoch = True
 if viz_sim:
     for params, model_list in models.items():
         params = dict(params)
-        # loss = ContrastiveLoss(temperature=params['temperature'], n_neg=params['n_neg'])
         for i in range(len(model_list)):
             for x in test_dataloader:
+                model_list[i].mask_layer = MaskLayer(p_t=0.8, p_c=0.8, c_span=False, mask_t_span=1, mask_c_span=1,
+                                    t_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(21, 128), requires_grad=True).to('cuda:0'),
+                                    c_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(40, 128), requires_grad=True).to('cuda:0'))
                 pred_series, x_encoded, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix = model_list[i](*x)
                 plt.rcParams["figure.figsize"] = (12.8, 7.2)
                 eeg_picks = mmarray['eeg'].ch_names
