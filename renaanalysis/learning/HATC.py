@@ -86,6 +86,7 @@ class HierarchicalAutoTranscoder(nn.Module):
         self.num_windows = num_timesteps // self.patch_length
 
         self.num_patches = self.num_channels * self.num_windows
+        self.output = output
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
         # self.to_patch_embedding = nn.Sequential(
@@ -108,19 +109,59 @@ class HierarchicalAutoTranscoder(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
 
         self.encoder = AutoTransEncoder(depth, patch_embed_dim, num_heads, dim_head, attn_dropout)
-        self.decoder = AutoTransDecoder(depth, patch_embed_dim * (2 ** (depth)), num_heads, dim_head, attn_dropout)
+        self.decoder = AutoTransDecoder(depth, patch_embed_dim * (2 ** depth), num_heads, dim_head, attn_dropout)
 
         self.pool = pool
         self.to_latent = nn.Identity()
 
         if output == 'single':
             self.mlp_head = nn.Sequential(
-                nn.LayerNorm(patch_embed_dim),
-                nn.Linear(patch_embed_dim, 1))
+                nn.LayerNorm(patch_embed_dim*(2**depth)),
+                nn.Linear(patch_embed_dim*(2**depth), 1))
         else:
             self.mlp_head = nn.Sequential(
-                nn.LayerNorm(patch_embed_dim),
-                nn.Linear(patch_embed_dim, num_classes))
+                nn.LayerNorm(patch_embed_dim * (2 ** depth)),
+                nn.Linear(patch_embed_dim * (2 ** depth), num_classes))
+
+    def adjust_model(self, num_timesteps, num_channels, sampling_rate, window_duration, num_classes, output, plot=False):
+        self.window_duration = window_duration
+        self.num_channels = num_channels
+        self.num_timesteps = num_timesteps
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
+        self.num_patches = self.num_channels * self.num_windows
+
+        if self.pos_embed_mode == 'learnable':
+            learnable_pos_embedding = self.learnable_pos_embedding.unsqueeze(0)
+            self.learnable_pos_embedding = F.interpolate(self.learnable_pos_embedding, size=(self.num_patches+1, self.patch_embed_dim), mode='bilinear',
+            align_corners=False).squeeze(0)
+
+        if output == 'single':
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(self.patch_embed_dim),
+                nn.Linear(self.patch_embed_dim*(2**self.depth), 1))
+        else:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(self.patch_embed_dim * (2 ** self.depth)),
+                nn.Linear(self.patch_embed_dim * (2 ** self.depth), num_classes))
+
+
+        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+        patch_embed_projection = self.to_patch_embedding[1].weight.data
+        axs[0].imshow(patch_embed_projection.squeeze().squeeze().cpu().detach().numpy())
+        axs[0].set_title('pretrained projection matrix before resample')
+        d, a, b, t = patch_embed_projection.shape
+        resampled_weight = F.interpolate(
+            patch_embed_projection, size=(b, self.patch_length), mode='bilinear',
+            align_corners=False)
+        bias = self.to_patch_embedding[1].bias.data
+        self.to_patch_embedding[1] = nn.Conv2d(1, self.patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True)
+        self.to_patch_embedding[1].weight.data = resampled_weight
+        self.to_patch_embedding[1].bias.data = bias
+        axs[1].imshow(self.to_patch_embedding[1].weight.data.squeeze().squeeze().cpu().detach().numpy())
+        axs[1].set_title('pretrained projection matrix after resample')
+        if plot:
+            fig.show()
 
     def forward(self, x, *args, **kwargs):
         x = self.to_patch_embedding(x)
@@ -134,11 +175,14 @@ class HierarchicalAutoTranscoder(nn.Module):
 
         if self.pos_embed_mode == 'sinusoidal':
             channel_pos = args[-1]  # batch_size x num_channels
-            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
-            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+            assert channel_pos.shape[
+                       1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x.device, dtype=torch.long) for a in
+                                    range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
             time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
-            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows,
+                                                                                               1)
             time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
             channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
 
@@ -149,18 +193,57 @@ class HierarchicalAutoTranscoder(nn.Module):
         elif self.pos_embed_mode == 'learnable':
             pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
         else:
-            raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
+            raise ValueError(
+                f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
 
         x += pos_embed
         x = self.dropout(x)
 
-        x_encoded, encoder_att_matrix = self.encoder(x)
-        x, decoder_att_matrix = self.decoder(x_encoded)
-        # x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-        x = rearrange(x, 'b nt ps -> (b nt) ps')
-        x = self.to_time_series(x)
-        x = self.to_latent(x[:, 1:])
-        return x
+        x, att_matrix = self.encoder(x)
+        x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
+        x = self.to_latent(x)
+        return self.mlp_head(x)
+
+
+    # def forward(self, x, *args, **kwargs):
+    #     x = self.to_patch_embedding(x)
+    #
+    #     x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+    #
+    #     b, n, _ = x.shape
+    #
+    #     cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
+    #     x = torch.cat((cls_tokens, x), dim=1)
+    #
+    #     if self.pos_embed_mode == 'sinusoidal':
+    #         channel_pos = args[-1]  # batch_size x num_channels
+    #         assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+    #         time_pos = torch.stack([torch.arange(0, self.num_windows, device=x.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+    #
+    #         time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+    #         channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+    #         time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+    #         channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
+    #
+    #         pos_embed = time_pos_embed + channel_pos_embed
+    #         cls_tokens_pos_embedding = repeat(self.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+    #         pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
+    #
+    #     elif self.pos_embed_mode == 'learnable':
+    #         pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
+    #     else:
+    #         raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
+    #
+    #     x += pos_embed
+    #     x = self.dropout(x)
+    #
+    #     x_encoded, encoder_att_matrix = self.encoder(x)
+    #     x, decoder_att_matrix = self.decoder(x_encoded)
+    #     # x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
+    #     x = rearrange(x, 'b nt ps -> (b nt) ps')
+    #     x = self.to_time_series(x)
+    #     x = self.to_latent(x[:, 1:])
+    #     return x
 
     def prepare_data(self, x):
         return x

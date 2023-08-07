@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
 
 from renaanalysis.learning.Conformer import interaug
+from renaanalysis.learning.HATC import HierarchicalAutoTranscoder
 from renaanalysis.learning.HT import ContrastiveLoss
 
 from tqdm import tqdm

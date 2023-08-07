@@ -539,8 +539,9 @@ def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epo
                                     raw = mne.io.read_raw_edf(os.path.join(data_root,
                                                                            f'{subject_group_id}/{subject_name}/{session_name}/{montage_type_name}/{data_file_name}'),
                                                               preload=True)
-                                    if raw.info['sfreq'] != 256:
-                                        raw.resample(256)
+                                    if raw.info['sfreq'] != 250:
+                                        raw.resample(250)
+                                    raw.notch_filter(60, n_jobs=16)
                                     mne.rename_channels(raw.info, TUH_mapping)
                                     num_epochs = math.ceil(raw.__len__() / (epoch_length * raw.info['sfreq']))
                                     eventID_mat = np.zeros((num_epochs, 3), dtype='int')
@@ -725,7 +726,7 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         x_dict, y, metadata_dict, event_viz_colors = get_TUHG_samples(dataset_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=250, subject_picks=subject_picks, subject_group_picks=subject_group_picks, *args, **kwargs)
         for ch_names, x in x_dict[21].items():
             metadata = metadata_dict[21][ch_names]
-            physio_arrays = [PhysioArray(x, metadata, sampling_rate=250, physio_type=eeg_name, dataset_name=dataset_name)]
+            physio_arrays = [PhysioArray(x, metadata, sampling_rate=250, physio_type=eeg_name, dataset_name=dataset_name, ch_names=eval(next(iter(x_dict[21].keys()))))]
     elif dataset_name == 'BCICIVA':
         x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]

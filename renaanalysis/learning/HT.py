@@ -371,9 +371,14 @@ class HierarchicalTransformer(nn.Module):
         axs[0].imshow(patch_embed_projection.squeeze().squeeze().cpu().detach().numpy())
         axs[0].set_title('pretrained projection matrix before resample')
         d, a, b, t = patch_embed_projection.shape
-        self.to_patch_embedding[1].weight.data = F.interpolate(
+        resampled_weight = F.interpolate(
             patch_embed_projection, size=(b, self.patch_length), mode='bilinear',
             align_corners=False)
+        bias = self.to_patch_embedding[1].bias.data
+        self.to_patch_embedding[1] = nn.Conv2d(1, self.patch_embed_dim, kernel_size=(1, self.patch_length),
+                                               stride=(1, self.patch_length), bias=True)
+        self.to_patch_embedding[1].weight.data = resampled_weight
+        self.to_patch_embedding[1].bias.data = bias
         axs[1].imshow(self.to_patch_embedding[1].weight.data.squeeze().squeeze().cpu().detach().numpy())
         axs[1].set_title('pretrained projection matrix after resample')
         if plot:

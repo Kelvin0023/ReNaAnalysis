@@ -38,10 +38,10 @@ rebalance_method = 'class_weight'
 
 task_name = TaskName.PreTrain
 # task_name = TaskName.TrainClassifier
-subject_pick = ['aaaaaaec', 'aaaaaaed', 'aaaaaaee', 'aaaaaaef', 'aaaaaaeg']
-# subject_pick = None
-subject_group_picks = None
-# subject_group_picks = ['001']
+# subject_pick = ['aaaaaaec', 'aaaaaaed', 'aaaaaaee', 'aaaaaaef', 'aaaaaaeg']
+subject_pick = None
+# subject_group_picks = None
+subject_group_picks = ['001']
 
 '''
 grid_search_params = {
