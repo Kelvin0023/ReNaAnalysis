@@ -6,7 +6,7 @@ import torch
 from sklearn.model_selection import ParameterGrid
 
 from renaanalysis.learning.HT import HierarchicalTransformer, HierarchicalTransformerContrastivePretrain, \
-    HierarchicalConvalueTransformer
+    HierarchicalConvalueTransformer, HierarchicalTransformerAutoEncoderPretrain
 from renaanalysis.learning.HATC import HierarchicalAutoTranscoder, HierarchicalAutoTranscoderPretrain
 from renaanalysis.learning.RHT import RecurrentHierarchicalTransformer
 from renaanalysis.learning.train import cv_train_test_model, self_supervised_pretrain
@@ -170,7 +170,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
                                                                                              verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
 
         elif task_name == TaskName.PreTrain:
-            model = HierarchicalAutoTranscoderPretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
+            model = HierarchicalTransformerAutoEncoderPretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
                                                                depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                                                pool=params['pool'], patch_embed_dim=params['patch_embed_dim'], pos_embed_mode=params['pos_embed_mode'],
                                                                dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'],

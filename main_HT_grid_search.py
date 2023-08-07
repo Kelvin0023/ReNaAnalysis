@@ -97,7 +97,7 @@ grid_search_params = {
     "feedforward_mlp_dim": [32],
 
     # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [32],
+    "patch_embed_dim": [128],
 
     # "pos_embed_mode": ['learnable'],
     "pos_embed_mode": ['sinusoidal'],
@@ -157,10 +157,10 @@ locking_performance, training_histories, models = grid_search_ht_eeg(grid_search
 #                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 if task_name == TaskName.PreTrain:
     pickle.dump(training_histories,
-                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HATC_TUH_sim.p', 'wb'))
+                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_TUH.p', 'wb'))
     pickle.dump(locking_performance,
-                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HATC_TUH_sim.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HATC_TUH_sim.p', 'wb'))
+                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_TUH.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_TUH.p', 'wb'))
 else:
     pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
     pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))

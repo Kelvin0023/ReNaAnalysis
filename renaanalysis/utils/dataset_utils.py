@@ -555,7 +555,7 @@ def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epo
                                     metadata_dict['epoch_start_times'] = epoch_start_times
                                     metadata = pd.DataFrame(metadata_dict)
                                     data = mne.Epochs(raw, eventID_mat, {'standard': 0}, metadata=metadata, tmin=0,
-                                                      tmax=epoch_length, preload=True, baseline=(0, 0))
+                                                      tmax=epoch_length-1/raw.info['sfreq'], preload=True, baseline=(0, 0))
                                     data.pick_channels(TUH_valid_channels, ordered=False)
                                     data.set_montage(mont1020)
                                     if len(data.info['ch_names']) not in subjects.keys():

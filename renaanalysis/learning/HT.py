@@ -547,9 +547,79 @@ class HierarchicalConvalueTransformer(nn.Module):
     def prepare_data(self, x):
         return x
 
+class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', p_t=0.1, p_c=0.2, mask_t_span=2, mask_c_span=5, pos_embed_mode='sinusoidal'):
+        if output == 'single':
+            assert num_classes == 2, 'output can only be single when num_classes is 2'
+        super().__init__()
+        self.depth = depth
+        self.num_heads = num_heads
+        self.window_duration = window_duration
+
+        self.num_channels = num_channels
+        self.num_timesteps = num_timesteps
+        self.patch_embed_dim = patch_embed_dim
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
+        self.pos_embed_mode = pos_embed_mode
+
+        self.grid_dims = self.num_channels, self.num_windows
+        self.num_patches = self.num_channels * self.num_windows
+        self.encoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, window_duration=window_duration, pool=pool,
+                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output)
+        self.decoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth,
+                                               num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim,
+                                               window_duration=window_duration, pool=pool,
+                                               patch_embed_dim=patch_embed_dim, dim_head=dim_head,
+                                               attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output).transformer
+        self.to_time_series = nn.Linear(patch_embed_dim, self.patch_length)
+        self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
+                                    t_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
+                                    c_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True))
+    def forward(self, x_eeg, *args, **kwargs):
+        x = self.encoder.to_patch_embedding(x_eeg)
+        x, original_x, mask_t, mask_c = self.mask_layer(x)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        b, n, _ = x.shape
+
+        cls_tokens = repeat(self.encoder.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
+        if self.pos_embed_mode == 'sinusoidal':
+            channel_pos = args[-1]  # batch_size x num_channels
+            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+
+            time_pos_embed = self.encoder.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+            channel_pos_embed = self.encoder.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
+
+            pos_embed = time_pos_embed + channel_pos_embed
+            cls_tokens_pos_embedding = repeat(self.encoder.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+            pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
+
+        elif self.pos_embed_mode == 'learnable':
+            pos_embed = self.encoder.learnable_pos_embedding[:, :(n + 1)]
+        x += pos_embed
+        x = self.encoder.dropout(x)
+
+        x_encoded, encoder_att_matrix = self.encoder.transformer(x)
+        x, decoder_att_matrix = self.decoder(x_encoded)
+        x = rearrange(x[:, 1:], 'b nt ps -> (b nt) ps')
+        x = self.to_time_series(x)
+        x = rearrange(x, '(b c w) ps -> b c (w ps)', b=b, c=self.num_channels, w=self.num_windows)
+        return x, x_encoded, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix
+
+    def prepare_data(self, x):
+        return x
+
 class HierarchicalTransformerContrastivePretrain(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', p_t=0.1, p_c=0.2, mask_t_span=2, mask_c_span=5):
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', p_t=0.1, p_c=0.2, mask_t_span=2, mask_c_span=5, pos_embed_mode='learnable'):
         if output == 'single':
             assert num_classes == 2, 'output can only be single when num_classes is 2'
         super().__init__()
@@ -592,7 +662,7 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
             channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
 
             pos_embed = time_pos_embed + channel_pos_embed
-            cls_tokens_pos_embedding = repeat(self.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+            cls_tokens_pos_embedding = repeat(self.HierarchicalTransformer.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
             pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
 
         elif self.pos_embed_mode == 'learnable':
