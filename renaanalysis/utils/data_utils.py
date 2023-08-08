@@ -286,6 +286,20 @@ def z_norm_by_trial(data):
         norm_data[i] = sample_norm
     return norm_data
 
+def min_max_by_trial(data):
+    """
+    Min-max normalize data by trial, the input data is in the shape of (num_samples, num_channels, num_timesteps)
+    @param data: data is in the shape of (num_samples, num_channels, num_timesteps)
+    """
+    norm_data = np.copy(data)
+    for i in range(data.shape[0]):
+        sample = data[i]
+        min = np.min(sample, axis=(0, 1))
+        max = np.max(sample, axis=(0, 1))
+        sample_norm = (sample - min) / (max - min)
+        norm_data[i] = sample_norm
+    return norm_data
+
 
 import numpy as np
 

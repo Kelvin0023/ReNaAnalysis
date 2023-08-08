@@ -225,6 +225,7 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
 
         """
     subjects = {}
+    session_count = 0
     for i in range(num_subs):
         subject = '{:0>{}}'.format(i + 1, subject_id_width)
         runs = {}
@@ -244,7 +245,7 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
 
             eventID_mat = np.zeros((epochs_info.shape[0], 3))
             event_dict_this_run = {}
-            metadata_dict = {'subject_id': [], 'run': []}
+            metadata_dict = {'subject_id': [], 'run': [], 'session': []}
             for k in range(epochs_info.shape[0]):
                 eventID_mat[k, 0] = epochs_info['sample'][k]
                 eventID_mat[k, 2] = event_label_dict[epochs_info['value'][k]]
@@ -252,12 +253,14 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
                     event_dict_this_run[epochs_info['value'][k]] = int(eventID_mat[k, 2])
                 metadata_dict['subject_id'].append(subject)
                 metadata_dict['run'].append(str(j))
+                metadata_dict['session'].append(session_count)  # give each subject's each run a unique
             eventID_mat = eventID_mat.astype(int)
             epoch_start_times = raw.times[eventID_mat[:, 0]]
             metadata_dict['epoch_start_times'] = epoch_start_times
             metadata = pd.DataFrame(metadata_dict)
             data = mne.Epochs(raw, eventID_mat, event_id=event_dict_this_run, metadata=metadata, tmin=epoch_tmin, tmax=epoch_tmax, baseline=baseline_tuple, preload=True)
             runs['run-' + str(j + 1)] = data
+            session_count += 1
     return subjects
 
 def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tmax = 0.8, include_last=False, colors=None):

@@ -15,7 +15,7 @@ def check_batch_is_ordered(batch_sample_indices):
 
 
 class OrderedBatchIterator:
-    def __init__(self, data_arrays, labels, batch_sample_indices, device, return_metainfo=False, shuffle_within_batches=False, encode_y=True):
+    def __init__(self, data_arrays, labels, batch_sample_indices, device, return_metainfo=False, shuffle_within_batches=False):
         no_none_batch_sample_indices = np.array(batch_sample_indices[batch_sample_indices != None], dtype=int)
         assert len(batch_sample_indices.shape) == 2, "batch_sample_indices must be a 2D array."
         # check the batch is ordered

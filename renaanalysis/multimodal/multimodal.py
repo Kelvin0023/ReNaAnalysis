@@ -644,7 +644,7 @@ class MultiModalArrays:
     def get_test_ordered_batch_iterator(self, device, encode_y=True, return_metainfo=False, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
         labels = self._encoder(self.labels_array) if encode_y else self.labels_array
-        return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, return_metainfo, shuffle_within_batches=shuffle_within_batches, encode_y=encode_y)
+        return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, return_metainfo, shuffle_within_batches=shuffle_within_batches)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)

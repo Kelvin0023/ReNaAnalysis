@@ -23,7 +23,7 @@ eeg_resample_rate = 200
 
 reject = None  # whether to apply auto rejection
 # data_root = 'D:/Dataset/auditory_oddball'
-data_root = r'D:\DropboxEEGDatasets\auditory_oddball_openneuro'
+data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray_class-weight.p'
 
@@ -40,7 +40,7 @@ grid_search_params = {
     "feedforward_mlp_dim": [256],
     # "feedforward_mlp_dim": [32],
 
-    "patch_embed_dim": [128],
+    "patch_embed_dim": [256],
 
     # "dim_head": [64],
     "dim_head": [128],
