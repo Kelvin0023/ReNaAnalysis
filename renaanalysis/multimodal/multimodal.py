@@ -35,7 +35,7 @@ class PhysioArray:
     @attribute is_rebalance_by_channel: when supersampling method such as SMOTE is applied as part of rebalancing,
     whether to apply it by channel or not
     """
-    def __init__(self, array: np.ndarray, meta_info: dict, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name='', ch_names=None):
+    def __init__(self, array: np.ndarray, meta_info: dict, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name='', ch_names=None, info=None):
         assert np.all(array.shape[0] == np.array([len(m) for m in meta_info.values()])), 'all metainfo in a physio array must have the same number of trials/epochs'
         self.array = array
         self.meta_info = meta_info
@@ -52,6 +52,8 @@ class PhysioArray:
         self.ch_names = ch_names
 
         self.array_preprocessed = None
+
+        self.info = info
 
     def __getitem__(self, item):
         if self.data_processor is not None:
@@ -621,14 +623,15 @@ class MultiModalArrays:
 
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size
+            if n_batches == 0:
+                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
+                continue
             n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
             sample_indices = np.concatenate([sample_indices, [None] * n_add])
             n_batches = len(sample_indices) / batch_size
             assert n_batches.is_integer()
             n_batches = int(n_batches)
-            if n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
-                continue
+
             n_test_batches = math.floor(test_size * n_batches)
             n_val_batches = math.floor(val_size * n_batches)
             if n_test_batches == 0 or n_val_batches == 0:

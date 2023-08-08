@@ -576,3 +576,17 @@ def visualize_eeg_samples(x, y, colors, eeg_picks, title='', out_dir=None, verbo
                 plt.clf()
             else:
                 plt.show()
+
+
+def get_line_styles(num_styles):
+    """
+    Get a list of different line styles for a line chart.
+
+    Parameters:
+        num_styles (int): The number of styles to generate.
+
+    Returns:
+        list: A list of line styles.
+    """
+    line_styles = ['-', '--', '-.', ':', (0, (1, 1)), (0, (5, 1)), (0, (3, 1, 1, 1)), (0, (3, 5, 1, 5)), (0, (3, 5, 3, 5, 1, 5))]
+    return line_styles[:num_styles]

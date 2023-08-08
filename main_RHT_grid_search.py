@@ -23,7 +23,7 @@ eeg_resample_rate = 200
 
 reject = None  # whether to apply auto rejection
 # data_root = 'D:/Dataset/auditory_oddball'
-data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
+data_root = r'D:\DropboxEEGDatasets\auditory_oddball_openneuro'
 dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray_class-weight.p'
 

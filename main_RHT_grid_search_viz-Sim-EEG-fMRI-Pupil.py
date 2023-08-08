@@ -12,7 +12,7 @@ from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, 
 from renaanalysis.params.params import *
 from renaanalysis.learning.HT import HierarchicalTransformer
 
-results_path = r'D:\PycharmProjects\ReNaAnalysis\RHT_grid_search'
+results_path = r'D:\PycharmProjects\ReNaAnalysis\RHT_grid_search_simEEGfMRIPupil'
 
 # viz options
 plot_eeg_epochs = False
@@ -82,13 +82,15 @@ pca = mmarray['eeg'].data_processor['pca'] if is_pca_ica else None
 ica = mmarray['eeg'].data_processor['ica'] if is_pca_ica else None
 
 _encoder = mmarray._encoder
+
+montage = mmarray.physio_arrays[0].info['montage']
 exg_resample_rate = mmarray['eeg'].sampling_rate
 event_names =  list(mmarray.event_viz_colors.keys())
 num_channels, num_timesteps = best_model.num_channels, best_model.num_timesteps
 eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
 
 # plot HT viz #########################################################################################################
-eeg_picks = mne.channels.make_standard_montage('biosemi64').ch_names
+eeg_viz_picks = ['Fz', 'Cz', 'Oz']
 
 if plot_eeg_epochs:
     visualize_eeg_samples(x_eeg_test, np.array(y_test, dtype=int), mmarray.event_id_viz_colors, this_picks)
@@ -99,8 +101,9 @@ if plot_ht_viz:
     #                       discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True)
 
     ht_eeg_viz_multimodal_batch(best_model, mmarray, attention_layer_class, device, rollout_data_root,
-           note='', load_saved_rollout=False, head_fusion='max', cls_colors=mmarray.event_viz_colors,
-           discard_ratio=0.9,is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=128, use_ordered=use_ordered)
+           note='', load_saved_rollout=False, head_fusion='max',
+           discard_ratio=0.9,is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=128, use_ordered=use_ordered,
+                                eeg_montage=montage, topo_map='forward', roll_topo_map_samples='random', picks=eeg_viz_picks, cls_colors=mmarray.event_viz_colors)
 
 # visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
 # # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
