@@ -1,3 +1,5 @@
+from typing import Dict
+
 import cv2
 import numpy as np
 import torch
@@ -8,3 +10,14 @@ def prepare_image_for_sim_score(img):
     img = np.expand_dims(img, axis=0)
     img = torch.Tensor(img)
     return img
+
+
+def batch_to_tensor(batch: Dict[str, np.ndarray], device):
+    """
+    Convert a batch dict of numpy arrays to a batch of torch tensors.
+    @param batch:
+    @param device:
+    @return:
+    """
+    rtn = {name: torch.tensor(x, dtype=torch.float32, device=device) for name, x in batch.items()}
+    return rtn

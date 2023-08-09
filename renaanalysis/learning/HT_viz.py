@@ -233,7 +233,7 @@ def ht_viz_multimodal(model, mmarray,
            note='',
            head_fusion='max', discard_ratio=0.1,
            load_saved_rollout=False, batch_size=64,
-           is_pca_ica=False, pca=None, ica=None, attention_layer_class=Attention, use_meta_info=False, *args, **kwargs):
+           is_pca_ica=False, pca=None, ica=None, attention_layer_class=Attention, *args, **kwargs):
     """
     @param num_channels: number of channels for the model. This can be different from the number of channels in X. If they are different,
     we assume the model is using dimension reduced data.
@@ -244,7 +244,7 @@ def ht_viz_multimodal(model, mmarray,
         assert os.path.exists(kwargs['model_path']), "Model path does not exist"
         model = model(**kwargs['model_init_params'])
         model.load_state_dict(torch.load(kwargs['model_path']))
-    test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, return_metainfo=use_meta_info,device=device)
+    test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, device=device)
     x_eeg_test, y_test = test_iterator.dataset.tensors[0].detach().cpu().numpy(), test_iterator.dataset.tensors[-1].detach().cpu().numpy()
 
     model.to(device)
@@ -413,7 +413,7 @@ def ht_viz_multimodal(model, mmarray,
 def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, data_root, cls_colors,
                                 note='', head_fusion='max', discard_ratio=0.1,
                                 load_saved_rollout=False, batch_size=512,
-                                is_pca_ica=False, pca=None, ica=None, use_meta_info=False,
+                                is_pca_ica=False, pca=None, ica=None,
                                 use_ordered=False, eeg_montage=mne.channels.make_standard_montage('biosemi64'), topo_map='forward',
                                 roll_topo_map_samples='all', roll_topo_map_n_samples=10,
                                 picks=('Fz', 'Cz', 'Oz'), tmin=-0.1, tmax=0.8, *args, **kwargs):
@@ -438,9 +438,9 @@ def ht_eeg_viz_multimodal_batch(model, mmarray, attention_layer_class, device, d
         model.load_state_dict(torch.load(kwargs['model_path']))
     x_test_original = mmarray['eeg'].array[mmarray.get_ordered_test_indices() if use_ordered else mmarray.test_indices]
     if use_ordered:
-        test_iterator = mmarray.get_test_ordered_batch_iterator(encode_y=False, return_metainfo=use_meta_info,  device=device)
+        test_iterator = mmarray.get_test_ordered_batch_iterator(encode_y=False,  device=device)
     else:
-        test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, return_metainfo=use_meta_info,device=device)
+        test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False,device=device)
     n_samples = len(test_iterator.dataset)
     event_ids = mmarray.event_ids
     event_ids_inversed = {v: k for k, v in event_ids.items()}

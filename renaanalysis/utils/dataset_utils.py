@@ -24,7 +24,8 @@ from renaanalysis.learning.preprocess import preprocess_samples_and_save
 from renaanalysis.params.params import eeg_name, pupil_name
 from renaanalysis.utils.Bidict import Bidict
 from renaanalysis.utils.data_utils import epochs_to_class_samples
-from renaanalysis.multimodal.multimodal import PhysioArray, MultiModalArrays
+from renaanalysis.multimodal.multimodal import MultiModalArrays
+from renaanalysis.multimodal.PhysioArray import PhysioArray
 from renaanalysis.utils.eeg_utils import is_standard_10_20_name
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.utils import preprocess_standard_eeg, add_annotations_to_raw, is_button_after_oddball

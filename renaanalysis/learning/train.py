@@ -598,8 +598,8 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     num_standard_errors = 0
     num_target_errors = 0
     for batch_data in dataloader:
-        y = batch_data[-1]
-        x = batch_data[:-1]
+        y = batch_data['y']
+        x = batch_data
         if mode == 'train': optimizer.zero_grad()
 
         mini_batch_i += 1

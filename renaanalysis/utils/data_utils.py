@@ -319,3 +319,27 @@ def mean_ignore_zero(arr, axis=0):
     mean = np.true_divide(arr.sum(axis=axis), (arr != 0).sum(axis=axis))
 
     return mean
+
+
+def check_and_merge_dicts(dict_dict):
+    encountered_keys = set()
+    merged_dict = {}
+
+    for _key, d in dict_dict.items():
+        for key in d:
+            # this_key = _key + '_' + key
+            this_key = key
+            merged_dict[this_key] = d[key]
+            if this_key in encountered_keys:
+                raise ValueError(f"Duplicate key found: {this_key}")
+            encountered_keys.add(this_key)
+
+    return merged_dict
+
+
+def check_arrays_equal(array_list):
+    reference_array = array_list[0]
+    for arr in array_list[1:]:
+        if not np.array_equal(reference_array, arr):
+            return False
+    return True

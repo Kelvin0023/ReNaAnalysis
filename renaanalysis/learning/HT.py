@@ -352,11 +352,13 @@ class HierarchicalTransformer(nn.Module):
                 nn.LayerNorm(patch_embed_dim),
                 nn.Linear(patch_embed_dim, num_classes))
 
-    def forward(self, x_eeg, *args, **kwargs):
-            x = self.encode(x_eeg, *args, **kwargs)
+    def forward(self, x, *args, **kwargs):
+            x = self.encode(x, *args, **kwargs)
             return self.mlp_head(x)
 
-    def encode(self, x_eeg, *args, **kwargs):
+    def encode(self, x, *args, **kwargs):
+        x_eeg = x['eeg']
+
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
@@ -366,7 +368,7 @@ class HierarchicalTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[4]  # batch_size x num_channels
+            channel_pos = x['channel_voxel_indices'] # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
@@ -502,7 +504,7 @@ class HierarchicalConvalueTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[5]  # batch_size x num_channels
+            channel_pos = x['channel_positions'] # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 

@@ -352,13 +352,13 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
                  patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1,
-                 reset_mem_each_session=True, session_meta_index=2):
+                 reset_mem_each_session=True):
         """
 
         # a token is a time slice of data on a single channel
 
         @param num_timesteps: int: number of timesteps in each sample
-        @param num_channels: int: number of channels of the input data
+        @param num_channels: int: nusmber of channels of the input data
         @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
         note that 'single' only works when the number of classes is 2.
         @param reset_mem_each_session:
@@ -413,9 +413,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
         self.current_session = None
         self.reset_mem_each_session = reset_mem_each_session
-        self.session_meta_index = session_meta_index
 
-    def forward(self, x_eeg, *args, **kwargs):
+    def forward(self, x, *args, **kwargs):
         """
         auditory oddball meta info: 'subject_id', 'run', 'epoch_start_times', 'channel_positions', 'channel_voxel_indices'
         @param x_eeg:
@@ -424,13 +423,23 @@ class RecurrentHierarchicalTransformer(nn.Module):
         """
 
         # check meta info is complete
-        x = self.encode(x_eeg, *args, **kwargs)
+        x = self.encode(x, *args, **kwargs)
         return self.mlp_head(x)
 
-    def encode(self, x_eeg, *args, **kwargs):
+    def encode(self, x, *args, **kwargs):
+        """
+        currently
+
+        @param x_eeg:
+        @param args:
+        @param kwargs:
+        @return:
+        """
+        x_eeg = x['eeg']
+
         b, nchannel, _ = x_eeg.shape
 
-        if self.reset_mem_each_session and self.current_session != (current_session := args[self.session_meta_index][0].item()):
+        if self.reset_mem_each_session and self.current_session != (current_session := x['session'][0].item()):
             self.reset()
             print(f"Current session changed from {self.current_session} to {current_session}. Memory reset.")
             self.current_session = current_session
@@ -446,10 +455,10 @@ class RecurrentHierarchicalTransformer(nn.Module):
         time_pos = torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long)[None, :]  # batch_size x num_windows  # use sample-relative time positions
 
         # compute channel positions that are voxel discretized
-        channel_pos = args[5]  # batch_size x num_channels
+        channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
 
         # get the participant embeddings
-        participant_pos = args[0]
+        participant_pos = x['subject_id']
         participant_pos = self.randomized_participant_pos[(participant_pos.to(torch.int))][:, None]  # batch_size x 1
 
         # each sample in a batch must have the same participant embedding
