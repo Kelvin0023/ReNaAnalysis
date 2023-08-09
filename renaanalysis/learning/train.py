@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
 
 from renaanalysis.learning.Conformer import interaug
+from renaanalysis.learning.HATC import HierarchicalAutoTranscoder
 from renaanalysis.learning.HT import ContrastiveLoss
 
 from tqdm import tqdm
@@ -28,7 +29,7 @@ from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
     export_data_root, TaskName
-from renaanalysis.utils.training_utils import count_standard_error, count_target_error
+from renaanalysis.utils.training_utils import count_standard_error, count_target_error, get_class_weight
 from renaanalysis.utils.data_utils import rebalance_classes, mean_max_sublists, \
     mean_min_sublists
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
@@ -552,7 +553,8 @@ def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTr
 
     return models, training_histories_folds, criterion, last_activation
 
-def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
+def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, mode, rebalance_method, l2_weight=1e-5, device=None, test_name='',
+                                  task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
     """
 
     @param model:
@@ -573,12 +575,12 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         # determine which layer to require grad
         if task_name == TaskName.PretrainedClassifierFineTune:
             for param in model.parameters():
-                param.requires_grad = False
-            for param in model.transformer.parameters():
                 param.requires_grad = True
-            for param in model.mlp_head.parameters():
-                param.requires_grad = True
-            model.cls_token.requires_grad = True
+            # for param in model.transformer.parameters():
+            #     param.requires_grad = True
+            # for param in model.mlp_head.parameters():
+            #     param.requires_grad = True
+            # model.cls_token.requires_grad = True
     elif mode == 'val':
         model.eval()
     else:
@@ -619,9 +621,15 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
             y_pred = model(*x)
 
             y_tensor = y.to(device)
-            if not isinstance(criterion, nn.CrossEntropyLoss):
+            if isinstance(criterion, nn.CrossEntropyLoss):
+                if rebalance_method == 'class_weight':
+                    class_weight = get_class_weight(y_tensor)
+                    classification_loss = criterion.__class__(weight=class_weight)(y_pred, y_tensor)
+                else:
+                    classification_loss = criterion(y_pred, y_tensor)
+            else:  # BCELoss does not apply class weights
                 y_pred = last_activation(y_pred)
-            classification_loss = criterion(y_pred, y_tensor)
+                classification_loss = criterion(y_pred, y_tensor)
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
@@ -769,12 +777,12 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
         # determine which layer to require grad
         if task_name == TaskName.PretrainedClassifierFineTune:
             for param in model.parameters():
-                param.requires_grad = False
-            for param in model.transformer.parameters():
                 param.requires_grad = True
-            for param in model.mlp_head.parameters():
-                param.requires_grad = True
-            model.cls_token.requires_grad = True
+            # for param in model.transformer.parameters():
+            #     param.requires_grad = True
+            # for param in model.mlp_head.parameters():
+            #     param.requires_grad = True
+            # model.cls_token.requires_grad = True
     elif mode == 'val':
         model.eval()
     else:
@@ -792,6 +800,7 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
     y_all_pred = None
     num_standard_errors = 0
     num_target_errors = 0
+    num_epochs = 0
     for x, y in dataloader:
         if mode == 'train':
             optimizer.zero_grad()
@@ -800,6 +809,7 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
             aug_data = aug_data.to(device)
             x = torch.cat((x, aug_data), dim=0)
             y = torch.cat((y, aug_labels), dim=0)
+            num_epochs += y.shape[0]
 
         mini_batch_i += 1
         if verbose >= 1:
@@ -819,14 +829,15 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
             y_pred = model(*x)
 
             y_tensor = y.to(device)
-            y_pred = last_activation(y_pred)
+            if not isinstance(criterion, nn.CrossEntropyLoss):
+                y_pred = last_activation(y_pred)
             classification_loss = criterion(y_pred, y_tensor)
 
-        if mode == 'train' and l2_weight > 0:
-            l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
-        else:
-            l2_penalty = 0
-        loss = classification_loss + l2_penalty
+        # if mode == 'train' and l2_weight > 0:
+        #     l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
+        # else:
+        #     l2_penalty = 0
+        loss = classification_loss
         if mode == 'train':
             loss.backward()
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
@@ -849,7 +860,7 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
     if verbose >= 1: pbar.close()
-    return np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
+    return np.mean(batch_losses), num_correct_preds / num_epochs if mode == 'train' else num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
 
 def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.PreTrain, verbose=1, check_param=1):
     """
@@ -898,16 +909,16 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
         #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
-            x = x if isinstance(x[0], tuple) else (x[0],)
-            pred_tokens, orig_tokens, mask_t, mask_c = model(*x)
+            x = x if isinstance(x, list) or isinstance(x, tuple) else (x,)
+            pred_series, encoded_tokens, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix = model(*x)
             # y_tensor = y.to(device)
-            classification_loss = criterion(pred_tokens, orig_tokens)
+            loss = criterion(x[0][:, :, :1000], pred_series)
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
         else:
             l2_penalty = 0
-        loss = classification_loss + l2_penalty
+        loss = loss + l2_penalty
         if mode == 'train':
             loss.backward()
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])

@@ -25,20 +25,24 @@ is_plot_ROC = True
 is_plot_topomap = True
 is_plot_epochs = True
 device ='cuda:0' if torch.cuda.is_available() else 'cpu'
+nfolds = 1
 
-viz_pca_ica = True
-
-mmarray = pickle.load(open(f'{export_data_root}/auditory_oddball_mmarray_smote_pica.p', 'rb'))
+use_ordered = True
+viz_pca_ica = False
+dataset_name = 'auditory_oddball'
+mmarray = pickle.load(open(f'{export_data_root}/{dataset_name}_mmarray_class-weight.p', 'rb'))
 
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
-nfolds = 1
-x_test, y_test = mmarray.get_test_set(device='cuda:0' if torch.cuda.is_available() else 'cpu')
-# get the un-pca-ica version of the data
-x_test_original = mmarray['eeg'].array[mmarray.test_indices]
 
 criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(list(models.values())[0][0], device='cuda:0' if torch.cuda.is_available() else 'cpu', include_metainfo=True)
+# x_test, y_test = mmarray.get_test_set(device=device, return_metainfo=True, shuffle_within_batches=True)
+test_data = mmarray.get_test_set(device=device, return_metainfo=True, use_ordered=use_ordered)
+x_eeg_test, y_test = test_data[0], test_data[-1]
+# get the un-pca-ica version of the data
+x_test_original = mmarray['eeg'].array[mmarray.get_ordered_test_indices() if use_ordered else mmarray.test_indices]
+
 is_pca_ica = 'pca' in mmarray['eeg'].data_processor.keys() or 'ica' in mmarray['eeg'].data_processor.keys()
 if is_pca_ica != viz_pca_ica:
     warnings.warn('The mmarry stored is different with the one desired for visualization')
@@ -71,7 +75,7 @@ if is_plot_epochs:
     rollout_data_root = f'HT_viz'
     eeg_montage = mne.channels.make_standard_montage('biosemi64')
     eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
-    num_channels, num_timesteps = x_test.shape[1:]
+    num_channels, num_timesteps = x_eeg_test.shape[1:]
     best_model = models[model_idx[0]][model_idx[1]]
     non_target_indc = np.where(y_test == 0)[0]
     target_indc = np.where(y_test == 6)[0]
@@ -81,7 +85,7 @@ if is_plot_epochs:
     this_picks = ['Iz', 'Oz', 'POz', 'Pz', 'CPz', 'Fpz', 'AFz', 'Fz', 'FCz', 'Cz']
     model = best_model
     if viz_all_epoch:
-        visualize_eeg_samples(x_test, y_test, colors, this_picks)
+        visualize_eeg_samples(x_eeg_test, y_test, colors, this_picks)
         # ht_viz(model, x_test, y_test, _encoder, event_names, rollout_data_root,
         #        best_model.window_duration,
         #        exg_resample_rate,
@@ -90,12 +94,12 @@ if is_plot_epochs:
         t_start = time.perf_counter()
         ht_eeg_viz_multimodal_batch(best_model, mmarray, Attention, device, rollout_data_root,
                               note='', load_saved_rollout=False, head_fusion=head_fusion,
-                              discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=256)
+                              discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=256, use_ordered=use_ordered)
         print("ht viz batched took {} seconds".format(time.perf_counter() - t_start))
     else:
-        visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
+        visualize_eeg_samples(x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
         # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))
-        ht_viz(model, x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], _encoder, event_names, rollout_data_root, best_model.window_duration,
+        ht_viz(model, x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], _encoder, event_names, rollout_data_root, best_model.window_duration,
                exg_resample_rate,
                eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=True, head_fusion='max',
                discard_ratio=0.1, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)

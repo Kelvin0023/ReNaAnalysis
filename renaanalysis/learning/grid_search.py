@@ -5,7 +5,9 @@ import pickle
 import torch
 from sklearn.model_selection import ParameterGrid
 
-from renaanalysis.learning.HT import HierarchicalTransformer, HierarchicalTransformerContrastivePretrain
+from renaanalysis.learning.HT import HierarchicalTransformer, HierarchicalTransformerContrastivePretrain, \
+    HierarchicalConvalueTransformer, HierarchicalTransformerAutoEncoderPretrain
+from renaanalysis.learning.HATC import HierarchicalAutoTranscoder, HierarchicalAutoTranscoderPretrain
 from renaanalysis.learning.RHT import RecurrentHierarchicalTransformer
 from renaanalysis.learning.train import cv_train_test_model, self_supervised_pretrain
 from renaanalysis.multimodal.train_multimodal import train_test_classifier_multimodal, \
@@ -147,7 +149,6 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
         #         pickle.dump(x_eeg_pca_ica_test, f)
         #     with open(os.path.join(export_data_root, 'x_eeg_test.p'), 'wb') as f:
         #         pickle.dump(x_eeg_test, f)
-    mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
     eeg_num_channels, eeg_num_timesteps = mmarray['eeg'].get_pca_ica_array().shape[1:] if is_pca_ica else mmarray['eeg'].array.shape[1:]
     eeg_fs = mmarray['eeg'].sampling_rate
     param_grid = ParameterGrid(grid_search_params)
@@ -158,30 +159,31 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
 
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
-        if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
+        if task_name == TaskName.TrainClassifier:
             model = HierarchicalTransformer(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
                                             depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
                                             pool=params['pool'], patch_embed_dim=params['patch_embed_dim'], pos_embed_mode=params['pos_embed_mode'],
                                             dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'])
             models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
-                                                                                            is_plot_conf_matrix=is_plot_confusion_matrix,
+                                                                                            is_plot_conf_matrix=is_plot_confusion_matrix, test_size=test_size,
                                                                                              verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
 
         elif task_name == TaskName.PreTrain:
-            model = HierarchicalTransformerContrastivePretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
+            model = HierarchicalTransformerAutoEncoderPretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
                                                                depth=params['depth'], num_heads=params['num_heads'], feedforward_mlp_dim=params['feedforward_mlp_dim'],
-                                                               pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
+                                                               pool=params['pool'], patch_embed_dim=params['patch_embed_dim'], pos_embed_mode=params['pos_embed_mode'],
                                                                dim_head=params['dim_head'], emb_dropout=params['emb_dropout'], attn_dropout=params['attn_dropout'], output=params['output'],
                                                                p_t=params['p_t'], p_c=params['p_c'], mask_t_span=params['mask_t_span'], mask_c_span=params['mask_c_span'])
             models, training_histories, criterion, last_activation = self_supervised_pretrain_multimodal(mmarray, model, temperature=params['temperature'], n_neg=params['n_neg'], is_plot_conf_matrix=is_plot_confusion_matrix, n_folds=n_folds, test_name=test_name, task_name=task_name, verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)  # use un-dimension reduced EEG data
         if task_name == TaskName.PreTrain:
-            folds_train_loss, folds_val_loss =  mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
+            folds_train_loss, folds_val_loss = mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
             print(f'{test_name} with param {params}: folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss} ')
 
             hashable_params = tuple(params.items())
             locking_performance[hashable_params] = {'folds val loss': folds_val_loss,
-                                                    'folds trian loss': folds_train_loss}
+                                                    'folds trian loss': folds_train_loss,
+                                                    'folds test loss': training_histories['loss_test']}
             total_training_histories[hashable_params] = training_histories
             models_param[hashable_params] = models
             if not os.path.exists('HT_grid_pretrain'):
@@ -205,7 +207,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
 
 
 def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int, results_path, is_pca_ica=False,
-                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, val_size = 0.1, test_size=0.1):
+                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, val_size = 0.1, test_size=0.1, batch_size=16, epochs=5000, patience=30):
     """
 
     @param grid_search_params:
@@ -250,7 +252,7 @@ def grid_search_rht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: 
             best_model_folds, best_models_from_folds, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal_ordered_batches(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix,
-                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed)
+                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed, epochs=epochs, patience=patience)
             folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
             folds_val_auc = mean_max_sublists(training_histories['auc_val'])
             print(f'{test_name} with param {params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}, ')

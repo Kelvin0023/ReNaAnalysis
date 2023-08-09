@@ -54,7 +54,7 @@ is_plot_conf_matrix = False
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
-pretrained_models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_both.p', 'rb'))
+pretrained_models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HATC_TUH_sim.p', 'rb'))
 
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
@@ -70,8 +70,8 @@ else:
 
 for pretrained_model_list in pretrained_models.values():
     for pretrained_model in pretrained_model_list:
-        model = pretrained_model.HierarchicalTransformer
-        model.adjust_model(mmarray['eeg'].array.shape[-1], mmarray['eeg'].array.shape[1], mmarray['eeg'].sampling_rate, window_duration)
+        model = pretrained_model.hierarchical_autotranscoder
+        model.adjust_model(mmarray['eeg'].array.shape[-1], mmarray['eeg'].array.shape[1], mmarray['eeg'].sampling_rate, window_duration, 2, 'multi')
         models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(mmarray, model, test_name='', task_name=TaskName.PretrainedClassifierFineTune,
                                                                                              n_folds=n_folds, lr=lr, is_plot_conf_matrix=is_plot_conf_matrix, random_seed=random_seed, l2_weight=l2_weight)
         pickle.dump(models, open(f'{result_path}/models_auditory_oddball.p', 'wb'))

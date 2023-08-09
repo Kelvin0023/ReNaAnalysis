@@ -422,7 +422,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0
             else:
                 plt.show()
     if is_plot_PSD:
-        epochs.compute_psd(fmin=1, fmax=40).plot()
+        epochs.compute_psd(fmin=1, fmax=120).plot()
 
     # get the min and max for plotting the topomap
     if is_plot_topo_map:
@@ -463,7 +463,10 @@ def preprocess_standard_eeg(raw, ica_path, montage=mne.channels.make_standard_mo
     data_channels = ch_names + proxy_eog_ch_names
     data_channel_types = ['eeg'] * len(eeg_data) + ['eog'] * 2
     info = mne.create_info(data_channels, sfreq=srate, ch_types=data_channel_types)  # with 3 additional info markers and design matrix
+    annotations = raw.annotations
+
     raw = mne.io.RawArray(exg_data, info)
+    raw.set_annotations(annotations)
     raw.set_montage(montage)
 
     raw, _ = mne.set_eeg_reference(raw, 'average', projection=False)
@@ -671,3 +674,36 @@ def validate_get_epoch_args(event_names, event_filters):
 
 def remove_value(lst, val):
     return list(filter(lambda x: x != val, lst))
+
+
+def add_annotations_to_raw(raw, new_annotations):
+    """
+    Add new annotations to an MNE Raw object.
+
+    Parameters:
+        raw (mne.io.Raw): The MNE Raw object with existing annotations.
+        new_annotations (mne.Annotations): The new annotations to add.
+
+    Returns:
+        mne.io.Raw: The MNE Raw object with both existing and new annotations.
+    """
+    old_annotations = raw.annotations
+
+    # Combine the existing and new annotations using set operations
+    all_onsets = list(old_annotations.onset) + list(new_annotations.onset)
+    all_durations = list(old_annotations.duration) + list(new_annotations.duration)
+    all_descriptions = list(old_annotations.description) + list(new_annotations.description)
+
+    # Create the new combined annotations
+    all_annotations = mne.Annotations(onset=all_onsets, duration=all_durations, description=all_descriptions)
+
+    # Set the new annotations to the raw data
+    raw.set_annotations(all_annotations)
+
+    return raw
+
+
+def is_button_after_oddball(oddball_time, button_times, response_threshold):
+
+    after_oddball_button_times = button_times[button_times > oddball_time] - oddball_time
+    return np.any(after_oddball_button_times > 0) and np.any(after_oddball_button_times < response_threshold)
