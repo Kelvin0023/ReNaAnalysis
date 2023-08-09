@@ -686,6 +686,9 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
     return x, y, event_viz_colors
 
 
+def getasdfasfasdf():
+    pass
+
 def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate_epochs=False, reject='auto',
                 eeg_resample_rate=200, is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
                 eyetracking_resample_srate=20, rebalance_method='SMOTE', subject_picks=None, subject_group_picks=None, random_seed=None, filename=None, *args, **kwargs):
@@ -733,6 +736,10 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
     elif dataset_name == 'SIM':
         x, y, metadata, event_viz_colors = get_SIM_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
+    # elif dataset_name == 'fNIRSMA':
+    #     x, y , metadata, event_viz_colors = getasdfasfasdf()
+    #     physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
+    #
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 
