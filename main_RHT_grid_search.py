@@ -53,6 +53,7 @@ grid_search_params = {
 
     # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
+    "pos_embed_mode": ['learnable'],
 
     # "output": ['single'],
     "output": ['multi'],
