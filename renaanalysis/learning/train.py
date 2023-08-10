@@ -616,8 +616,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
-            x = x if isinstance(x, list) or isinstance(x, tuple) else (x,)
-            y_pred = model(*x)
+            y_pred = model(x)
 
             y_tensor = y.to(device)
             if isinstance(criterion, nn.CrossEntropyLoss):
