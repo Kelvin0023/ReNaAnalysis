@@ -54,7 +54,7 @@ is_plot_conf_matrix = False
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
-pretrained_models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_both.p', 'rb'))
+pretrained_models = pickle.load(open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HT_TUH.p', 'rb'))
 
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):

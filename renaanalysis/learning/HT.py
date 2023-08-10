@@ -300,6 +300,7 @@ class MaskLayer(nn.Module):
             mask_t = self.make_t_mask((batch_size, Width), self.p_t, self.mask_t_span)
         if self.p_c > 0:
             mask_c = self.make_c_mask((batch_size, Height), self.p_c, self.mask_c_span)
+
         if mask_t is not None:
             x.transpose(2, 1)[mask_t] = self.t_mask_replacement
         if mask_c is not None:
@@ -655,11 +656,12 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
         self.patch_embed_dim = patch_embed_dim
         self.patch_length = int(window_duration * sampling_rate)
         self.num_windows = num_timesteps // self.patch_length
+        self.pos_embed_mode = pos_embed_mode
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
         self.HierarchicalTransformer = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, window_duration=window_duration, pool=pool,
-                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output)
+                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode)
         self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
                                     t_mask_replacement=torch.nn.Parameter(
                                         torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
@@ -792,7 +794,7 @@ class ContrastiveLoss(nn.Module):
 
         return logits.view(-1, logits.shape[-1])
 
-    def forward(self, pred_tokens, original_tokens, metric='simularity'):
+    def forward(self, pred_tokens, original_tokens, metric='similarity'):
         batch_size, token_dim, num_channels, num_windows = pred_tokens.shape
         negt_tokens = self._generate_negatives(pred_tokens)
         pred_tokens = pred_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)

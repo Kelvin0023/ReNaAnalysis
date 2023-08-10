@@ -173,7 +173,8 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     assert isinstance(model, HierarchicalTransformerContrastivePretrain) or isinstance(model, HierarchicalAutoTranscoderPretrain) or isinstance(model, HierarchicalTransformerAutoEncoderPretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
-    criterion = ReconstructionLoss()
+    # criterion = ReconstructionLoss()
+    criterion = ContrastiveLoss(temperature, n_neg)
     mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
     # X_test, _ = mmarray.get_test_set()
     test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True,

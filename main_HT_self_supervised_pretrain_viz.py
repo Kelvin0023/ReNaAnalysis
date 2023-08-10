@@ -38,8 +38,8 @@ training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{vi
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_both.p', 'rb'))
 models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_both.p', 'rb'))
 nfolds = 1
-mmarray = pickle.load(open(f'{export_data_root}/TUH_mmarray.p', 'rb'))
-x_test, y_test = mmarray.get_test_set(device='cuda:0' if torch.cuda.is_available() else 'cpu')
+mmarray = pickle.load(open(f'{export_data_root}/TUH_mmarray_filtered.p', 'rb'))
+x_test = mmarray.get_test_set(device='cuda:0' if torch.cuda.is_available() else 'cpu')
 x_test = torch.Tensor(x_test)
 is_pca_ica = 'pca' in mmarray['eeg'].data_processor.keys() or 'ica' in mmarray['eeg'].data_processor.keys()
 if is_pca_ica != viz_pca_ica:
@@ -62,6 +62,16 @@ print('\n'.join([f"{str(x)}, {y[metric]}" for x, y in locking_performance.items(
 #         if model_performance['folds test loss'][i] < best_loss:
 #             model_idx = [params, i]
 #             best_auc = model_performance['folds test auc'][i]
+
+# plot training history
+if is_plot_train_history:
+    for params, history_folds in training_histories.items():
+        params_dict = dict(params)
+        seached_params = [params_dict[key] for key in search_params]
+        for i in range(nfolds):
+            history = {'loss_train': history_folds['loss_train'][i], 'loss_val': history_folds['loss_val'][i], 'loss_test': history_folds['loss_test'][i]}
+            plot_training_loss_history(history, seached_params, i)
+
 
 # viz each layer
 if viz_sim:
@@ -207,14 +217,6 @@ if is_plot_epochs:
                discard_ratio=0.1, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)
 
 
-# plot training history
-if is_plot_train_history:
-    for params, history_folds in training_histories.items():
-        params_dict = dict(params)
-        seached_params = [params_dict[key] for key in search_params]
-        for i in range(nfolds):
-            history = {'loss_train': history_folds['loss_train'][i], 'loss_val': history_folds['loss_val'][i], 'loss_test': history_folds['loss_test'][i]}
-            plot_training_loss_history(history, seached_params, i)
 
 
 # plot ROC curve for each stored model

@@ -39,7 +39,7 @@ training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{vi
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_TUH.p', 'rb'))
 models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_TUH.p', 'rb'))
 nfolds = 1
-mmarray = pickle.load(open(f'{export_data_root}/TUH_mmarray.p', 'rb'))
+mmarray = pickle.load(open(f'{export_data_root}/TUH_mmarray_filtered.p', 'rb'))
 test_dataloader = mmarray.get_test_dataloader(batch_size=32, device='cuda:0' if torch.cuda.is_available() else 'cpu', return_metainfo=True)
 is_pca_ica = 'pca' in mmarray['eeg'].data_processor.keys() or 'ica' in mmarray['eeg'].data_processor.keys()
 if is_pca_ica != viz_pca_ica:
@@ -64,13 +64,24 @@ print('\n'.join([f"{str(x)}, {y[metric]}" for x, y in locking_performance.items(
 #             best_auc = model_performance['folds test auc'][i]
 viz_epoch = True
 
+
+# plot training history
+if is_plot_train_history:
+    for params, history_folds in training_histories.items():
+        params_dict = dict(params)
+        seached_params = [params_dict[key] for key in search_params]
+        for i in range(nfolds):
+            history = {'loss_train': history_folds['loss_train'][i], 'loss_val': history_folds['loss_val'][i], 'loss_test': history_folds['loss_test'][i]}
+            plot_training_loss_history(history, seached_params, i)
+
+
 # viz each layer
 if viz_sim:
     for params, model_list in models.items():
         params = dict(params)
         for i in range(len(model_list)):
             for x in test_dataloader:
-                model_list[i].mask_layer = MaskLayer(p_t=0.8, p_c=0.8, c_span=False, mask_t_span=1, mask_c_span=1,
+                model_list[i].mask_layer = MaskLayer(p_t=0.7, p_c=0.7, c_span=False, mask_t_span=1, mask_c_span=1,
                                     t_mask_replacement=torch.nn.Parameter(
                                         torch.zeros(21, 128), requires_grad=True).to('cuda:0'),
                                     c_mask_replacement=torch.nn.Parameter(
@@ -103,21 +114,22 @@ if viz_sim:
 
                     plt.title('{0} - Channel {1}'.format('Pretrain', ch))
                     plt.show()
-                epochs.compute_psd(fmin=1, fmax=120).plot()
                 for nsample, this_pred_series in enumerate(pred_series):
                     this_mask_c = repeat(mask_c[nsample][:, None], 'c 1 -> c t', t=mask_t.shape[-1])
                     this_mask_t = repeat(mask_t[nsample][None, :], '1 t -> c t', c=mask_c.shape[-1])
 
                     this_mask = np.logical_or(this_mask_c, this_mask_t)
-                    fig, axs = plt.subplots(1, 2, figsize=(15, 5))
+                    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+                    axs[1, 0].imshow(this_mask)
+                    axs[1, 1].imshow(this_mask)
                     for ch_id, time_serie in enumerate(this_pred_series):
-                        axs[0].plot(time_serie.cpu().detach().numpy(), label=f'channel {ch_id}')
-                        axs[0].set_title(f'predicted sample {nsample}')
-                        axs[0].legend()
+                        axs[0, 0].plot(time_serie.cpu().detach().numpy(), label=f'channel {ch_id}')
+                        axs[0, 0].set_title(f'predicted sample {nsample}')
+                        axs[0, 0].legend()
                         # plt.show()
-                        axs[1].plot(x[0][nsample][ch_id].cpu().detach().numpy(), label=f'channel {ch_id}')
-                        axs[1].set_title(f'original sample {nsample}')
-                        axs[1].legend()
+                        axs[0, 1].plot(x[0][nsample][ch_id].cpu().detach().numpy(), label=f'channel {ch_id}')
+                        axs[0, 1].set_title(f'original sample {nsample}')
+                        axs[0, 1].legend()
                     fig.show()
                     if nsample > 10:
                         break
@@ -164,15 +176,6 @@ if is_plot_epochs:
                eeg_montage, num_timesteps, num_channels, note='', load_saved_rollout=False, head_fusion='max',
                discard_ratio=0.1, batch_size=64, is_pca_ica=is_pca_ica, pca=pca, ica=ica)
 
-
-# plot training history
-if is_plot_train_history:
-    for params, history_folds in training_histories.items():
-        params_dict = dict(params)
-        seached_params = [params_dict[key] for key in search_params]
-        for i in range(nfolds):
-            history = {'loss_train': history_folds['loss_train'][i], 'loss_val': history_folds['loss_val'][i], 'loss_test': history_folds['loss_test'][i]}
-            plot_training_loss_history(history, seached_params, i)
 
 
 # plot ROC curve for each stored model

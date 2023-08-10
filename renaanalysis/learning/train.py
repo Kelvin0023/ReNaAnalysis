@@ -910,9 +910,10 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
 
         with context_manager:
             x = x if isinstance(x, list) or isinstance(x, tuple) else (x,)
-            pred_series, encoded_tokens, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix = model(*x)
-            # y_tensor = y.to(device)
-            loss = criterion(x[0][:, :, :1000], pred_series)
+            # pred_series, encoded_tokens, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix = model(*x)
+            pred_series, original_x, mask_t, mask_c = model(*x)
+            # loss = criterion(x[0], pred_series)
+            loss = criterion(pred_series, original_x, metric='similarity')
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
