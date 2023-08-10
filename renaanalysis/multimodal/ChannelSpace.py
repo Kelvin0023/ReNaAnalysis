@@ -1,13 +1,11 @@
 
 import numpy as np
-from matplotlib import pyplot as plt
 
-from renaanalysis.multimodal.multimodal import PhysioArray
 from scipy.spatial.distance import pdist
 
 
 
-def create_discretize_channel_space(parray: PhysioArray):
+def create_discretize_channel_space(parray):
     assert parray.physio_type == 'eeg'
     assert 'channel_positions' in parray.meta_info.keys()
     channel_locations = parray.meta_info['channel_positions']

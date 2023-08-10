@@ -73,8 +73,11 @@ for param_combo, test_auc in params_test_auc:
     print(f"{param_combo}: {test_auc}")
 
 # prepare the model to test
-criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(best_model, device=device, include_metainfo=True)
-test_data = mmarray.get_test_set(device=device, return_metainfo=True, use_ordered=use_ordered)
+criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(best_model, device=device)
+if use_ordered:
+    test_data = mmarray.get_ordered_test_set(device=device, convert_to_tensor=True)
+else:
+    test_data = mmarray.get_test_set(device=device, convert_to_tensor=True)
 x_eeg_test, y_test = test_data[0], test_data[-1]
 
 is_pca_ica = 'pca' in mmarray['eeg'].data_processor.keys() and 'ica' in mmarray['eeg'].data_processor.keys()
@@ -102,8 +105,8 @@ if plot_ht_viz:
 
     ht_eeg_viz_multimodal_batch(best_model, mmarray, attention_layer_class, device, rollout_data_root,
            note='', load_saved_rollout=False, head_fusion='max',
-           discard_ratio=0.9,is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=128, use_ordered=use_ordered,
-                                eeg_montage=montage, topo_map='forward', roll_topo_map_samples='random', picks=eeg_viz_picks, cls_colors=mmarray.event_viz_colors)
+           discard_ratio=0.9,is_pca_ica=is_pca_ica, pca=pca, ica=ica, batch_size=128, use_ordered=use_ordered,
+                                eeg_montage=montage, topo_map='forward', roll_topo_map_samples='all', picks=eeg_viz_picks, cls_colors=mmarray.event_viz_colors)
 
 # visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
 # # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-block_margin = 2.
+block_margin = 0.01
 block_marker = 3
 n_blocks = 20
 

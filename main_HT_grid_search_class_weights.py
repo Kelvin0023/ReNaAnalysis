@@ -94,6 +94,9 @@ grid_search_params = {
     "lr": [1e-4],
     "l2_weight": [1e-5],
 
+    "pos_embed_mode": ['learnable'],
+    # "pos_embed_mode": ['sinusoidal'],
+
     # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
@@ -117,8 +120,8 @@ start_time = time.time()  # record the start time of the analysis
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
     mmarray = get_dataset(dataset_name, epochs_root=export_data_root, dataset_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs, subject_picks=subject_pick, subject_group_picks=subject_group_picks, random_seed=random_seed,
-                          rebalance_method='class_weight')
-    mmarray.save(mmarray_path)
+                          rebalance_method='class_weight', filename=mmarray_path)
+    mmarray.save_to_path(mmarray_path)
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
 

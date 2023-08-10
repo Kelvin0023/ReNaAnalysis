@@ -36,9 +36,13 @@ training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{vi
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 
-criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(list(models.values())[0][0], device='cuda:0' if torch.cuda.is_available() else 'cpu', include_metainfo=True)
+criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(list(models.values())[0][0], device='cuda:0' if torch.cuda.is_available() else 'cpu')
 # x_test, y_test = mmarray.get_test_set(device=device, return_metainfo=True, shuffle_within_batches=True)
-test_data = mmarray.get_test_set(device=device, return_metainfo=True, use_ordered=use_ordered)
+if use_ordered:
+    test_data = mmarray.get_ordered_test_set(device=device, convert_to_tensor=True)
+else:
+    test_data = mmarray.get_test_set(device=device, convert_to_tensor=True)
+
 x_eeg_test, y_test = test_data[0], test_data[-1]
 # get the un-pca-ica version of the data
 x_test_original = mmarray['eeg'].array[mmarray.get_ordered_test_indices() if use_ordered else mmarray.test_indices]
@@ -94,7 +98,7 @@ if is_plot_epochs:
         t_start = time.perf_counter()
         ht_eeg_viz_multimodal_batch(best_model, mmarray, Attention, device, rollout_data_root,
                               note='', load_saved_rollout=False, head_fusion=head_fusion, cls_colors=mmarray.event_viz_colors,
-                              discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True, batch_size=256, use_ordered=use_ordered)
+                              discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, batch_size=256, use_ordered=use_ordered)
         print("ht viz batched took {} seconds".format(time.perf_counter() - t_start))
     else:
         visualize_eeg_samples(x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
