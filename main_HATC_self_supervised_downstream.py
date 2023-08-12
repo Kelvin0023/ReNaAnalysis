@@ -37,7 +37,7 @@ task_name = 'oddball'
 data_root = 'D:/Dataset/auditory_oddball'
 reject = 'auto'
 model_path = 'renaanalysis/learning/saved_models/oddball-pretrainbendr_lr_0.0001_dimhead_128_feeddim_128_numheads_8_patchdim_128_fold_0_pca_False.pt'
-mmarray_fn = f'{dataset_name}_mmarray.p'
+mmarray_fn = f'{dataset_name}_mmarray_class_weight.p'
 
 
 # training parameters ######################################################################################

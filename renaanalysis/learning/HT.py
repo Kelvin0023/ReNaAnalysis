@@ -11,6 +11,8 @@ import torch.nn.utils.rnn as rnn_utils
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
+from renaanalysis.params.params import verbose
+
 
 class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, embed_dim):
@@ -334,6 +336,9 @@ class HierarchicalTransformer(nn.Module):
         self.window_duration = window_duration
         self.patch_embed_dim = patch_embed_dim
         self.pos_embed_mode = pos_embed_mode
+        self.num_timesteps = num_timesteps
+        self.output = output
+        self.num_classes = num_classes
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
@@ -377,7 +382,34 @@ class HierarchicalTransformer(nn.Module):
                 nn.LayerNorm(patch_embed_dim),
                 nn.Linear(patch_embed_dim, num_classes))
 
-    def adjust_model(self, num_timesteps, num_channels, sampling_rate, window_duration, plot=False):
+    def disable_classification_parameters(self):
+
+        for param in self.mlp_head.parameters():
+            param.requires_grad = False
+        if verbose is not None:
+            print('mlp_head parameters disabled')
+        self.cls_token.requires_grad = False
+        if verbose is not None:
+            print('cls_token parameters disabled')
+        if self.pos_embed_mode == 'sinusoidal':
+            self.learnable_pos_embedding.requires_grad = False
+            if verbose is not None:
+                print('learnable positional embedding disabled')
+
+    def enable_classification_parameters(self):
+        for param in self.mlp_head.parameters():
+            param.requires_grad = True
+        if verbose is not None:
+            print('mlp_head parameters enabled')
+        self.cls_token.requires_grad = True
+        if verbose is not None:
+            print('cls_token parameters enabled')
+        if self.pos_embed_mode == 'learnable':
+            self.learnable_pos_embedding.requires_grad = True
+            if verbose is not None:
+                print('learnable positional embedding enabled')
+
+    def adjust_model(self, num_timesteps, num_channels, sampling_rate, window_duration, num_classes, output, plot=False):
         self.window_duration = window_duration
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
@@ -387,8 +419,10 @@ class HierarchicalTransformer(nn.Module):
 
         if self.pos_embed_mode == 'learnable':
             learnable_pos_embedding = self.learnable_pos_embedding.unsqueeze(0)
-            self.learnable_pos_embedding = F.interpolate(self.learnable_pos_embedding, size=(self.num_patches+1, self.patch_embed_dim), mode='bilinear',
+            self.learnable_pos_embedding = F.interpolate(learnable_pos_embedding, size=(self.num_patches+1, self.patch_embed_dim), mode='bilinear',
             align_corners=False).squeeze(0)
+        else:
+            self.learnable_pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.patch_embed_dim), requires_grad=False)
 
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
         patch_embed_projection = self.to_patch_embedding[1].weight.data
@@ -408,24 +442,28 @@ class HierarchicalTransformer(nn.Module):
         if plot:
             fig.show()
 
+        # reinitialize classification parameters
+        self.cls_token = nn.Parameter(torch.randn(1, 1, self.patch_embed_dim))
+        if output == 'single':
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(self.patch_embed_dim),
+                nn.Linear(self.patch_embed_dim, 1))
+        else:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(self.patch_embed_dim),
+                nn.Linear(self.patch_embed_dim, num_classes))
+
+
     def forward(self, x_eeg, *args, **kwargs):
         x = self.encode(x_eeg, *args, **kwargs)
         return self.mlp_head(x)
 
     def encode(self, x, *args, **kwargs):
         x_eeg = x['eeg']
-
-        x = self.to_patch_embedding(x_eeg)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-
-        b, n, _ = x.shape
-
-        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
+        b, nchannel, _ = x_eeg.shape
 
         if self.pos_embed_mode == 'sinusoidal':
             channel_pos = x['channel_voxel_indices'] # batch_size x num_channels
-            channel_pos = args[-1]  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
@@ -442,6 +480,15 @@ class HierarchicalTransformer(nn.Module):
             pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
         else:
             raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
+
+        x = self.to_patch_embedding(x_eeg)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        n = x.shape[1]
+
+        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
+
 
         x += pos_embed
         x = self.dropout(x)
@@ -678,19 +725,26 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
                                         torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
                                     c_mask_replacement=torch.nn.Parameter(
                                         torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True))
-    def forward(self, x_eeg, *args, **kwargs):
-        x = self.HierarchicalTransformer.to_patch_embedding(x_eeg)
-        x, original_x, mask_t, mask_c = self.mask_layer(x)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+        self.print_forward = True
 
-        b, n, _ = x.shape
+    def disable_classification_parameters(self):
+        self.HierarchicalTransformer.disable_classification_parameters()
+
+    def forward(self, x, *args, **kwargs):
+        if verbose is not None and self.print_forward:
+            print(f'\nPretrain model input type: {type(x)}, containing: {list(x.keys())}')
+        data = self.HierarchicalTransformer.to_patch_embedding(x['eeg'])
+        data, original_data, mask_t, mask_c = self.mask_layer(data)
+        data = data.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        b, n, _ = data.shape
 
         cls_tokens = repeat(self.HierarchicalTransformer.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
+        data = torch.cat((cls_tokens, data), dim=1)
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[-1]  # batch_size x num_channels
+            channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
-            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=data.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
             time_pos_embed = self.HierarchicalTransformer.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
             channel_pos_embed = self.HierarchicalTransformer.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
@@ -703,16 +757,19 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
 
         elif self.pos_embed_mode == 'learnable':
             pos_embed = self.HierarchicalTransformer.learnable_pos_embedding[:, :(n + 1)]
-        x += pos_embed
-        x = self.HierarchicalTransformer.dropout(x)
+        data += pos_embed
+        data = self.HierarchicalTransformer.dropout(data)
 
-        x, att_matrix = self.HierarchicalTransformer.transformer(x)
+        data, att_matrix = self.HierarchicalTransformer.transformer(data)
         # att_matrix = att_matrix[:, :, 1:, 1:]
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
         # att_matrix = torch.sum(att_matrix, dim=2)
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
-        x = self.HierarchicalTransformer.to_latent(x[:, 1:].transpose(1, 2).view(original_x.shape))  # exclude cls
-        return x, original_x, mask_t, mask_c
+        data = self.HierarchicalTransformer.to_latent(data[:, 1:].transpose(1, 2).view(original_data.shape))  # exclude cls
+
+        self.print_forward = False # only print once
+
+        return data, original_data, mask_t, mask_c
 
     def prepare_data(self, x):
         return x

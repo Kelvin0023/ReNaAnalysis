@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 from renaanalysis.learning.HT import PreNorm, Attention, SinusoidalPositionalEmbedding, MaskLayer
+from renaanalysis.params.params import verbose
 
 
 class FeedForwardTrans(nn.Module):
@@ -123,6 +124,33 @@ class HierarchicalAutoTranscoder(nn.Module):
                 nn.LayerNorm(patch_embed_dim * (2 ** depth)),
                 nn.Linear(patch_embed_dim * (2 ** depth), num_classes))
 
+    def disable_classification_parameters(self):
+
+        for param in self.mlp_head.parameters():
+            param.requires_grad = False
+        if verbose is not None:
+            print('mlp_head parameters disabled')
+        self.cls_token.requires_grad = False
+        if verbose is not None:
+            print('cls_token parameters disabled')
+        if self.pos_embed_mode == 'sinusoidal':
+            self.learnable_pos_embedding.requires_grad = False
+            if verbose is not None:
+                print('learnable positional embedding disabled')
+
+    def enable_classification_parameters(self):
+        for param in self.mlp_head.parameters():
+            param.requires_grad = True
+        if verbose is not None:
+            print('mlp_head parameters enabled')
+        self.cls_token.requires_grad = True
+        if verbose is not None:
+            print('cls_token parameters enabled')
+        if self.pos_embed_mode == 'learnable':
+            self.learnable_pos_embedding.requires_grad = True
+            if verbose is not None:
+                print('learnable positional embedding enabled')
+
     def adjust_model(self, num_timesteps, num_channels, sampling_rate, window_duration, num_classes, output, plot=False):
         self.window_duration = window_duration
         self.num_channels = num_channels
@@ -135,15 +163,6 @@ class HierarchicalAutoTranscoder(nn.Module):
             learnable_pos_embedding = self.learnable_pos_embedding.unsqueeze(0)
             self.learnable_pos_embedding = F.interpolate(self.learnable_pos_embedding, size=(self.num_patches+1, self.patch_embed_dim), mode='bilinear',
             align_corners=False).squeeze(0)
-
-        if output == 'single':
-            self.mlp_head = nn.Sequential(
-                nn.LayerNorm(self.patch_embed_dim),
-                nn.Linear(self.patch_embed_dim*(2**self.depth), 1))
-        else:
-            self.mlp_head = nn.Sequential(
-                nn.LayerNorm(self.patch_embed_dim * (2 ** self.depth)),
-                nn.Linear(self.patch_embed_dim * (2 ** self.depth), num_classes))
 
 
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
@@ -163,8 +182,19 @@ class HierarchicalAutoTranscoder(nn.Module):
         if plot:
             fig.show()
 
-    def forward(self, x, *args, **kwargs):
-        x = self.to_patch_embedding(x)
+        # reinitialize classification parameters
+        self.cls_token = nn.Parameter(torch.randn(1, 1, self.patch_embed_dim))
+        if output == 'single':
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(self.patch_embed_dim),
+                nn.Linear(self.patch_embed_dim*(2**self.depth), 1))
+        else:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(self.patch_embed_dim * (2 ** self.depth)),
+                nn.Linear(self.patch_embed_dim * (2 ** self.depth), num_classes))
+
+    def forward(self, x_dict, *args, **kwargs):
+        x = self.to_patch_embedding(x_dict['eeg'])
 
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
@@ -174,7 +204,7 @@ class HierarchicalAutoTranscoder(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[-1]  # batch_size x num_channels
+            channel_pos = x_dict['channel_voxel_indices']  # batch_size x num_channels
             assert channel_pos.shape[
                        1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x.device, dtype=torch.long) for a in
@@ -296,8 +326,11 @@ class HierarchicalAutoTranscoderPretrain(nn.Module):
         #     nn.Linear(self.patch_length, patch_embed_dim),
         # )
 
-    def forward(self, x, *args, **kwargs):
-        x = self.hierarchical_autotranscoder.to_patch_embedding(x)
+    def disable_classification_parameters(self):
+        self.hierarchical_autotranscoder.disable_classification_parameters()
+
+    def forward(self, x_dict, *args, **kwargs):
+        x = self.hierarchical_autotranscoder.to_patch_embedding(x_dict['eeg'])
         x, _, mask_t, mask_c = self.mask_layer(x)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
         b, n, _ = x.shape
@@ -306,7 +339,7 @@ class HierarchicalAutoTranscoderPretrain(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.hierarchical_autotranscoder.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[-1]  # batch_size x num_channels
+            channel_pos = x_dict['channel_voxel_indices']  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
@@ -327,13 +360,13 @@ class HierarchicalAutoTranscoderPretrain(nn.Module):
         x += pos_embed
         x = self.hierarchical_autotranscoder.dropout(x)
 
-        x_encoded, encoder_att_matrix = self.hierarchical_autotranscoder.encoder(x)
-        x, decoder_att_matrix = self.hierarchical_autotranscoder.decoder(x_encoded)
+        x_encoded, _ = self.hierarchical_autotranscoder.encoder(x)
+        x, _ = self.hierarchical_autotranscoder.decoder(x_encoded)
         # x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
         x = rearrange(x[:, 1:], 'b nt ps -> (b nt) ps')
         x = self.hierarchical_autotranscoder.to_time_series(x)
         x = rearrange(x, '(b c w) ps -> b c (w ps)', b=b, c=self.num_channels, w=self.num_windows)
-        return x, x_encoded, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix
+        return x, x_encoded, mask_t, mask_c
 
     def prepare_data(self, x):
         return x

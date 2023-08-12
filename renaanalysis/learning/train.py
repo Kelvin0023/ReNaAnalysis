@@ -3,6 +3,7 @@ import copy
 import math
 import os
 import pickle
+import warnings
 
 import mne
 import numpy as np
@@ -638,6 +639,16 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         loss = classification_loss + l2_penalty
         if mode == 'train':
             loss.backward()
+            if verbose is not None:
+                for param_name, params in model.named_parameters():
+                    if model.pos_embed_mode == 'sinusoidal' and param_name == 'learnable_pos_embedding':
+                        continue
+                    if model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
+                        continue
+                    if torch.abs(params).median() <= 1e-10:
+                        warnings.warn(f'median value of parameter {param_name} is smaller than 1e-10')
+                    if torch.abs(params.grad).median() <= 1e-30:
+                        warnings.warn(f'median grad value of parameter {param_name} is smaller than 1e-10')
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
             nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
             optimizer.step()
@@ -925,10 +936,10 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
 
         with context_manager:
             x = x if isinstance(x, list) or isinstance(x, tuple) else (x,)
-            # pred_series, encoded_tokens, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix = model(*x)
-            pred_series, original_x, mask_t, mask_c = model(*x)
-            # loss = criterion(x[0], pred_series)
-            loss = criterion(pred_series, original_x, metric='similarity')
+            pred_series, encoded_tokens, mask_t, mask_c = model(*x)
+            # pred_series, original_x, mask_t, mask_c = model(*x)
+            loss = criterion(x[0]['eeg'], pred_series)
+            # loss = criterion(pred_series, original_x, metric='similarity')
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])

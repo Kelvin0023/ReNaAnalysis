@@ -532,7 +532,7 @@ class MultiModalArrays:
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size
             if n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
+                warnings.warn(f"Subject {subject} run {run} has fewer samples than batch size. Ignored.")
                 continue
             n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
             sample_indices = np.concatenate([sample_indices, [None] * n_add])

@@ -5,6 +5,7 @@ from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from torch import nn
 
+from renaanalysis.learning.HT import MaskLayer
 from renaanalysis.models.model_utils import init_weight
 
 
@@ -394,7 +395,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
 
         self.mem_len = (self.num_channels * self.num_windows * mem_len + 1 ) if mem_len != 0 else 0  # +1 for cls token
-        self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=attn_dropout, dropout=dropout, mem_len=self.mem_len)
+        self.transformer_encoder = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=attn_dropout, dropout=dropout, mem_len=self.mem_len)
+        # self.decoder =
 
         self.pool = pool
         self.to_latent = nn.Identity()
@@ -512,7 +514,7 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformerAutoEncoderPretrain(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1, p_t=0.7, p_c=0.7):
         """
 
         # a token is a time slice of data on a single channel
@@ -557,6 +559,11 @@ class RecurrentHierarchicalTransformerAutoEncoderPretrain(nn.Module):
 
         self.pool = pool
         self.to_latent = nn.Identity()
+        self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
+                                    t_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
+                                    c_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True))
 
         if output == 'single':
             self.mlp_head = nn.Sequential(

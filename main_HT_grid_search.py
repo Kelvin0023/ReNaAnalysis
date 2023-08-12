@@ -91,13 +91,13 @@ grid_search_params = {
 # }
 
 grid_search_params = {
-    "depth": [4],
+    "depth": [2],
     "num_heads": [8],
     "pool": ['cls'],
     "feedforward_mlp_dim": [32],
 
     # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [128],
+    "patch_embed_dim": [64],
 
     # "pos_embed_mode": ['learnable'],
     "pos_embed_mode": ['sinusoidal'],

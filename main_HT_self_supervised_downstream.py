@@ -37,7 +37,7 @@ task_name = 'oddball'
 data_root = 'D:/Dataset/auditory_oddball'
 reject = 'auto'
 model_path = 'renaanalysis/learning/saved_models/oddball-pretrainbendr_lr_0.0001_dimhead_128_feeddim_128_numheads_8_patchdim_128_fold_0_pca_False.pt'
-mmarray_fn = f'{dataset_name}_mmarray.p'
+mmarray_fn = f'{dataset_name}_mmarray_class_weight.p'
 
 
 # training parameters ######################################################################################
@@ -71,7 +71,7 @@ else:
 for pretrained_model_list in pretrained_models.values():
     for pretrained_model in pretrained_model_list:
         model = pretrained_model.HierarchicalTransformer
-        model.adjust_model(mmarray['eeg'].array.shape[-1], mmarray['eeg'].array.shape[1], mmarray['eeg'].sampling_rate, window_duration)
+        model.adjust_model(mmarray['eeg'].array.shape[-1], mmarray['eeg'].array.shape[1], mmarray['eeg'].sampling_rate, window_duration, 2, 'multi')
         models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(mmarray, model, test_name='', task_name=TaskName.PretrainedClassifierFineTune,
                                                                                              n_folds=n_folds, lr=lr, is_plot_conf_matrix=is_plot_conf_matrix, random_seed=random_seed, l2_weight=l2_weight)
         pickle.dump(models, open(f'{result_path}/models_auditory_oddball.p', 'wb'))

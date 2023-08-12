@@ -155,7 +155,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
 
 def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=TaskName.PreTrain, n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6,
                             lr_scheduler_type='exponential', temperature=1, n_neg=20, test_size=0.1, val_size=0.1, is_plot_conf_matrix=False,
-                            plot_histories=True, random_seed=None):
+                            plot_histories=True, random_seed=None, use_ordered=False):
 
     """
 
@@ -176,12 +176,20 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     assert isinstance(model, HierarchicalTransformerContrastivePretrain) or isinstance(model, HierarchicalAutoTranscoderPretrain) or isinstance(model, HierarchicalTransformerAutoEncoderPretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
-    # criterion = ReconstructionLoss()
-    criterion = ContrastiveLoss(temperature, n_neg)
-    mmarray.train_test_split(test_size=test_size, random_seed=random_seed)
-    # X_test, _ = mmarray.get_test_set()
-    test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=True, return_metainfo=True,
-                                                  device=device)
+    if isinstance(model, HierarchicalTransformerContrastivePretrain):
+        criterion = ContrastiveLoss(temperature, n_neg)
+    else:
+        criterion = ReconstructionLoss()
+
+    if use_ordered:
+        mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size,
+                                                               test_size=0.1, random_seed=random_seed)
+        test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, shuffle_within_batches=True)
+        train_val_func = mmarray.get_train_val_ordered_batch_iterator_fold
+    else:
+        mmarray.test_train_val_split(n_folds, test_size=test_size, val_size=val_size, random_seed=random_seed)
+        test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, device=device)
+        train_val_func = mmarray.get_dataloader_fold
 
     last_activation = None
 
@@ -191,12 +199,11 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
 
     model_copy = None
     test_loss = []
-    mmarray.training_val_split(n_folds, val_size=val_size, random_seed=random_seed)
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
 
-        train_dataloader, val_dataloader = mmarray.get_dataloader_fold(f_index, batch_size=batch_size, is_rebalance_training=False, random_seed=random_seed, return_metainfo=True, device=device, task_name=task_name)
+        train_dataloader, val_dataloader = train_val_func(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=True)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)

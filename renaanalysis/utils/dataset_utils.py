@@ -734,7 +734,7 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         x_dict, y, metadata_dict, event_viz_colors = get_TUHG_samples(dataset_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=250, subject_picks=subject_picks, subject_group_picks=subject_group_picks, *args, **kwargs)
         for ch_names, x in x_dict[21].items():
             metadata = metadata_dict[21][ch_names]
-            physio_arrays = [PhysioArray(x, metadata, sampling_rate=250, physio_type=eeg_name, dataset_name=dataset_name, ch_names=eval(next(iter(x_dict[21].keys()))))]
+            physio_arrays = [PhysioArray(x, metadata, sampling_rate=250, physio_type=eeg_name, dataset_name=dataset_name, info={'ch_names': eval(next(iter(x_dict[21].keys())))})]
     elif dataset_name == 'BCICIVA':
         x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
