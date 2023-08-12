@@ -559,11 +559,12 @@ class RecurrentHierarchicalTransformerAutoEncoderPretrain(nn.Module):
 
         self.pool = pool
         self.to_latent = nn.Identity()
-        self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
+        self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=1, mask_c_span=1,
                                     t_mask_replacement=torch.nn.Parameter(
                                         torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
                                     c_mask_replacement=torch.nn.Parameter(
-                                        torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True))
+                                        torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True),
+                                    is_constant_size=True)
 
         if output == 'single':
             self.mlp_head = nn.Sequential(
@@ -589,17 +590,17 @@ class RecurrentHierarchicalTransformerAutoEncoderPretrain(nn.Module):
         x = self.encode(x_eeg, *args, **kwargs)
         return self.mlp_head(x)
 
-    def encode(self, x_eeg, *args, **kwargs):
-        b, nchannel, _ = x_eeg.shape
-
+    def encode(self, x, *args, **kwargs):
         # get discretized time for each token
-        discretized_start_times = args[2]  // self.window_duration
-        mem_timesteps = int(self.transformer.mems[0][0].size(1) / self.num_channels) if (self.transformer.mems is not None and torch.numel(self.transformer.mems[0][0]) != 0) else 0
+        discretized_start_times = x['epoch'] // self.window_duration
+        mem_timesteps = int(self.transformer.mems[0][0].size(1) / self.num_channels) if (
+                    self.transformer.mems is not None and torch.numel(self.transformer.mems[0][0]) != 0) else 0
         mem_num_epochs = mem_timesteps // self.num_windows
         tlen = mem_timesteps + self.num_windows
         # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
         # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
-        time_pos = torch.stack([torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
+        time_pos = torch.stack([torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long) for a in
+                                discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
 
         # compute channel positions that are voxel discretized
         channel_pos = args[4]  # batch_size x num_channels
@@ -611,15 +612,20 @@ class RecurrentHierarchicalTransformerAutoEncoderPretrain(nn.Module):
         # each sample in a batch must have the same participant embedding
         time_pos_embed = self.pos_embedding(time_pos)
         channel_pos_embed = self.pos_embedding(channel_pos)
-        participant_pos_embed = self.pos_embedding(participant_pos)  # no need to repeat because every token in the same sample has the same participant embedding
+        participant_pos_embed = self.pos_embedding(
+            participant_pos)  # no need to repeat because every token in the same sample has the same participant embedding
 
         # viz_time_positional_embedding(time_pos_embed)  # time embedding differs in batch
         # viz_time_positional_embedding(channel_pos_embed)  # time embedding differs in batch
 
         # prepare the positional features that are different among tokens in the same sample
         time_pos_embed = time_pos_embed.unsqueeze(1).repeat(1, nchannel, 1, 1).reshape(b, -1, self.patch_embed_dim)
-        channel_pos_embed = channel_pos_embed.unsqueeze(2).repeat(1, 1, self.num_windows, 1).reshape(b, -1, self.patch_embed_dim)
+        channel_pos_embed = channel_pos_embed.unsqueeze(2).repeat(1, 1, self.num_windows, 1).reshape(b, -1,
+                                                                                                     self.patch_embed_dim)
         participant_pos_embed = repeat(participant_pos_embed, 'b 1 d-> b n d', n=self.num_patches)
+
+        b, nchannel, _ = x_eeg.shape
+
 
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC

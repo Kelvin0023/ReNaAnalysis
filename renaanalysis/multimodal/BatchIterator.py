@@ -78,3 +78,13 @@ class OrderedBatchIterator:
         #     return batch, labels
 
         return self.dataset[this_batch_sample_indices]
+
+    def check_correctness(self):
+        '''
+        Check the correctness of the batch iterator.
+        1. Check the batch is ordered.
+        2. Check training, validation and test set do not overlap.
+        This should be called before the training starts if verbose is True.
+        @return:
+        '''
+        pass

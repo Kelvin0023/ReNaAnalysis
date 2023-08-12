@@ -645,7 +645,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
                         continue
                     if model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
                         continue
-                    if torch.abs(params).median() <= 1e-10:
+                    if torch.abs(params).median() <= 1e-15:
                         warnings.warn(f'median value of parameter {param_name} is smaller than 1e-10')
                     if torch.abs(params.grad).median() <= 1e-30:
                         warnings.warn(f'median grad value of parameter {param_name} is smaller than 1e-10')

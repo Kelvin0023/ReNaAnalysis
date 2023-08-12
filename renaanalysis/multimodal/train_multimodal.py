@@ -9,6 +9,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, SimularityLoss, ContrastiveLoss, \
     ReconstructionLoss, HierarchicalTransformerAutoEncoderPretrain
 from renaanalysis.learning.HATC import HierarchicalAutoTranscoderPretrain
+from renaanalysis.learning.RHT import RecurrentHierarchicalTransformerAutoEncoderPretrain
 from renaanalysis.learning.train import _run_one_epoch_classification, eval_test, _run_one_epoch_self_sup, \
     _run_one_epoch_classification_augmented
 from renaanalysis.params.params import batch_size, epochs, patience, TaskName
@@ -175,7 +176,7 @@ def self_supervised_pretrain_multimodal(mmarray, model, test_name="", task_name=
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    assert isinstance(model, HierarchicalTransformerContrastivePretrain) or isinstance(model, HierarchicalAutoTranscoderPretrain) or isinstance(model, HierarchicalTransformerAutoEncoderPretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
+    assert isinstance(model, HierarchicalTransformerContrastivePretrain) or isinstance(model, HierarchicalAutoTranscoderPretrain) or isinstance(model, HierarchicalTransformerAutoEncoderPretrain) or isinstance(model, RecurrentHierarchicalTransformerAutoEncoderPretrain), "self_supervised_pretrain_multimodal: model must be a HierarchicalTransformerContrastivePretrain instance"
     if isinstance(model, HierarchicalTransformerContrastivePretrain):
         criterion = ContrastiveLoss(temperature, n_neg)
     else:

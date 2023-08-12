@@ -207,7 +207,7 @@ class MultiModalArrays:
         else:
             skf = ShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
             for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
-                self.training_val_split_indices.append((self.train_indices[train], self.train_indices[val]))
+                self.training_val_split_indices.append((np.array(self.train_indices)[train], np.array(self.train_indices)[val]))
         self.save()
 
 
@@ -584,16 +584,21 @@ class MultiModalArrays:
         """
         assert self.val_batch_sample_indices is not None and self.train_batch_sample_indices is not None, \
             "Please call training_val_test_split_ordered_by_subject_run() first."
-
-        labels_encoded = self._encoder(self.labels_array)
-
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
-            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
+        if self.labels_array is not None:
+            labels_encoded = self._encoder(self.labels_array)
+            return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
+                OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
+        else:
+            return OrderedBatchIterator(self.physio_arrays, None, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
+                OrderedBatchIterator(self.physio_arrays, None, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
 
     def get_test_ordered_batch_iterator(self, device, encode_y=True, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
-        labels = self._encoder(self.labels_array) if encode_y else self.labels_array
-        return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
+        if self.labels_array is not None:
+            labels = self._encoder(self.labels_array) if encode_y else self.labels_array
+            return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
+        else:
+            return OrderedBatchIterator(self.physio_arrays, None, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)
@@ -614,6 +619,16 @@ class MultiModalArrays:
         if self.labels_array is not None:
             labels_encoded = self._encoder(self.labels_array)
         return labels_encoded
+
+    def check_correctness(self):
+        '''
+        check if the mmarray is correct.
+        1. Check the batch is ordered.
+        2. Check training, validation and test set do not overlap.
+        This should be called before training start if verbose is set to True.
+        @return:
+        '''
+        pass
 
 def load_mmarray(path):
     """

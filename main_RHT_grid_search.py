@@ -62,10 +62,10 @@ grid_search_params = {
 
     'temperature' : [0.1],
     'n_neg': [1],
-    'p_t': [0.1],
-    'p_c': [0.25],
+    'p_t': [0.7],
+    'p_c': [0.7],
     'mask_t_span': [1],
-    'mask_c_span': [5]
+    'mask_c_span': [1]
 }
 
 
