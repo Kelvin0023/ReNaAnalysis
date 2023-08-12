@@ -203,11 +203,11 @@ class MultiModalArrays:
         if self.labels_array is not None:
             skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
             for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices], self.labels_array[self.train_indices])):
-                self.training_val_split_indices.append((train, val))
+                self.training_val_split_indices.append((self.train_indices[train], self.train_indices[val]))
         else:
             skf = ShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
             for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
-                self.training_val_split_indices.append((train, val))
+                self.training_val_split_indices.append((self.train_indices[train], self.train_indices[val]))
         self.save()
 
 
@@ -247,6 +247,10 @@ class MultiModalArrays:
         self.train_test_split(test_size=test_size, random_seed=random_seed)
         val_size = val_size / (1 - test_size)  # adjust the val size to be a percentage of the training set
         self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed)
+        for i in range(n_folds):
+            assert set(self.training_val_split_indices[i][0]).intersection(set(self.test_indices)) == set(), 'train and test sets are not disjoint'
+            assert set(self.training_val_split_indices[i][0]).intersection(set(self.training_val_split_indices[i][1])) == set(), 'train and val sets are not disjoint'
+            assert set(self.training_val_split_indices[i][1]).intersection(set(self.test_indices)) == set(), 'val and test sets are not disjoint'
 
 
     def set_training_val_set(self, train_indices, val_indices):
@@ -563,6 +567,10 @@ class MultiModalArrays:
         self.test_batch_sample_indices = np.array(test_batch_sample_indices)
         self.val_batch_sample_indices = np.array(val_batch_sample_indices)
         self.train_batch_sample_indices = np.array(train_batch_sample_indices)
+        for i in range(n_folds):
+            assert set(self.test_batch_sample_indices[self.test_batch_sample_indices != None]).intersection(set(self.train_batch_sample_indices[i][self.train_batch_sample_indices[i] != None])) == set(), "test and train is not disjoint"
+            assert set(self.test_batch_sample_indices[self.test_batch_sample_indices != None]).intersection(set(self.val_batch_sample_indices[i][self.val_batch_sample_indices[i] != None])) == set(), "test and val is not disjoint"
+            assert set(self.train_batch_sample_indices[i][self.train_batch_sample_indices[i] != None]).intersection(set(self.val_batch_sample_indices[i][self.val_batch_sample_indices[i] != None])) == set(), "train and val is not disjoint"
         self.save()
 
     def get_train_val_ordered_batch_iterator_fold(self, fold, device, shuffle_within_batches=False, *args, **kwargs):
