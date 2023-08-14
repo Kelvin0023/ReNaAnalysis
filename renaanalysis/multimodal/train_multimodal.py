@@ -57,6 +57,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
+        model_copy.disable_pretrain_parameters()
 
         train_dataloader, val_dataloader = train_val_func(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=True)
         # train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True, shuffle_within_batches=True)

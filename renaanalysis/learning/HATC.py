@@ -124,6 +124,16 @@ class HierarchicalAutoTranscoder(nn.Module):
                 nn.LayerNorm(patch_embed_dim * (2 ** depth)),
                 nn.Linear(patch_embed_dim * (2 ** depth), num_classes))
 
+    def disable_pretrain_parameters(self):
+        for param in self.decoder.parameters():
+            param.requires_grad = False
+        if verbose is not None:
+            print('decoder gradient disabled')
+        for param in self.to_time_series.parameters():
+            param.requires_grad = False
+        if verbose is not None:
+            print('to_time_series gradient disabled')
+
     def disable_classification_parameters(self):
 
         for param in self.mlp_head.parameters():
