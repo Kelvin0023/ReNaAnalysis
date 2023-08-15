@@ -36,11 +36,10 @@ viz_sim = True
 viz_pca_ica = False
 training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_both.p', 'rb'))
 locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_both.p', 'rb'))
-models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_bendr_TUH_both.p', 'rb'))
+models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}_pretrain_HT_TUH.p', 'rb'))
 nfolds = 1
-mmarray = pickle.load(open(f'{export_data_root}/TUH_mmarray_filtered.p', 'rb'))
-x_test = mmarray.get_test_set(device='cuda:0' if torch.cuda.is_available() else 'cpu')
-x_test = torch.Tensor(x_test)
+mmarray = pickle.load(open(f'{export_data_root}/TUH_mmarray.p', 'rb'))
+x_test = mmarray.get_test_set(convert_to_tensor=True, device='cuda:0' if torch.cuda.is_available() else 'cpu')
 is_pca_ica = 'pca' in mmarray['eeg'].data_processor.keys() or 'ica' in mmarray['eeg'].data_processor.keys()
 if is_pca_ica != viz_pca_ica:
     warnings.warn('The mmarry stored is different with the one desired for visualization')
@@ -80,7 +79,7 @@ if viz_sim:
         loss = ContrastiveLoss(temperature=params['temperature'], n_neg=params['n_neg'])
         for i in range(len(model_list)):
             device = 'cuda:0' if model_list[i].HierarchicalTransformer.to_patch_embedding[1].bias.is_cuda else 'cpu'
-            x = model_list[i].HierarchicalTransformer.to_patch_embedding(x_test[0:10].to(device))
+            x = model_list[i].HierarchicalTransformer.to_patch_embedding(x_test.data['eeg'][0:10].to(device))
             x, original_x, mask_t, mask_c = model_list[i].mask_layer(x)
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 

@@ -8,6 +8,7 @@ import warnings
 import mne
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
 from sklearn import preprocessing, metrics
 from sklearn.model_selection import StratifiedShuffleSplit, ShuffleSplit
 from sklearn.preprocessing import LabelEncoder
@@ -554,8 +555,8 @@ def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTr
 
     return models, training_histories_folds, criterion, last_activation
 
-def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, mode, rebalance_method, l2_weight=1e-5, device=None, test_name='',
-                                  task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
+def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, encoder, mode, rebalance_method, l2_weight=1e-5, device=None, test_name='',
+                                  task_name=TaskName.TrainClassifier, verbose=1, check_param=1, is_augment_batch=False):
     """
 
     @param model:
@@ -599,10 +600,19 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     y_all_pred = None
     num_standard_errors = 0
     num_target_errors = 0
+    num_epochs = 0
     for batch_data in dataloader:
         y = batch_data['y']
         x = batch_data
-        if mode == 'train': optimizer.zero_grad()
+        if mode == 'train':
+            optimizer.zero_grad()
+            if is_augment_batch:
+                aug_data, aug_labels = interaug(x[:, None, :, :], y, encoder)
+                aug_data = torch.squeeze(aug_data, dim=1)
+                aug_data = aug_data.to(device)
+                x = torch.cat((x, aug_data), dim=0)
+                y = torch.cat((y, aug_labels), dim=0)
+        num_epochs += y.shape[0]
 
         mini_batch_i += 1
         if verbose >= 1:
@@ -628,6 +638,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
                     classification_loss = criterion.__class__(weight=class_weight)(y_pred, y_tensor)
                 else:
                     classification_loss = criterion(y_pred, y_tensor)
+                y_pred = last_activation(y_pred)
             else:  # BCELoss does not apply class weights
                 y_pred = last_activation(y_pred)
                 classification_loss = criterion(y_pred, y_tensor)
@@ -646,9 +657,9 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
                     if model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
                         continue
                     if torch.abs(params).median() <= 1e-15:
-                        warnings.warn(f'median value of parameter {param_name} is smaller than 1e-10')
+                        warnings.warn(f'median value of parameter {param_name} is {torch.abs(params).median()}')
                     if torch.abs(params.grad).median() <= 1e-30:
-                        warnings.warn(f'median grad value of parameter {param_name} is smaller than 1e-10')
+                        warnings.warn(f'median grad value of parameter {param_name} is {torch.abs(params).median()}')
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
             nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
             optimizer.step()
@@ -669,7 +680,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
     if verbose >= 1: pbar.close()
-    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
+    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / num_epochs, num_standard_errors, num_target_errors, y_all, y_all_pred
 
 
 # def _run_one_epoch_classification_ordered_batch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='',
@@ -918,6 +929,8 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
         pbar = tqdm(total=math.ceil(len(dataloader.dataset) / dataloader.batch_size), desc=f'{mode} {test_name}')
         pbar.update(mini_batch_i := 0)
     batch_losses = []
+
+    weights = []
     for x in dataloader:
         if mode == 'train': optimizer.zero_grad()
 
@@ -948,13 +961,28 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
         loss = loss + l2_penalty
         if mode == 'train':
             loss.backward()
+            if verbose is not None:
+                for param_name, params in model.named_parameters():
+                    if model.pos_embed_mode == 'sinusoidal' and param_name == 'learnable_pos_embedding':
+                        continue
+                    if model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
+                        continue
+                    # if param_name == 'hierarchical_autotranscoder.encoder.layers.0.0.fn.to_qkv.weight':
+                    #     print(torch.abs(params).median())
+                    if torch.abs(params).median() <= 1e-15:
+                        warnings.warn(f'median value of parameter {param_name} is smaller than 1e-10')
+                    if params.grad is not None:
+                        if torch.abs(params.grad).median() <= 1e-30:
+                            warnings.warn(f'median grad value of parameter {param_name} is smaller than 1e-10')
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
             nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
-            optimizer.step()
+            # weights.append(model.hierarchical_autotranscoder.encoder.layers[0][0].fn.to_qkv.weight.data[0, 0].clone().detach().cpu().numpy())
 
+            optimizer.step()
         batch_losses.append(loss.item())
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
-
+    # plt.plot(weights)
+    # plt.show()
     if verbose >= 1: pbar.close()
     return batch_losses, np.mean(batch_losses)
 

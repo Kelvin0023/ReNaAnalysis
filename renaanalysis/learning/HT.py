@@ -382,8 +382,10 @@ class HierarchicalTransformer(nn.Module):
                 nn.LayerNorm(patch_embed_dim),
                 nn.Linear(patch_embed_dim, num_classes))
 
-    def disable_classification_parameters(self):
+    def disable_pretrain_parameters(self):
+        pass
 
+    def disable_classification_parameters(self):
         for param in self.mlp_head.parameters():
             param.requires_grad = False
         if verbose is not None:
@@ -661,19 +663,16 @@ class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
                                         torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
                                     c_mask_replacement=torch.nn.Parameter(
                                         torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True))
+
+    def disable_classification_parameters(self):
+        self.encoder.disable_classification_parameters()
+
     def forward(self, x_eeg, *args, **kwargs):
-        x = self.encoder.to_patch_embedding(x_eeg)
-        x, original_x, mask_t, mask_c = self.mask_layer(x)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-
-        b, n, _ = x.shape
-
-        cls_tokens = repeat(self.encoder.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
+        b = x_eeg['eeg'].shape[0]
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[-1]  # batch_size x num_channels
+            channel_pos = x_eeg['channel_voxel_indices']  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
-            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg['eeg'].device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
             time_pos_embed = self.encoder.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
             channel_pos_embed = self.encoder.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
@@ -686,6 +685,14 @@ class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
 
         elif self.pos_embed_mode == 'learnable':
             pos_embed = self.encoder.learnable_pos_embedding[:, :(n + 1)]
+
+        x = self.encoder.to_patch_embedding(x_eeg['eeg'])
+        x, original_x, mask_t, mask_c = self.mask_layer(x)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        cls_tokens = repeat(self.encoder.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
+
         x += pos_embed
         x = self.encoder.dropout(x)
 
@@ -694,7 +701,7 @@ class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
         x = rearrange(x[:, 1:], 'b nt ps -> (b nt) ps')
         x = self.to_time_series(x)
         x = rearrange(x, '(b c w) ps -> b c (w ps)', b=b, c=self.num_channels, w=self.num_windows)
-        return x, x_encoded, mask_t, mask_c, encoder_att_matrix, decoder_att_matrix
+        return x, x_encoded, mask_t, mask_c
 
     def prepare_data(self, x):
         return x

@@ -96,12 +96,29 @@ class MultiModalArrays:
     def get_indices_by_subject_run(self, subject, run):
         return [i for i, (s, r) in enumerate(zip(self.experiment_info['subject_id'], self.experiment_info['run'])) if s == subject and r == run]
 
-    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, *args, **kwargs):
+    def get_indices_from_picks(self, picks):
+        train_indices_fold = []
+        val_indices_fold = []
+        for n_fold, subject_dict in enumerate(picks['subjects']):
+            this_train_indices = []
+            this_val_indices = []
+            for train_subject in subject_dict['train']:
+                for train_run in picks['run'][n_fold]['train']:
+                    this_train_indices += self.get_indices_by_subject_run(train_subject, train_run)
+            for val_subject in subject_dict['val']:
+                for val_run in picks['run'][n_fold]['val']:
+                    this_val_indices += self.get_indices_by_subject_run(val_subject, val_run)
+            train_indices_fold.append(this_train_indices)
+            val_indices_fold.append(this_val_indices)
+        return train_indices_fold, val_indices_fold
+
+    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, picks=None, *args, **kwargs):
         """
         get the dataloader for a given fold
         this function must be called after training_val_split
         @param fold:
         @param random_seed:
+        @param picks: dict of subject and run to pick for train and val respectively, if None, dataloader split it randomly
         @return:
         """
         if self.rebalance_method == 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
@@ -170,7 +187,10 @@ class MultiModalArrays:
         #         dataset_class = MultiInputDataset
         #     train_dataset = dataset_class(x_train)
         #     val_dataset = dataset_class(x_val)
-        training_indices, val_indices = self.training_val_split_indices[fold_index]
+        if picks is None:
+            training_indices, val_indices = self.training_val_split_indices[fold_index]
+        else:
+            training_indices, val_indices = self.get_indices_from_picks(picks)
         val_dataset = MultiModalDataset(self.physio_arrays, labels=(encoded_labels := self.get_encoded_labels()), indices=val_indices)
 
         # rebalance training set
@@ -189,7 +209,7 @@ class MultiModalArrays:
         return train_dataloader, val_dataloader
 
 
-    def training_val_split(self, n_folds, val_size=0.1, random_seed=None):
+    def training_val_split(self, n_folds, val_size=0.1, random_seed=None, picks=None):
         """
         split the train set into training and validation sets
 
@@ -200,14 +220,17 @@ class MultiModalArrays:
         """
         assert self.train_indices is not None, 'train indices have not been set, please call train_test_split first'
         self.training_val_split_indices = []
-        if self.labels_array is not None:
-            skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
-            for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices], self.labels_array[self.train_indices])):
-                self.training_val_split_indices.append((self.train_indices[train], self.train_indices[val]))
+        if picks is None:
+            if self.labels_array is not None:
+                skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
+                for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices], self.labels_array[self.train_indices])):
+                    self.training_val_split_indices.append((self.train_indices[train], self.train_indices[val]))
+            else:
+                skf = ShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
+                for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
+                    self.training_val_split_indices.append((np.array(self.train_indices)[train], np.array(self.train_indices)[val]))
         else:
-            skf = ShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
-            for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
-                self.training_val_split_indices.append((np.array(self.train_indices)[train], np.array(self.train_indices)[val]))
+            self.training_val_split_indices = self.get_indices_from_picks(picks)
         self.save()
 
 
@@ -234,7 +257,7 @@ class MultiModalArrays:
         self.save()
 
 
-    def test_train_val_split(self, n_folds, test_size=0.1, val_size=0.1, random_seed=None):
+    def test_train_val_split(self, n_folds, test_size=0.1, val_size=0.1, random_seed=None, picks=None):
         """
         create indices for test, train and validation sets
 
@@ -246,7 +269,7 @@ class MultiModalArrays:
         """
         self.train_test_split(test_size=test_size, random_seed=random_seed)
         val_size = val_size / (1 - test_size)  # adjust the val size to be a percentage of the training set
-        self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed)
+        self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed, picks=picks)
         for i in range(n_folds):
             assert set(self.training_val_split_indices[i][0]).intersection(set(self.test_indices)) == set(), 'train and test sets are not disjoint'
             assert set(self.training_val_split_indices[i][0]).intersection(set(self.training_val_split_indices[i][1])) == set(), 'train and val sets are not disjoint'

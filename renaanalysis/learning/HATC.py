@@ -315,6 +315,7 @@ class HierarchicalAutoTranscoderPretrain(nn.Module):
         self.patch_embed_dim = patch_embed_dim
         self.patch_length = int(window_duration * sampling_rate)
         self.num_windows = num_timesteps // self.patch_length
+        self.pos_embed_mode = pos_embed_mode
 
         self.num_patches = self.num_channels * self.num_windows
         self.hierarchical_autotranscoder = HierarchicalAutoTranscoder(num_timesteps, num_channels, sampling_rate, num_classes,

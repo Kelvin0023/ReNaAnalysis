@@ -27,21 +27,24 @@ reject = 'auto'  # whether to apply auto rejection
 # reject = None  # whether to apply auto rejection
 # data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 # data_root = 'D:/Dataset/auditory_oddball'
-data_root = 'J:\TUEH\edf'
-# data_root = 'D:\Dataset\BCICIV_2a'
+# data_root = 'J:\TUEH\edf'
+data_root = 'D:\Dataset\BCICIV_2a'
 # dataset_name = 'auditory_oddball'
-dataset_name = 'TUH'
-# dataset_name = 'BCICIVA'
+# dataset_name = 'TUH'
+dataset_name = 'BCICIVA'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
 mmarray_fn = f'{dataset_name}_mmarray.p'
-rebalance_method = 'class_weight'
+# rebalance_method = 'class_weight'
+# rebalance_method = 'smote'
+rebalance_method = None
 
 task_name = TaskName.PreTrain
-# task_name = TaskName.TrainClassifier
+task_name = TaskName.TrainClassifier
 # subject_pick = ['aaaaaaec', 'aaaaaaed', 'aaaaaaee', 'aaaaaaef', 'aaaaaaeg']
 subject_pick = None
 # subject_group_picks = None
 subject_group_picks = ['001']
+picks = {'subjects': [{'train': [1, 2, 3, 4, 5, 6, 7, 8, 9], 'val': [1, 2, 3, 4, 5, 6, 7, 8, 9]}, ], 'run': [{'train': [1], 'val': [2]}, ]}
 
 '''
 grid_search_params = {
@@ -152,15 +155,15 @@ else:
 #             val_indices += mmarray.get_indices_by_subject_run(i+1, j+1)
 
 locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name, is_pca_ica=is_pca_ica,
-                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
+                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed, picks=picks)
 # locking_performance, training_histories, models = grid_search_eeg(grid_search_params, mmarray, model_class, n_folds, task_name=task_name,
 #                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 if task_name == TaskName.PreTrain:
     pickle.dump(training_histories,
-                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HT_{dataset_name}.p', 'wb'))
+                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_{dataset_name}.p', 'wb'))
     pickle.dump(locking_performance,
-                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HT_{dataset_name}.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HT_{dataset_name}.p', 'wb'))
+                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_{dataset_name}.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain_HTAE_{dataset_name}.p', 'wb'))
 else:
     pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
     pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
