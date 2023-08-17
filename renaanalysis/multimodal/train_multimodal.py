@@ -62,8 +62,8 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         train_dataloader, val_dataloader = train_val_func(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=True)
         # train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True, shuffle_within_batches=True)
 
-        # optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
-        optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
+        optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
+        # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
         scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
         patience_counter = 0

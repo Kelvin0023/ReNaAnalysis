@@ -34,7 +34,7 @@ data_root = 'D:\Dataset\BCICIV_2a'
 # dataset_name = 'TUH'
 dataset_name = 'BCICIVA'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
-mmarray_fn = f'{dataset_name}_mmarray_new.p'
+mmarray_fn = f'{dataset_name}_mmarray.p'
 # rebalance_method = 'class_weight'
 # rebalance_method = 'smote'
 rebalance_method = None
@@ -45,7 +45,7 @@ task_name = TaskName.TrainClassifier
 subject_pick = None
 # subject_group_picks = None
 subject_group_picks = ['001']
-picks = {'subjects': [{'train': [1], 'val': [1]}, ], 'run': [{'train': [1], 'val': [2]}, ]}
+picks = {'subjects': [{'train': [3], 'val': [3]}, ], 'run': [{'train': [1], 'val': [2]}, ]}
 # picks = None
 test_size = 0
 val_size = 0.1
@@ -116,7 +116,7 @@ grid_search_params = {
     # "emb_dropout": [0.5],
     "emb_dropout": [0.3],
 
-    "lr": [1e-4],
+    "lr": [1e-3],
     # "lr": [1e-3],
 
     "l2_weight": [1e-5],
