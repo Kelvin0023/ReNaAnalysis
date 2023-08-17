@@ -6,6 +6,8 @@ import mne
 import numpy as np
 import scipy
 from mne import Epochs
+from scipy import signal
+from scipy.signal import spectrogram
 
 from renaanalysis.eye.eyetracking import Saccade, GazeRayIntersect
 from renaanalysis.params.params import conditions, item_marker_names, \
@@ -381,7 +383,7 @@ def visualize_pupil_epochs(epochs, event_ids, colors, title='', srate=200, verbo
 
 
 # TODO visualize_eeg_epochs
-def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0.1, tmax_eeg_viz=0.8, low_frequency=1, high_frequency=40, eeg_picks=None, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_PSD=True, is_plot_timeseries=True, is_plot_topo_map=False, gaze_behavior=None):
+def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0.1, tmax_eeg_viz=0.8, low_frequency=1, high_frequency=40, eeg_picks=None, out_dir=None, verbose='INFO', fig_size=(12.8, 7.2), is_plot_PSD=True, is_plot_timeseries=True, is_plot_topo_map=False, gaze_behavior=None, is_plot_ERD=True, sfreq=200):
     if colors is None:
         colors = {'Distractor': 'blue', 'Target': 'red', 'Novelty': 'orange'}
     mne.set_log_level(verbose=verbose)
@@ -422,7 +424,73 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0
             else:
                 plt.show()
     if is_plot_PSD:
-        epochs.compute_psd(fmin=1, fmax=120).plot()
+        n_signals = len(y)
+        n_samples = y.shape[-1]
+        nperseg = 256
+        low_frequency = 1
+        high_frequency = 30
+        for event_name, events in event_groups.items():
+            for ch in eeg_picks:
+                if ch == 'C3' or ch == 'C4':
+                    try:
+                        y = epochs.crop(tmin_eeg_viz, np.min([tmax_eeg_viz, epochs.tmax]))[event_name].pick_channels([ch]).get_data().squeeze(1)
+                    except KeyError:  # meaning this event does not exist in these epochs
+                        continue
+
+                    # Compute and average the PSDs
+                    avg_psd = np.zeros(nperseg // 2 + 1)
+                    for sig in y:
+                        freq, psd = signal.welch(sig, fs=sfreq, nperseg=nperseg)
+                        avg_psd += psd
+                    avg_psd /= n_signals
+
+                    # Plot the average PSD
+                    min_freq_index = np.argmin(np.abs(freq - low_frequency))
+                    max_freq_index = np.argmin(np.abs(freq - high_frequency))
+                    plot_freq = freq[min_freq_index:max_freq_index]
+                    plt.plot(plot_freq, np.log10(avg_psd[min_freq_index:max_freq_index]), label=ch)
+                    plt.xlabel('Frequency (Hz)')
+                    plt.ylabel('Power/Frequency')
+                    plt.title(f'Average Power Spectral Density of class {event_name}')
+                    plt.legend()
+                    plt.grid()
+            plt.show()
+
+    if is_plot_ERD:
+        fs = 250  # Sampling rate in Hz
+        nperseg = 128  # Number of data points per segment
+        noverlap = nperseg // 2  # Overlap between segments
+        nfft = 512  # Number of FFT points
+
+        n_timepoints = 1000
+        freq_min = 1
+        freq_max = 30
+        for ch in eeg_picks:
+            if ch == 'C3' or ch == 'C4':
+                for event_name, events in event_groups.items():
+                    try:
+                        y = epochs.crop(tmin_eeg_viz, np.min([tmax_eeg_viz, epochs.tmax]))[event_name].pick_channels([ch]).get_data().squeeze(1)
+                    except KeyError:  # meaning this event does not exist in these epochs
+                        continue
+                    spectrograms = []
+                    frequencies = []
+                    for i in range(len(y)):
+                        f, t, Sxx = spectrogram(y[i], fs=fs, nperseg=nperseg, noverlap=noverlap,
+                                                nfft=nfft)
+                        spectrograms.append(Sxx)
+                        frequencies.append(f)
+                    mean_spectrograms = np.mean(np.array(spectrograms), axis=0)
+                    freqs = np.array(frequencies)[0]
+                    min_freq_index = np.argmin(np.abs(freqs - freq_min))
+                    max_freq_index = np.argmin(np.abs(freqs - freq_max))
+                    im = plt.imshow(np.log10(mean_spectrograms[min_freq_index:max_freq_index]), cmap='jet', aspect='auto',
+                               extent=[t.min(), t.max(), freqs[min_freq_index], freqs[max_freq_index]])
+                    plt.colorbar(im)
+                    plt.title(f'Channel {ch}, class {event_name}')
+                    plt.ylabel('Frequency (Hz)')
+                    plt.xlabel('Time (s)')
+                    plt.tight_layout()
+                    plt.show()
 
     # get the min and max for plotting the topomap
     if is_plot_topo_map:

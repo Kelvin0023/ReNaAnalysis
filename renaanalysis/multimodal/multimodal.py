@@ -110,7 +110,7 @@ class MultiModalArrays:
                     this_val_indices += self.get_indices_by_subject_run(val_subject, val_run)
             train_indices_fold.append(this_train_indices)
             val_indices_fold.append(this_val_indices)
-        return train_indices_fold, val_indices_fold
+        return [(np.array(i), np.array(j)) for (i, j) in zip(train_indices_fold, val_indices_fold)]
 
     def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, picks=None, *args, **kwargs):
         """
@@ -187,10 +187,7 @@ class MultiModalArrays:
         #         dataset_class = MultiInputDataset
         #     train_dataset = dataset_class(x_train)
         #     val_dataset = dataset_class(x_val)
-        if picks is None:
-            training_indices, val_indices = self.training_val_split_indices[fold_index]
-        else:
-            training_indices, val_indices = self.get_indices_from_picks(picks)
+        training_indices, val_indices = self.training_val_split_indices[fold_index]
         val_dataset = MultiModalDataset(self.physio_arrays, labels=(encoded_labels := self.get_encoded_labels()), indices=val_indices)
 
         # rebalance training set
@@ -248,10 +245,14 @@ class MultiModalArrays:
         @return:
         """
         if self.labels_array is not None:
-            skf = StratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=random_seed)
-            self.train_indices, self.test_indices = [(train, test) for train, test in skf.split(self.physio_arrays[0].array, self.labels_array)][0]
-            assert np.all(np.unique(self.labels_array[self.test_indices]) == np.unique(self.labels_array[self.train_indices])), "train and test labels are not the same"
-            assert len(np.unique(self.labels_array[self.test_indices])) == len(self.event_names), "number of unique labels is not the same as number of event names"
+            if test_size != 0:
+                skf = StratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=random_seed)
+                self.train_indices, self.test_indices = [(train, test) for train, test in skf.split(self.physio_arrays[0].array, self.labels_array)][0]
+                assert np.all(np.unique(self.labels_array[self.test_indices]) == np.unique(self.labels_array[self.train_indices])), "train and test labels are not the same"
+                assert len(np.unique(self.labels_array[self.test_indices])) == len(self.event_names), "number of unique labels is not the same as number of event names"
+            else:
+                self.train_indices = np.arange(self.physio_arrays[0].array.shape[0])
+                self.test_indices = np.array([], dtype=int)
         else:
             self.train_indices, self.test_indices = train_test_split(list(range(self.physio_arrays[0].array.shape[0])), test_size=test_size, random_state=random_seed, stratify=self.labels_array)
         self.save()

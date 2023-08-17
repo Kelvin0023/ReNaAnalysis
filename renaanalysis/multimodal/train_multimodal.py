@@ -19,7 +19,7 @@ from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_his
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1, test_size=0.1,
                                      lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30, batch_size=16,
-                                     use_ordered=False, picks=None):
+                                     use_ordered=False, picks=None, is_augment_batch=False):
     """
 
     """
@@ -62,8 +62,8 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         train_dataloader, val_dataloader = train_val_func(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=True)
         # train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True, shuffle_within_batches=True)
 
-        optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
-        # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
+        # optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)
+        optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
         scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
         patience_counter = 0
@@ -82,7 +82,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         # prev_para = []
         # for param in model_copy.parameters():
         #     prev_para.append(param.cpu().detach().numpy())
-            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(model_copy, train_dataloader, criterion, last_activation, optimizer, mmarray.encoder, rebalance_method=mmarray.rebalance_method, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            train_auc, train_loss, train_accuracy, num_train_standard_error, num_train_target_error, train_y_all, train_y_all_pred = _run_one_epoch_classification(model_copy, train_dataloader, criterion, last_activation, optimizer, mmarray._encoder, rebalance_method=mmarray.rebalance_method, mode='train', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose, is_augment_batch=is_augment_batch)
             if is_plot_conf_matrix:
                 train_predicted_labels_all = np.argmax(train_y_all_pred, axis=1)
                 train_true_label_all = np.argmax(train_y_all, axis=1)
@@ -91,7 +91,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
                 viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
             scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
-            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_dataloader, criterion, last_activation, optimizer, mmarray.encoder, rebalance_method=mmarray.rebalance_method, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+            val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_dataloader, criterion, last_activation, optimizer, mmarray._encoder, rebalance_method=mmarray.rebalance_method, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose, is_augment_batch=is_augment_batch)
             if is_plot_conf_matrix:
                 val_predicted_labels_all = np.argmax(val_y_all_pred, axis=1)
                 val_true_label_all = np.argmax(val_y_all, axis=1)
@@ -129,7 +129,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         #                                  _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
 
         test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
-            _run_one_epoch_classification(best_model, test_dataloader, criterion, last_activation, encoder=mmarray.encoder, rebalance_method=mmarray.rebalance_method, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+            _run_one_epoch_classification(best_model, test_dataloader, criterion, last_activation, encoder=mmarray._encoder, rebalance_method=mmarray.rebalance_method, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
 
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))

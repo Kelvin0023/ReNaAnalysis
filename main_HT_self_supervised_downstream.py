@@ -43,7 +43,7 @@ mmarray_fn = f'{dataset_name}_mmarray_class_weight.p'
 # training parameters ######################################################################################
 rebalance_method = 'class_weight'
 n_folds = 3
-lr = 1e-3
+lr = 1e-2
 ht_l2 = 1e-5
 window_duration = 0.1
 is_pca_ica = False

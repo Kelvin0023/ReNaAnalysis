@@ -607,10 +607,11 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         if mode == 'train':
             optimizer.zero_grad()
             if is_augment_batch:
-                aug_data, aug_labels = interaug(x[:, None, :, :], y, encoder)
+                aug_data, aug_labels = interaug(x['eeg'][:, None, :, :], y, encoder)
                 aug_data = torch.squeeze(aug_data, dim=1)
                 aug_data = aug_data.to(device)
-                x = torch.cat((x, aug_data), dim=0)
+                aug_labels = aug_labels.to(device)
+                x['eeg'] = torch.cat((x['eeg'], aug_data), dim=0)
                 y = torch.cat((y, aug_labels), dim=0)
         num_epochs += y.shape[0]
 

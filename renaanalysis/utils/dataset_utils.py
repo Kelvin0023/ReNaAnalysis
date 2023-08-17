@@ -424,7 +424,7 @@ def get_BCICIVA_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tm
         x = pickle.load(open(x_path, 'rb'))
         y = pickle.load(open(y_path, 'rb'))
         metadata = pickle.load(open(metadata_path, 'rb'))
-    return x, y, metadata, event_viz_colors
+    return x, y, metadata, event_viz_colors, kept_channels
 
 
 def get_DEAP_preprocessed_samples(data_root):
@@ -736,8 +736,8 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
             metadata = metadata_dict[21][ch_names]
             physio_arrays = [PhysioArray(x, metadata, sampling_rate=250, physio_type=eeg_name, dataset_name=dataset_name, info={'ch_names': eval(next(iter(x_dict[21].keys())))})]
     elif dataset_name == 'BCICIVA':
-        x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
-        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
+        x, y, metadata, event_viz_colors, ch_names = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name, ch_names=ch_names)]
     elif dataset_name == 'SIM':
         x, y, metadata, event_viz_colors, montage = get_SIM_samples(dataset_root, eeg_resample_rate=eeg_resample_rate, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name, info={'montage': montage})]

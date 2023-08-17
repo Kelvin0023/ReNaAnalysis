@@ -19,7 +19,8 @@ is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-is_regenerate_epochs = False
+is_regenerate_epochs = True
+is_augment_batch = False
 
 eeg_resample_rate = 200
 
@@ -33,7 +34,7 @@ data_root = 'D:\Dataset\BCICIV_2a'
 # dataset_name = 'TUH'
 dataset_name = 'BCICIVA'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
-mmarray_fn = f'{dataset_name}_mmarray.p'
+mmarray_fn = f'{dataset_name}_mmarray_new.p'
 # rebalance_method = 'class_weight'
 # rebalance_method = 'smote'
 rebalance_method = None
@@ -44,8 +45,10 @@ task_name = TaskName.TrainClassifier
 subject_pick = None
 # subject_group_picks = None
 subject_group_picks = ['001']
-picks = {'subjects': [{'train': [1, 2, 3, 4, 5, 6, 7, 8, 9], 'val': [1, 2, 3, 4, 5, 6, 7, 8, 9]}, ], 'run': [{'train': [1], 'val': [2]}, ]}
-
+picks = {'subjects': [{'train': [1], 'val': [1]}, ], 'run': [{'train': [1], 'val': [2]}, ]}
+# picks = None
+test_size = 0
+val_size = 0.1
 '''
 grid_search_params = {
     "depth": [2, 4, 6],
@@ -108,10 +111,10 @@ grid_search_params = {
     "dim_head": [128],
 
     # "attn_dropout": [0.5],
-    "attn_dropout": [0.0],
+    "attn_dropout": [0.3],
 
     # "emb_dropout": [0.5],
-    "emb_dropout": [0.1],
+    "emb_dropout": [0.3],
 
     "lr": [1e-4],
     # "lr": [1e-3],
@@ -154,8 +157,8 @@ else:
 #         else:
 #             val_indices += mmarray.get_indices_by_subject_run(i+1, j+1)
 
-locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name, is_pca_ica=is_pca_ica,
-                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed, picks=picks)
+locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name, is_pca_ica=is_pca_ica, test_size=test_size, val_size=val_size,
+                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed, picks=picks, is_augment_batch=is_augment_batch)
 # locking_performance, training_histories, models = grid_search_eeg(grid_search_params, mmarray, model_class, n_folds, task_name=task_name,
 #                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 if task_name == TaskName.PreTrain:

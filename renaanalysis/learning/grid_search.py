@@ -98,9 +98,9 @@ def grid_search_eeg(grid_search_params, mmarray: MultiModalArrays, model_class, 
     return locking_performance, total_training_histories, models_param
 
 def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int,
-                       test_size=0.1,
+                       test_size=0.1, val_size=0.1,
                        is_pca_ica=False,
-                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, picks=None):
+                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, picks=None, is_augment_batch=False):
     """
 
     @param grid_search_params:
@@ -168,7 +168,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
             models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix, test_size=test_size,
-                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed, picks=picks)
+                                                                                             verbose=1, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed, picks=picks, is_augment_batch=is_augment_batch,)
 
         elif task_name == TaskName.PreTrain:
             model = HierarchicalTransformerAutoEncoderPretrain(eeg_num_timesteps, eeg_num_channels, eeg_fs, num_classes=2,
