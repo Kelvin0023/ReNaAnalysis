@@ -46,8 +46,8 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     test_loss = []
 
     if use_ordered:
-        mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=0.1, random_seed=random_seed)
-        test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, shuffle_within_batches=True)
+        mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=test_size, random_seed=random_seed)
+        test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, shuffle_within_batches=False)
         train_val_func = mmarray.get_train_val_ordered_batch_iterator_fold
     else:
         mmarray.test_train_val_split(n_folds, test_size=test_size, val_size=val_size, random_seed=random_seed, picks=picks)
@@ -59,7 +59,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         model_copy = model_copy.to(device)
         model_copy.disable_pretrain_parameters()
 
-        train_dataloader, val_dataloader = train_val_func(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=True)
+        train_dataloader, val_dataloader = train_val_func(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=False)
         # train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True, shuffle_within_batches=True)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr)

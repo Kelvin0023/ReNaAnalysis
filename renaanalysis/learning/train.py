@@ -597,7 +597,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     batch_losses = []
     num_correct_preds = 0
     y_all = None
-    y_all_pred = None
+    y_all_pred_post_logits = None
     num_standard_errors = 0
     num_target_errors = 0
     num_epochs = 0
@@ -629,8 +629,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
-            x = x if isinstance(x, list) or isinstance(x, tuple) else (x,)
-            y_pred = model(*x)
+            y_pred = model(x)
 
             y_tensor = y.to(device)
             if isinstance(criterion, nn.CrossEntropyLoss):
@@ -639,10 +638,10 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
                     classification_loss = criterion.__class__(weight=class_weight)(y_pred, y_tensor)
                 else:
                     classification_loss = criterion(y_pred, y_tensor)
-                y_pred = last_activation(y_pred)
+                y_pred_postlogits = last_activation(y_pred)
             else:  # BCELoss does not apply class weights
-                y_pred = last_activation(y_pred)
-                classification_loss = criterion(y_pred, y_tensor)
+                y_pred_postlogits = last_activation(y_pred)
+                classification_loss = criterion(y_pred_postlogits, y_tensor)
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
@@ -666,7 +665,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
             optimizer.step()
 
         y_all = np.concatenate([y_all, y.detach().cpu().numpy()]) if y_all is not None else y.detach().cpu().numpy()
-        y_all_pred = np.concatenate([y_all_pred, y_pred.detach().cpu().numpy()]) if y_all_pred is not None else y_pred.detach().cpu().numpy()
+        y_all_pred_post_logits = np.concatenate([y_all_pred_post_logits, y_pred_postlogits.detach().cpu().numpy()]) if y_all_pred_post_logits is not None else y_pred_postlogits.detach().cpu().numpy()
 
         batch_losses.append(loss.item())
         if y_pred.shape[1] == 1:
@@ -681,7 +680,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
     if verbose >= 1: pbar.close()
-    return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / num_epochs, num_standard_errors, num_target_errors, y_all, y_all_pred
+    return metrics.roc_auc_score(y_all, y_all_pred_post_logits), np.mean(batch_losses), num_correct_preds / num_epochs, num_standard_errors, num_target_errors, y_all, y_all_pred_post_logits
 
 
 # def _run_one_epoch_classification_ordered_batch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='',

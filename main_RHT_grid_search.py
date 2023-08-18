@@ -16,7 +16,9 @@ n_folds = 2
 is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
-is_regenerate_epochs = False
+is_regenerate_epochs = True
+
+eeg_baseline = None
 
 eeg_resample_rate = 200
 
@@ -54,8 +56,10 @@ grid_search_params = {
     # "lr": [1e-3],
     "l2_weight": [1e-5],
 
-    # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
+
+    "pos_embed_mode": ['learnable'],
+    # "pos_embed_mode": ['sinusoidal'],
 
     # "output": ['single'],
     "output": ['multi'],
@@ -79,7 +83,10 @@ start_time = time.time()  # record the start time of the analysis
 
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
-    mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, dataset_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs, random_seed=random_seed, rebalance_method="class_weight", filename=mmarray_path)
+    mmarray = get_dataset('auditory_oddball', epochs_root=export_data_root, dataset_root=data_root,
+                          reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs,
+                          random_seed=random_seed, rebalance_method="class_weight", filename=mmarray_path,
+                          eeg_baseline=eeg_baseline)
     mmarray.save()
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
