@@ -601,6 +601,8 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     num_standard_errors = 0
     num_target_errors = 0
     num_epochs = 0
+    if len(dataloader) == 0:
+        return 0, 0, 0, 0, 0, 0, 0
     for batch_data in dataloader:
         y = batch_data['y']
         x = batch_data
@@ -629,7 +631,8 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
-            y_pred = model(x)
+            # y_pred = model(x)
+            y_pred = model(x['eeg'])
 
             y_tensor = y.to(device)
             if isinstance(criterion, nn.CrossEntropyLoss):
@@ -652,9 +655,9 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
             loss.backward()
             if verbose is not None:
                 for param_name, params in model.named_parameters():
-                    if model.pos_embed_mode == 'sinusoidal' and param_name == 'learnable_pos_embedding':
+                    if hasattr(model, 'pos_embed_mode') and model.pos_embed_mode == 'sinusoidal' and param_name == 'learnable_pos_embedding':
                         continue
-                    if model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
+                    if hasattr(model, 'pos_embed_mode') and model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
                         continue
                     if torch.abs(params).median() <= 1e-15:
                         warnings.warn(f'median value of parameter {param_name} is {torch.abs(params).median()}')
@@ -963,9 +966,9 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
             loss.backward()
             if verbose is not None:
                 for param_name, params in model.named_parameters():
-                    if model.pos_embed_mode == 'sinusoidal' and param_name == 'learnable_pos_embedding':
+                    if hasattr(model, 'pos_embed_mode') and model.pos_embed_mode == 'sinusoidal' and param_name == 'learnable_pos_embedding':
                         continue
-                    if model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
+                    if hasattr(model, 'pos_embed_mode') and model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
                         continue
                     # if param_name == 'hierarchical_autotranscoder.encoder.layers.0.0.fn.to_qkv.weight':
                     #     print(torch.abs(params).median())

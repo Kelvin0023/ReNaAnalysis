@@ -270,8 +270,8 @@ def epochs_to_class_samples(epochs, event_names, picks=None,
     event_ids = {event_name: i for i, event_name in enumerate(event_names)}
     # event_clean = epochs_clean['']
     x, y, metadata = _epoch_to_samples(epochs_clean, event_ids, require_metainfo=require_metainfo, event_marker_to_label=False)
-    epochs_clean = epochs_clean[np.logical_and(epochs_clean.metadata['run'] == 1,  epochs_clean.metadata['subject_id'] == 3)]
-    visualize_eeg_epochs(epochs_clean, event_ids, colors, tmin_eeg_viz=epoch_tmin, tmax_eeg_viz=epoch_tmax, eeg_picks=eeg_viz_picks, sfreq=eeg_resample_rate, title='EEG Epochs ' + title, low_frequency=low_freq, high_frequency=high_freq, is_plot_PSD=is_plot_PSD, is_plot_timeseries=is_plot_ERP)
+    epochs_clean = epochs_clean[np.logical_and(epochs_clean.metadata['run'] == 2,  epochs_clean.metadata['subject_id'] == 3)]
+    visualize_eeg_epochs(epochs_clean, event_ids, colors, tmin_eeg_viz=epoch_tmin, tmax_eeg_viz=epoch_tmax, eeg_picks=eeg_viz_picks, sfreq=eeg_resample_rate, title='EEG Epochs ' + title, low_frequency=low_freq, high_frequency=high_freq, is_plot_PSD=is_plot_PSD, is_plot_ERD=is_plot_ERP)
 
     return x, y, metadata
 

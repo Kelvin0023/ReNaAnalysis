@@ -18,14 +18,15 @@ from renaanalysis.utils.data_utils import z_norm_by_trial
 from renaanalysis.utils.dataset_utils import get_auditory_oddball_samples, get_dataset
 
 # environment parameters ######################################################################################
-dataset_name = 'auditory_oddball'
+# dataset_name = 'auditory_oddball'
+dataset_name = 'BCICIVA'
 event_names = ["standard", "oddball_with_response"]
 colors = {
     "standard": "red",
     "oddball_with_response": "green"
 }
-picks = 'eeg'
 subject_pick = None
+picks = {'subjects': [{'train': [3], 'val': [3]}, ], 'run': [{'train': [1], 'val': [2]}, ]}
 subject_group_picks = None
 eeg_resample_rate = 200
 models = ['HT-sesup']
@@ -37,15 +38,21 @@ task_name = 'oddball'
 data_root = 'D:/Dataset/auditory_oddball'
 reject = 'auto'
 model_path = 'renaanalysis/learning/saved_models/oddball-pretrainbendr_lr_0.0001_dimhead_128_feeddim_128_numheads_8_patchdim_128_fold_0_pca_False.pt'
-mmarray_fn = f'{dataset_name}_mmarray_class_weight.p'
+# mmarray_fn = f'{dataset_name}_mmarray_class_weight.p'
+mmarray_fn = f'{dataset_name}_mmarray.p'
 
+# model parameters ######################################################################################
+num_classes = 4
 
 # training parameters ######################################################################################
-rebalance_method = 'class_weight'
-n_folds = 3
+# rebalance_method = 'class_weight'
+rebalance_method = None
+n_folds = 3 if picks is None else 1
 lr = 1e-3
 ht_l2 = 1e-5
 window_duration = 0.1
+test_size = 0
+val_size = 0.1
 is_pca_ica = False
 is_by_channel = False
 is_plot_conf_matrix = False
@@ -71,7 +78,7 @@ else:
 for pretrained_model_list in pretrained_models.values():
     for pretrained_model in pretrained_model_list:
         model = pretrained_model.encoder
-        model.adjust_model(mmarray['eeg'].array.shape[-1], mmarray['eeg'].array.shape[1], mmarray['eeg'].sampling_rate, window_duration, 2, 'multi')
-        models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(mmarray, model, test_name='', task_name=TaskName.PretrainedClassifierFineTune,
-                                                                                             n_folds=n_folds, lr=lr, is_plot_conf_matrix=is_plot_conf_matrix, random_seed=random_seed, l2_weight=l2_weight)
+        model.adjust_model(mmarray['eeg'].array.shape[-1], mmarray['eeg'].array.shape[1], mmarray['eeg'].sampling_rate, window_duration, num_classes, 'multi')
+        models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(mmarray, model, test_name='', patience=100, task_name=TaskName.PretrainedClassifierFineTune, test_size=test_size, val_size=val_size,
+                                                                                             n_folds=n_folds, lr=lr, is_plot_conf_matrix=is_plot_conf_matrix, random_seed=random_seed, l2_weight=l2_weight, picks=picks, is_augment_batch=True)
         pickle.dump(models, open(f'{result_path}/models_auditory_oddball.p', 'wb'))

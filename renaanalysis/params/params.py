@@ -169,7 +169,7 @@ eeg_epoch_ticks = np.array([0, 0.3, 0.6, 0.8])
 pupil_epoch_ticks = np.array([0, 0.5, 1., 1.5, 2., 2.5, 3])
 
 lr = 2e-4
-batch_size = 16
+batch_size = 72
 epochs = 2000
 patience = 10
 train_ratio = 0.8

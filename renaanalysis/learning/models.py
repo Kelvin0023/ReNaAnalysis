@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -106,8 +108,10 @@ class EEGCNN(nn.Module):
         # with torch.no_grad():
         #     cnn_flattened_size = self.conv(torch.rand(in_shape)).shape[1]
 
+        out_size = math.floor((math.floor((math.floor((in_shape[-1] -6)/2+1) -6)/2+1) - 6)/2 + 1) * num_filters
+
         self.fcs = nn.Sequential(
-            nn.Linear(304, 128),
+            nn.Linear(out_size, 128),
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),

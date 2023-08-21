@@ -20,11 +20,11 @@ is_by_channel = False # use by channel version of SMOT rebalance or not, no big 
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
 is_regenerate_epochs = True
-is_augment_batch = False
+is_augment_batch = True
 
 eeg_resample_rate = 200
 
-reject = 'auto'  # whether to apply auto rejection
+reject = None  # whether to apply auto rejection
 # reject = None  # whether to apply auto rejection
 # data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
 # data_root = 'D:/Dataset/auditory_oddball'
@@ -34,18 +34,18 @@ data_root = 'D:\Dataset\BCICIV_2a'
 # dataset_name = 'TUH'
 dataset_name = 'BCICIVA'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
-mmarray_fn = f'{dataset_name}_mmarray.p'
+mmarray_fn = f'{dataset_name}_mmarray_new.p'
 # rebalance_method = 'class_weight'
 # rebalance_method = 'smote'
 rebalance_method = None
 
-task_name = TaskName.PreTrain
+# task_name = TaskName.PreTrain
 task_name = TaskName.TrainClassifier
 # subject_pick = ['aaaaaaec', 'aaaaaaed', 'aaaaaaee', 'aaaaaaef', 'aaaaaaeg']
 subject_pick = None
 # subject_group_picks = None
 subject_group_picks = ['001']
-picks = {'subjects': [{'train': [3], 'val': [3]}, ], 'run': [{'train': [1], 'val': [2]}, ]}
+picks = {'subjects': [{'train': ['A03'], 'val': ['A03']}, ], 'run': [{'train': [1], 'val': [2]}, ]}
 # picks = None
 test_size = 0
 val_size = 0.1
@@ -97,13 +97,13 @@ grid_search_params = {
 # }
 
 grid_search_params = {
-    "depth": [2],
+    "depth": [4],
     "num_heads": [8],
     "pool": ['cls'],
     "feedforward_mlp_dim": [32],
 
     # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [64],
+    "patch_embed_dim": [128],
 
     # "pos_embed_mode": ['learnable'],
     "pos_embed_mode": ['sinusoidal'],
@@ -116,10 +116,10 @@ grid_search_params = {
     # "emb_dropout": [0.5],
     "emb_dropout": [0.3],
 
-    "lr": [1e-3],
+    "lr": [1e-4],
     # "lr": [1e-3],
 
-    "l2_weight": [1e-5],
+    "l2_weight": [1e-3],
 
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],

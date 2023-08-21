@@ -25,7 +25,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
 
     def forward(self, p):
         # t has shape (batch_size, seq_len, embed_dim)
-        outer_product = torch.einsum('bn,nd->bnd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
+        outer_product = torch.einsum('n,nd->nd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
         pos_emb = torch.cat([outer_product.sin(), outer_product.cos()], dim=-1)
         return pos_emb
 
@@ -465,12 +465,12 @@ class HierarchicalTransformer(nn.Module):
         b, nchannel, _ = x_eeg.shape
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = x['channel_voxel_indices'] # batch_size x num_channels
-            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
-            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
-
-            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
-            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            channel_pos = x['channel_voxel_indices'][0] # batch_size x num_channels
+            assert channel_pos.shape[0] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+            time_pos = torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long)  # batch_size x num_windows  # use sample-relative time positions
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(0).repeat(b, self.num_channels, 1, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(1).repeat(b, 1, self.num_windows, 1)
             time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
             channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
 
@@ -479,7 +479,7 @@ class HierarchicalTransformer(nn.Module):
             pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
 
         elif self.pos_embed_mode == 'learnable':
-            pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
+            pos_embed = self.learnable_pos_embedding[:, :(self.num_channels * self.num_windows + 1)]
         else:
             raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
 

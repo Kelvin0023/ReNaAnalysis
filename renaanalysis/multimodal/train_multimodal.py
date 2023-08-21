@@ -18,7 +18,7 @@ from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_his
 
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6, val_size=0.1, test_size=0.1,
-                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30, batch_size=16,
+                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30,
                                      use_ordered=False, picks=None, is_augment_batch=False):
     """
 
@@ -57,7 +57,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     for f_index in range(n_folds):
         model_copy = copy.deepcopy(model)
         model_copy = model_copy.to(device)
-        model_copy.disable_pretrain_parameters()
+        if hasattr(model_copy, 'disable_pretrain_parameters'): model_copy.disable_pretrain_parameters()
 
         train_dataloader, val_dataloader = train_val_func(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=False)
         # train_dataloader, val_dataloader = mmarray.get_train_val_ordered_batch_iterator_fold(f_index, device=device, return_metainfo=True, shuffle_within_batches=True)
@@ -73,6 +73,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         num_val_standard_errors = []
         num_val_target_errors = []
         best_auc = 0
+        best_acc = 0
         train_losses = []
         train_accs = []
         val_losses = []
@@ -107,17 +108,30 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
 
             if verbose >= 1:
                 print("Fold {}, Epoch {}: val auc = {:.16f}, train accuracy = {:.16f}, train loss={:.16f}; val accuracy = {:.16f}, val loss={:.16f}, patience left {}".format(f_index, epoch, np.max(val_aucs), train_accs[-1], train_losses[-1], val_accs[-1],val_losses[-1], patience - patience_counter))
-            if val_auc > best_auc:
-                if verbose >= 1: print('Best validation auc improved from {} to {}'.format(best_auc, val_auc))
-                # best_loss = val_losses[-1]
-                best_auc = val_auc
-                patience_counter = 0
-                best_model = copy.deepcopy(model_copy)
+            if mmarray.rebalance_method == None:
+                if val_accuracy > best_acc and mmarray.rebalance_method == None:
+                    if verbose >= 1: print('Best validation acc improved from {} to {}'.format(best_acc, val_accuracy))
+                    best_acc = val_accuracy
+                    patience_counter = 0
+                    best_model = copy.deepcopy(model_copy)
+                else:
+                    patience_counter += 1
+                    if patience_counter > patience:
+                        if verbose >= 1: print(
+                            f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                        break
             else:
-                patience_counter += 1
-                if patience_counter > patience:
-                    if verbose >= 1: print(f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
-                    break
+                if val_auc > best_auc:
+                    if verbose >= 1: print('Best validation auc improved from {} to {}'.format(best_auc, val_auc))
+                    # best_loss = val_losses[-1]
+                    best_auc = val_auc
+                    patience_counter = 0
+                    best_model = copy.deepcopy(model_copy)
+                else:
+                    patience_counter += 1
+                    if patience_counter > patience:
+                        if verbose >= 1: print(f'Fold {f_index}: Terminated terminated by patience, validation loss has not improved in {patience} epochs')
+                        break
         # viz_class_error(num_train_standard_errors, num_train_target_errors, 'train')
         # viz_class_error(num_val_standard_errors, num_val_target_errors, 'validation')
         train_accs_folds.append(train_accs)

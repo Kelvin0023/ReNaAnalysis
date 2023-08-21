@@ -478,8 +478,9 @@ class MultiModalArrays:
         rand_input = self.get_random_sample(convert_to_tensor=True, device=device)
         with torch.no_grad():
             model.eval()
-            rand_input= rand_input if isinstance(rand_input, tuple) else (rand_input,)
-            output_shape = model.to(device)(*rand_input).shape[1]
+            # rand_input= rand_input if isinstance(rand_input, tuple) else (rand_input,)
+            # output_shape = model.to(device)(*rand_input).shape[1]
+            output_shape = model.to(device)(rand_input['eeg']).shape[1]
 
         self.create_label_encoder(output_shape)
         if output_shape == 1:

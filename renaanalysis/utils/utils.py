@@ -424,8 +424,6 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0
             else:
                 plt.show()
     if is_plot_PSD:
-        n_signals = len(y)
-        n_samples = y.shape[-1]
         nperseg = 256
         low_frequency = 1
         high_frequency = 30
@@ -436,7 +434,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0
                         y = epochs.crop(tmin_eeg_viz, np.min([tmax_eeg_viz, epochs.tmax]))[event_name].pick_channels([ch]).get_data().squeeze(1)
                     except KeyError:  # meaning this event does not exist in these epochs
                         continue
-
+                    n_signals = len(y)
                     # Compute and average the PSDs
                     avg_psd = np.zeros(nperseg // 2 + 1)
                     for sig in y:
@@ -457,7 +455,6 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0
             plt.show()
 
     if is_plot_ERD:
-        fs = 250  # Sampling rate in Hz
         nperseg = 128  # Number of data points per segment
         noverlap = nperseg // 2  # Overlap between segments
         nfft = 512  # Number of FFT points
@@ -475,7 +472,7 @@ def visualize_eeg_epochs(epochs, event_groups, colors, title='', tmin_eeg_viz=-0
                     spectrograms = []
                     frequencies = []
                     for i in range(len(y)):
-                        f, t, Sxx = spectrogram(y[i], fs=fs, nperseg=nperseg, noverlap=noverlap,
+                        f, t, Sxx = spectrogram(y[i], fs=sfreq, nperseg=nperseg, noverlap=noverlap,
                                                 nfft=nfft)
                         spectrograms.append(Sxx)
                         frequencies.append(f)
