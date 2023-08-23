@@ -671,11 +671,11 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         y_all_pred_post_logits = np.concatenate([y_all_pred_post_logits, y_pred_postlogits.detach().cpu().numpy()]) if y_all_pred_post_logits is not None else y_pred_postlogits.detach().cpu().numpy()
 
         batch_losses.append(loss.item())
-        if y_pred.shape[1] == 1:
-            predicted_labels = (y_pred > .5).int()
+        if y_pred_postlogits.shape[1] == 1:
+            predicted_labels = (y_pred_postlogits > .5).int()
             true_label = y_tensor
         else:
-            predicted_labels = torch.argmax(y_pred, dim=1)
+            predicted_labels = torch.argmax(y_pred_postlogits, dim=1)
             true_label = torch.argmax(y_tensor, dim=1)
         num_correct_preds += torch.sum(true_label == predicted_labels).item()
         num_standard_errors += count_standard_error(true_label, predicted_labels)

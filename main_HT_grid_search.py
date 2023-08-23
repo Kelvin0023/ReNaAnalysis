@@ -30,11 +30,13 @@ reject = None  # whether to apply auto rejection
 # data_root = 'D:/Dataset/auditory_oddball'
 # data_root = 'J:\TUEH\edf'
 data_root = 'D:\Dataset\BCICIV_2a'
+# data_root = 'D:\Dataset\DEAP'
 # dataset_name = 'auditory_oddball'
 # dataset_name = 'TUH'
 dataset_name = 'BCICIVA'
+# dataset_name = 'DEAP'
 # mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
-mmarray_fn = f'{dataset_name}_mmarray_new.p'
+mmarray_fn = f'{dataset_name}_mmarray.p'
 # rebalance_method = 'class_weight'
 # rebalance_method = 'smote'
 rebalance_method = None
@@ -119,7 +121,7 @@ grid_search_params = {
     "lr": [1e-4],
     # "lr": [1e-3],
 
-    "l2_weight": [1e-3],
+    "l2_weight": [1e-5],
 
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],

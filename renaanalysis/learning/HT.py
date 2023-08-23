@@ -480,6 +480,15 @@ class HierarchicalTransformer(nn.Module):
 
         elif self.pos_embed_mode == 'learnable':
             pos_embed = self.learnable_pos_embedding[:, :(self.num_channels * self.num_windows + 1)]
+        elif self.pos_embed_mode == 'concate':
+            channel_pos = x['channel_voxel_indices'][0] # num_channels
+            time_pos = torch.arange(0, self.num_windows, device=x_eeg.device,
+                                    dtype=torch.long)  # batch_size x num_windows  # use sample-relative time positions
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(0).repeat(b, self.num_channels, 1, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(1).repeat(b, 1, self.num_windows,
+                                                                                               1)
+            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
         else:
             raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
 
