@@ -19,7 +19,7 @@ is_pca_ica = False # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
-is_regenerate_epochs = False
+is_regenerate_epochs = True
 
 eeg_resample_rate = 200
 
@@ -37,7 +37,7 @@ dataset_name = 'auditory_oddball'
 mmarray_fn = f'{dataset_name}_mmarray.p'
 rebalance_method = 'class_weight'
 
-task_name = TaskName.PreTrain
+task_name = TaskName.TrainClassifier
 # task_name = TaskName.TrainClassifier
 # subject_pick = ['aaaaaaec', 'aaaaaaed', 'aaaaaaee', 'aaaaaaef', 'aaaaaaeg']
 subject_pick = None

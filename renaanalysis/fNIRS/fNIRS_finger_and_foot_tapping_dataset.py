@@ -8,9 +8,22 @@ import scipy
 
 
 
+def create_montage(channel_names, standard_montage_name='standard_1005'):
+    default_montage = mne.channels.make_standard_montage(standard_montage_name)
+    default_montage_channel_positions = default_montage.get_positions()['ch_pos']
+    new_channel_positions = {}
+    for channel_name in channel_names:
+        if channel_name in default_montage_channel_positions.keys():
+            new_channel_positions[channel_name] = default_montage_channel_positions[channel_name]
+        else:
+            print(f"Channel {channel_name} not found in {standard_montage_name} montage.")
+    new_montage = mne.channels.make_dig_montage(ch_pos=new_channel_positions, coord_frame='head')
+    return new_montage
 
-def visualize_eeg_epochs(epochs, event_groups, colors, picks, tmin_vis, tmax_vis, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
-                         is_plot_timeseries=True):
+
+
+def visualize_epochs(epochs, event_groups, colors, picks, tmin_vis, tmax_vis, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
+                     is_plot_timeseries=True):
     """
     Visualize EEG epochs for different event types and channels.
 
@@ -134,7 +147,7 @@ event_color = {
 
 
 
-def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epoch_t_max):
+def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, epoch_t_max):
     assert os.path.exists(dataset_root_dir), "File path does not exist."
     file_names = [f for f in os.listdir(dataset_root_dir) if os.path.isfile(os.path.join(dataset_root_dir, f))]
     file_names.sort()
@@ -184,9 +197,9 @@ def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epo
         filtered_raw_epoch = mne.Epochs(filtered_raw, event_groups, tmin=epoch_t_min, tmax=epoch_t_max, verbose=True, picks=['hbo', 'hbr'],
                                         event_id=event_id, preload=True)
 
-        visualize_eeg_epochs(filtered_raw_epoch, event_id, event_color, picks=channel_names, tmin_vis=epoch_t_min, tmax_vis=epoch_t_max,
-                             title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
-                             is_plot_timeseries=True)
+        visualize_epochs(filtered_raw_epoch, event_id, event_color, picks=channel_names, tmin_vis=epoch_t_min, tmax_vis=epoch_t_max,
+                         title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
+                         is_plot_timeseries=True)
 
         epoch_data_dict[participant_id] = [raw_epoch, filtered_raw_epoch]
         participant_id += 1
@@ -204,4 +217,7 @@ if __name__ == '__main__':
     epoch_t_max = 20
     dataset_root = 'D:/HaowenWei/Data/HT_Data/fNIRS/FingerFootTapping'
 
-    get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir=dataset_root, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
+    epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
+
+
+
