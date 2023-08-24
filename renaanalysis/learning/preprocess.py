@@ -2,7 +2,7 @@ import os
 import pickle
 from typing import List
 
-from renaanalysis.params.params import pupil_name, eeg_name
+from renaanalysis.params.params import pupil_name, eeg_name, fnirs_name
 from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica
 from renaanalysis.multimodal.PhysioArray import PhysioArray
 
@@ -43,6 +43,9 @@ def preprocess_samples_and_save(physio_arrays: List[PhysioArray], epochs_root: s
             pickle.dump(physio_arrays[i], open(parray_preprocessed_eeg_file_path, "wb"))
         elif physio_arrays[i].physio_type == pupil_name:
             physio_arrays[i].apply_znorm_by_trial()
+            pickle.dump(physio_arrays[i], open(parray_preprocessed_eeg_file_path, "wb"))
+        elif physio_arrays[i].physio_type == fnirs_name:
+            physio_arrays[i].apply_znorm_global()
             pickle.dump(physio_arrays[i], open(parray_preprocessed_eeg_file_path, "wb"))
         else:
             raise NotImplementedError

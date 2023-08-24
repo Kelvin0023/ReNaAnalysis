@@ -11,6 +11,8 @@ import torch.nn.utils.rnn as rnn_utils
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
+from renaanalysis.params.params import eeg_name
+
 
 class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, embed_dim):
@@ -309,9 +311,9 @@ class MaskLayer(nn.Module):
 
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, physio_type=eeg_name, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
                  patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi',
-                 pos_embed_mode='learnable'):
+                 pos_embed_mode='learnable', *args, **kwargs):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """
@@ -333,6 +335,7 @@ class HierarchicalTransformer(nn.Module):
         self.window_duration = window_duration
         self.patch_embed_dim = patch_embed_dim
         self.pos_embed_mode = pos_embed_mode
+        self.physio_type = physio_type
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
@@ -412,7 +415,7 @@ class HierarchicalTransformer(nn.Module):
             return self.mlp_head(x)
 
     def encode(self, x, *args, **kwargs):
-        x_eeg = x['eeg']
+        x_eeg = x[self.physio_type]
 
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC

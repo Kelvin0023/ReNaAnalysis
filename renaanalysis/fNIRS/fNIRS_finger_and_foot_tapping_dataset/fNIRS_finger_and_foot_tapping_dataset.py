@@ -160,11 +160,11 @@ def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, 
 
     participant_id = 0
     epoch_data_dict = {}
-
     for file_name in file_names:
         print('Processing file: {0}'.format(file_name))
         data_dict = loadmat(os.path.join(dataset_root_dir, file_name))
         fs = data_dict['nfo']['fs']
+        this_epoch_t_max = epoch_t_max - 0.5/fs
         channel_names = data_dict['nfo']['clab']
         channel_dict = {key: value for key, value in data_dict.items() if key.startswith('ch')}
         data = list(channel_dict.values())
@@ -190,7 +190,7 @@ def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, 
         add_stim_channel(raw, timestamps, event_ts, event, deviate=0.25)
 
         filtered_raw = raw.copy().filter(l_freq=0.01, h_freq=0.1, method='iir', verbose=True, picks=['hbo', 'hbr'])
-
+        # resample raw
         spectrum_raw = raw.compute_psd()
         spectrum_raw.plot(average=True, picks="data", exclude="bads")
 
@@ -200,10 +200,12 @@ def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, 
         event_groups = mne.find_events(raw, stim_channel='STI', verbose=True)
         raw_epoch = mne.Epochs(raw, event_groups, tmin=-1.5, tmax=25, verbose=True, picks=['hbo', 'hbr'], event_id=event_id,
                                preload=True)
-        filtered_raw_epoch = mne.Epochs(filtered_raw, event_groups, tmin=epoch_t_min, tmax=epoch_t_max, verbose=True, picks=['hbo', 'hbr'],
+        filtered_raw_epoch = mne.Epochs(filtered_raw, event_groups, tmin=epoch_t_min, tmax=this_epoch_t_max, verbose=True, picks=['hbo', 'hbr'],
                                         event_id=event_id, preload=True)
-
-        visualize_epochs(filtered_raw_epoch, event_id, event_color, picks=channel_names, tmin_vis=epoch_t_min, tmax_vis=epoch_t_max,
+        # resample epochs
+        raw_epoch = raw_epoch.resample(20, npad='auto')
+        filtered_raw_epoch = filtered_raw_epoch.resample(20, npad='auto')
+        visualize_epochs(filtered_raw_epoch, event_id, event_color, picks=channel_names, tmin_vis=epoch_t_min, tmax_vis=this_epoch_t_max,
                          title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
                          is_plot_timeseries=True)
 
@@ -237,7 +239,9 @@ def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epo
             subject_id.append([this_subject_id]*len(epochs))
             run.append([run_index]*len(epochs))
             epoch_start_times.append(epochs.events[:, 0]/epochs.info['sfreq'])
-            channel_positions.append(fnirs_finger_and_foot_tapping_dataset_montage_channel_positions())
+            channel_position = np.array(fnirs_finger_and_foot_tapping_dataset_montage_channel_positions())
+            channel_positions.append(np.tile(channel_position, (len(epochs), 1, 1)))
+            # channel_positions.append(np.array(fnirs_finger_and_foot_tapping_dataset_montage_channel_positions()))
 
     x = np.concatenate(x, axis=0)
     y = np.concatenate(y, axis=0)
@@ -253,7 +257,7 @@ def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epo
         'channel_positions': channel_positions
     }
 
-    return x, y, metadata, event_color
+    return x, y, metadata, event_color, epochs.info['sfreq']
 
 
 if __name__ == '__main__':

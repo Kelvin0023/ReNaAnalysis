@@ -20,17 +20,16 @@ from RenaAnalysis import get_rdf
 from mne_bids import (BIDSPath, read_raw_bids)
 
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
+from renaanalysis.fNIRS.fNIRS_finger_and_foot_tapping_dataset.fNIRS_finger_and_foot_tapping_dataset import \
+    get_fnirs_finger_and_foot_tapping_dataset
 from renaanalysis.learning.preprocess import preprocess_samples_and_save
-from renaanalysis.params.params import eeg_name, pupil_name, random_seed
+from renaanalysis.params.params import eeg_name, pupil_name, random_seed, fnirs_name
 from renaanalysis.utils.Bidict import Bidict
-<<<<<<< HEAD
-from renaanalysis.utils.data_utils import epochs_to_class_samples, epochs_to_class_samples_TUH
-from renaanalysis.multimodal.multimodal import PhysioArray, MultiModalArrays
-=======
+from renaanalysis.utils.data_utils import epochs_to_class_samples_TUH
+from renaanalysis.multimodal.multimodal import PhysioArray
 from renaanalysis.utils.data_utils import epochs_to_class_samples
 from renaanalysis.multimodal.multimodal import MultiModalArrays
 from renaanalysis.multimodal.PhysioArray import PhysioArray
->>>>>>> 05899af38f3c3ff19aaff2e9741d1c89272c49cc
 from renaanalysis.utils.eeg_utils import is_standard_10_20_name
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.utils import preprocess_standard_eeg, add_annotations_to_raw, is_button_after_oddball
@@ -698,9 +697,6 @@ def get_rena_samples(base_root, export_data_root, is_regenerate_epochs, reject, 
     return x, y, event_viz_colors
 
 
-def getasdfasfasdf():
-    pass
-
 def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate_epochs=False, reject='auto',
                 eeg_resample_rate=200, eeg_baseline=(-0.1, 0.), is_apply_pca_ica_eeg=True, pca_ica_eeg_n_components=20,
                 eyetracking_resample_srate=20, rebalance_method='SMOTE', subject_picks=None, subject_group_picks=None, random_seed=None, filename=None, *args, **kwargs):
@@ -746,17 +742,11 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == 'SIM':
-<<<<<<< HEAD
-        x, y, metadata, event_viz_colors = get_SIM_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
-        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
-    # elif dataset_name == 'fNIRSMA':
-    #     x, y , metadata, event_viz_colors = getasdfasfasdf()
-    #     physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
-    #
-=======
         x, y, metadata, event_viz_colors, montage = get_SIM_samples(dataset_root, eeg_resample_rate=eeg_resample_rate, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name, info={'montage': montage})]
->>>>>>> 05899af38f3c3ff19aaff2e9741d1c89272c49cc
+    elif dataset_name == 'fNIRS_finger_foot_tapping':
+        x, y , metadata, event_viz_colors, fnirs_srate = get_fnirs_finger_and_foot_tapping_dataset(dataset_root, *args, **kwargs)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=fnirs_srate, physio_type=fnirs_name, dataset_name=dataset_name)]
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 

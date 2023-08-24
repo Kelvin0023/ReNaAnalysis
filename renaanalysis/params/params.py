@@ -189,3 +189,4 @@ class TaskName(Enum):
 
 eeg_name = 'eeg'
 pupil_name = 'pupil'
+fnirs_name = 'fnirs'
