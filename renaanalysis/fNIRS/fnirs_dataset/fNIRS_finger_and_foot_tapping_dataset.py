@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from mat4py import loadmat
 import os
 import scipy
-
+from sklearn.model_selection import train_test_split
 
 fnirs_finger_and_foot_tapping_dataset_montage_channel_names = [
     'AFF5h', 'F5', 'F3', 'FFC5h', 'FC5', 'FC3', 'FCC5h', 'C5', 'C3', 'CCP5h',
@@ -153,7 +153,7 @@ event_color = {
 
 
 
-def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, epoch_t_max):
+def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, epoch_t_max, visualize_participants_epoch=True):
     assert os.path.exists(dataset_root_dir), "File path does not exist."
     file_names = [f for f in os.listdir(dataset_root_dir) if os.path.isfile(os.path.join(dataset_root_dir, f))]
     file_names.sort()
@@ -164,7 +164,7 @@ def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, 
         print('Processing file: {0}'.format(file_name))
         data_dict = loadmat(os.path.join(dataset_root_dir, file_name))
         fs = data_dict['nfo']['fs']
-        this_epoch_t_max = epoch_t_max - 0.5/fs
+        # this_epoch_t_max = epoch_t_max - 0.5/fs
         channel_names = data_dict['nfo']['clab']
         channel_dict = {key: value for key, value in data_dict.items() if key.startswith('ch')}
         data = list(channel_dict.values())
@@ -198,30 +198,31 @@ def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, 
         spectrum_filtered_raw.plot(average=True, picks="data", exclude="bads")
 
         event_groups = mne.find_events(raw, stim_channel='STI', verbose=True)
-        raw_epoch = mne.Epochs(raw, event_groups, tmin=-1.5, tmax=25, verbose=True, picks=['hbo', 'hbr'], event_id=event_id,
+        raw_epoch = mne.Epochs(raw, event_groups, tmin=epoch_t_min, tmax=epoch_t_max, verbose=True, picks=['hbo', 'hbr'], event_id=event_id,
                                preload=True)
-        filtered_raw_epoch = mne.Epochs(filtered_raw, event_groups, tmin=epoch_t_min, tmax=this_epoch_t_max, verbose=True, picks=['hbo', 'hbr'],
+        filtered_raw_epoch = mne.Epochs(filtered_raw, event_groups, tmin=epoch_t_min, tmax=epoch_t_max, verbose=True, picks=['hbo', 'hbr'],
                                         event_id=event_id, preload=True)
         # resample epochs
         raw_epoch = raw_epoch.resample(20, npad='auto')
         filtered_raw_epoch = filtered_raw_epoch.resample(20, npad='auto')
-        visualize_epochs(filtered_raw_epoch, event_id, event_color, picks=channel_names, tmin_vis=epoch_t_min, tmax_vis=this_epoch_t_max,
-                         title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
-                         is_plot_timeseries=True)
+        if visualize_participants_epoch:
+            visualize_epochs(filtered_raw_epoch, event_id, event_color, picks=channel_names, tmin_vis=epoch_t_min, tmax_vis=epoch_t_max,
+                             title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
+                             is_plot_timeseries=True)
 
         epoch_data_dict[participant_id] = {'raw': [raw_epoch], 'filtered_raw': [filtered_raw_epoch]}
         participant_id += 1
 
-        # TODO: remove this
-        if participant_id > 1:
-            break
+        # # TODO: remove this
+        # if participant_id > 1:
+        #     break
 
     return epoch_data_dict
 
 
 
-def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epoch_t_max):
-    epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
+def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epoch_t_max, visualize_participants_epoch=False):
+    epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max, visualize_participants_epoch=visualize_participants_epoch)
 
     x = []
     y = []
@@ -259,13 +260,24 @@ def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epo
 
     return x, y, metadata, event_color, epochs.info['sfreq']
 
+#
+# if __name__ == '__main__':
+#     epoch_t_min = -1.5
+#     epoch_t_max = 20
+#     dataset_root_dir = 'D:/HaowenWei/Data/HT_Data/fNIRS/FingerFootTapping'
+#
+#     # epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
+#
+#     x, y, metadata, event_color, fs = get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
+#     x_train, x_test, y_train, y_test = train_test_split(x, y, stratify=y, test_size=0.1)
+#     x_train = x_train.reshape(x_train.shape[0], -1)
+#     x_test = x_test.reshape(x_test.shape[0], -1)
+#
+#     model.fit(x_train, y_train)
 
-if __name__ == '__main__':
-    epoch_t_min = -1.5
-    epoch_t_max = 20
-    dataset_root_dir = 'D:/HaowenWei/Data/HT_Data/fNIRS/FingerFootTapping'
-
-    # epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
-    x, y, metadata, event_color = get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
+# if __name__ == '__main__':
+#     create_montage(fnirs_finger_and_foot_tapping_dataset_montage_channel_names)
+#
+#
 
 

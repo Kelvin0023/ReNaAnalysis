@@ -20,7 +20,7 @@ from RenaAnalysis import get_rdf
 from mne_bids import (BIDSPath, read_raw_bids)
 
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
-from renaanalysis.fNIRS.fNIRS_finger_and_foot_tapping_dataset.fNIRS_finger_and_foot_tapping_dataset import \
+from renaanalysis.fNIRS.fnirs_dataset.fNIRS_finger_and_foot_tapping_dataset import \
     get_fnirs_finger_and_foot_tapping_dataset
 from renaanalysis.learning.preprocess import preprocess_samples_and_save
 from renaanalysis.params.params import eeg_name, pupil_name, random_seed, fnirs_name
