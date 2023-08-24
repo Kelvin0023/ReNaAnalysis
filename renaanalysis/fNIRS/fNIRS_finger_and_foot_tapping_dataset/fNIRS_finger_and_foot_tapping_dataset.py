@@ -4,8 +4,11 @@ import matplotlib.pyplot as plt
 from mat4py import loadmat
 import os
 import scipy
-# from renaanalysis.utils.dataset_utils import visualize_eeg_epochs
 
+
+fnirs_finger_and_foot_tapping_dataset_montage_channel_names = [
+    'AFF5h', 'F5', 'F3', 'FFC5h', 'FC5', 'FC3', 'FCC5h', 'C5', 'C3', 'CCP5h',
+    'AFF6h', 'F4','F6', 'FFC6h', 'FC4', 'FC6', 'FCC6h', 'C4', 'C6', 'CCP6h']
 
 
 def create_montage(channel_names, standard_montage_name='standard_1005'):
@@ -20,6 +23,9 @@ def create_montage(channel_names, standard_montage_name='standard_1005'):
     new_montage = mne.channels.make_dig_montage(ch_pos=new_channel_positions, coord_frame='head')
     return new_montage
 
+def fnirs_finger_and_foot_tapping_dataset_montage_channel_positions():
+    montage = create_montage(fnirs_finger_and_foot_tapping_dataset_montage_channel_names)
+    return list(montage.get_positions()['ch_pos'].values())*2
 
 
 def visualize_epochs(epochs, event_groups, colors, picks, tmin_vis, tmax_vis, title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
@@ -201,23 +207,61 @@ def get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir, epoch_t_min, 
                          title='', out_dir=None, verbose='INFO', fig_size=(12.8, 7.2),
                          is_plot_timeseries=True)
 
-        epoch_data_dict[participant_id] = [raw_epoch, filtered_raw_epoch]
+        epoch_data_dict[participant_id] = {'raw': [raw_epoch], 'filtered_raw': [filtered_raw_epoch]}
         participant_id += 1
+
+        # TODO: remove this
+        if participant_id > 1:
+            break
 
     return epoch_data_dict
 
 
 
+def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epoch_t_max):
+    epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
 
+    x = []
+    y = []
 
+    subject_id = []
+    run = []
+    epoch_start_times = []
+    channel_positions = []
+
+    for this_subject_id, subject_data in epoch_data_dict.items():
+        epochs_list = subject_data['filtered_raw']
+        for run_index, epochs in enumerate(epochs_list):
+            x.append(epochs.get_data())
+            y.append(epochs.events[:, -1])
+            subject_id.append([this_subject_id]*len(epochs))
+            run.append([run_index]*len(epochs))
+            epoch_start_times.append(epochs.events[:, 0]/epochs.info['sfreq'])
+            channel_positions.append(fnirs_finger_and_foot_tapping_dataset_montage_channel_positions())
+
+    x = np.concatenate(x, axis=0)
+    y = np.concatenate(y, axis=0)
+    subject_id = np.concatenate(subject_id, axis=0)
+    run = np.concatenate(run, axis=0)
+    epoch_start_times = np.concatenate(epoch_start_times, axis=0)
+    channel_positions = np.concatenate(channel_positions, axis=0)
+
+    metadata = {
+        'subject_id': subject_id,
+        'run': run,
+        'epoch_start_times': epoch_start_times,
+        'channel_positions': channel_positions
+    }
+
+    return x, y, metadata, event_color
 
 
 if __name__ == '__main__':
     epoch_t_min = -1.5
     epoch_t_max = 20
-    dataset_root = 'D:/HaowenWei/Data/HT_Data/fNIRS/FingerFootTapping'
+    dataset_root_dir = 'D:/HaowenWei/Data/HT_Data/fNIRS/FingerFootTapping'
 
-    epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
-
+    # epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
+    x, y, metadata, event_color = get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
 
 
