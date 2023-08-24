@@ -329,6 +329,23 @@ def z_norm_by_trial(data):
         norm_data[i] = sample_norm
     return norm_data
 
+def z_norm_by_subject_run(physioarray):
+    """
+    Z-normalize data by trial, the input data is in the shape of (num_samples, num_channels, num_timesteps)
+    @param data: data is in the shape of (num_samples, num_channels, num_timesteps)
+    """
+    norm_data = np.copy(physioarray.array)
+    metadata = physioarray.meta_info
+    run_set = np.unique(metadata['run'])
+    subject_set = np.unique(metadata['subject_id'])
+    for s in subject_set:
+        mean = np.mean(physioarray.array[np.where(np.logical_and(metadata['run'] == 1, metadata['subject_id'] == s))])
+        std = np.std(physioarray.array[np.where(np.logical_and(metadata['run'] == 1, metadata['subject_id'] == s))])
+        for i in run_set:
+            sample_norm = (physioarray.array[np.where(np.logical_and(metadata['run'] == i, metadata['subject_id'] == s))] - mean) / std
+            norm_data[np.where(np.logical_and(metadata['run'] == i, metadata['subject_id'] == s))] = sample_norm
+    return norm_data
+
 def min_max_by_trial(data):
     """
     Min-max normalize data by trial, the input data is in the shape of (num_samples, num_channels, num_timesteps)

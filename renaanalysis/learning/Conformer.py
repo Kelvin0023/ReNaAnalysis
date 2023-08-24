@@ -158,18 +158,15 @@ def interaug(timg, label, encoder):
         tmp_data = timg[cls_idx]
         tmp_label = encoder(np.array(cls4aug).reshape(1, 1))
 
-        if tmp_data.shape[0] == 0:
-            continue
-        else:
-            tmp_aug_data = torch.zeros((int(batch_size / 4), 1, 22, 1000))
-            for ri in range(int(batch_size / 4)):
-                for rj in range(8):
-                    rand_idx = np.random.randint(0, tmp_data.shape[0], 8)
-                    tmp_aug_data[ri, :, :, rj * 125:(rj + 1) * 125] = tmp_data[rand_idx[rj], :, :,
-                                                                      rj * 125:(rj + 1) * 125]
+        tmp_aug_data = torch.zeros((int(batch_size / 4), 1, 22, 1000))
+        for ri in range(int(batch_size / 4)):
+            for rj in range(8):
+                rand_idx = np.random.randint(0, tmp_data.shape[0], 8)
+                tmp_aug_data[ri, :, :, rj * 125:(rj + 1) * 125] = tmp_data[rand_idx[rj], :, :,
+                                                                  rj * 125:(rj + 1) * 125]
 
-            aug_data.append(tmp_aug_data)
-            aug_label.append(torch.from_numpy(tmp_label).expand(int(batch_size / 4), -1))
+        aug_data.append(tmp_aug_data)
+        aug_label.append(torch.from_numpy(tmp_label).expand(int(batch_size), -1))
     aug_data = np.concatenate(aug_data)
     aug_label = np.concatenate(aug_label)
     aug_shuffle = np.random.permutation(len(aug_data))
@@ -181,4 +178,5 @@ def interaug(timg, label, encoder):
     aug_label = torch.from_numpy(aug_label)
     aug_label = aug_label.long()
     return aug_data, aug_label
+
 
