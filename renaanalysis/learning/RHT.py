@@ -112,7 +112,7 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(embedding_dim)
 
     # def forward(self, x, r_t, r_c, bias_time_e, bias_time_r, bias_channel_r, bias_channel_e):
-    def forward(self, x, r_t, r_c, r_p, bias_pf, mems):
+    def forward(self, x, r_t, r_c, r_p, bias_pf, mems, qlen):
         """
 
         @param x:
@@ -124,21 +124,20 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         @param bias_channel_e:  num_head x dim_head
         @return:
         # """
-        b, qlen, dpatch = x.shape
-
+        b, _,  dpatch = x.shape
 
         if mems is not None:
             mem_x, mem_r_t, mem_r_c, mem_r_p = mems
             if b != mem_x.shape[0]:
                 mem_x, mem_r_t, mem_r_c, mem_r_p = mem_x[:b], mem_r_t[:b], mem_r_c[:b], mem_r_p[:b]
-            x_with_mems = torch.cat([mem_x, x], dim=1)
-            klen = x_with_mems.size(1)
+            # x_with_mems = torch.cat([mem_x, x], dim=1)
+            klen = x.size(1)
             # x_with_mems = self.layer_norm(torch.cat([mem_x, x], dim=1))
             r_t = torch.cat([mem_r_t, r_t], dim=1) if r_t.size(1) != klen else r_t
             r_c = torch.cat([mem_r_c, r_c], dim=1) if r_c.size(1) != klen else r_t
             r_p = torch.cat([mem_r_p, r_p], dim=1) if r_p.size(1) != klen else r_t
 
-            qkv = self.to_qkv(x_with_mems).chunk(3, dim=-1)
+            qkv = self.to_qkv(x).chunk(3, dim=-1)
             Ex_Wq, Ex_Wke, v = map(lambda t: rearrange(t, 'b n (h d) -> n b h d', h=self.num_heads), qkv)
             Ex_Wq = Ex_Wq[-qlen:]
         else:
@@ -280,11 +279,16 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         layer_outs_rs = []
         if self.mem_len > 0: layer_outs_rs.append((x, r_t[:, -qlen:], r_c, r_p))
         for i, (attention_layer, prenorm_ff_residual_postnorm) in enumerate(self.layers):
-            mems_i = None if self.mems is None else self.mems[i]  # memory at ith layer
+            if self.mems is not None:
+                mem_x, _, _, _ = self.mems[i]
+                if b != mem_x.shape[0]:
+                    mem_x= mem_x[:b]
+                x_with_mems = torch.cat([mem_x, x], dim=1)   # concate x with mem here so they are prenorm together
+                out, attention = attention_layer(x_with_mems, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=self.mems[i], qlen=qlen)
+            else:
+                out, attention = attention_layer(x, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=None, qlen=qlen)
             # out, attention = prenorm_attention(x, r_t=r_t, r_c=r_c, bias_time_e=self.bias_time_e, bias_time_r=self.bias_time_r, bias_channel_r=self.bias_channel_r, bias_channel_e=self.bias_channel_e)
-            out, attention = attention_layer(x, r_t=r_t, r_c=r_c, r_p=r_p, bias_pf=self.bias_pf, mems=mems_i)
             x = out + x  # residual connection
-
             x = prenorm_ff_residual_postnorm(x) + x
 
             if self.mem_len > 0: layer_outs_rs.append((x, r_t[:, -qlen:], r_c, r_p))  # r_t can be of the same len as t
@@ -347,15 +351,17 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1,
+                 reset_mem_each_session=True):
         """
 
         # a token is a time slice of data on a single channel
 
         @param num_timesteps: int: number of timesteps in each sample
-        @param num_channels: int: number of channels of the input data
+        @param num_channels: int: nusmber of channels of the input data
         @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
         note that 'single' only works when the number of classes is 2.
+        @param reset_mem_each_session:
         """
         if output == 'single':
             assert num_classes == 2, 'output can only be single when num_classes is 2'
@@ -405,7 +411,10 @@ class RecurrentHierarchicalTransformer(nn.Module):
         randomized_participant_pos = torch.randperm(n_participant).to(torch.float32)
         self.register_buffer('randomized_participant_pos', randomized_participant_pos)
 
-    def forward(self, x_eeg, *args, **kwargs):
+        self.current_session = None
+        self.reset_mem_each_session = reset_mem_each_session
+
+    def forward(self, x, *args, **kwargs):
         """
         auditory oddball meta info: 'subject_id', 'run', 'epoch_start_times', 'channel_positions', 'channel_voxel_indices'
         @param x_eeg:
@@ -414,26 +423,42 @@ class RecurrentHierarchicalTransformer(nn.Module):
         """
 
         # check meta info is complete
-        x = self.encode(x_eeg, *args, **kwargs)
+        x = self.encode(x, *args, **kwargs)
         return self.mlp_head(x)
 
-    def encode(self, x_eeg, *args, **kwargs):
+    def encode(self, x, *args, **kwargs):
+        """
+        currently
+
+        @param x_eeg:
+        @param args:
+        @param kwargs:
+        @return:
+        """
+        x_eeg = x['eeg']
+
         b, nchannel, _ = x_eeg.shape
 
+        if self.reset_mem_each_session and self.current_session != (current_session := x['session'][0].item()):
+            self.reset()
+            print(f"Current session changed from {self.current_session} to {current_session}. Memory reset.")
+            self.current_session = current_session
+
         # get discretized time for each token
-        discretized_start_times = args[2]  // self.window_duration
+        # discretized_start_times = args[3]  // self.window_duration
         mem_timesteps = int(self.transformer.mems[0][0].size(1) / self.num_channels) if (self.transformer.mems is not None and torch.numel(self.transformer.mems[0][0]) != 0) else 0
         mem_num_epochs = mem_timesteps // self.num_windows
         tlen = mem_timesteps + self.num_windows
         # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
         # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
-        time_pos = torch.stack([torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
+        # time_pos = torch.stack([torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
+        time_pos = torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long)[None, :]  # batch_size x num_windows  # use sample-relative time positions
 
         # compute channel positions that are voxel discretized
-        channel_pos = args[4]  # batch_size x num_channels
+        channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
 
         # get the participant embeddings
-        participant_pos = args[0]
+        participant_pos = x['subject_id']
         participant_pos = self.randomized_participant_pos[(participant_pos.to(torch.int))][:, None]  # batch_size x 1
 
         # each sample in a batch must have the same participant embedding
@@ -445,7 +470,7 @@ class RecurrentHierarchicalTransformer(nn.Module):
         # viz_time_positional_embedding(channel_pos_embed)  # time embedding differs in batch
 
         # prepare the positional features that are different among tokens in the same sample
-        time_pos_embed = time_pos_embed.unsqueeze(1).repeat(1, nchannel, 1, 1).reshape(b, -1, self.patch_embed_dim)
+        time_pos_embed = time_pos_embed.unsqueeze(1).repeat(b, nchannel, 1, 1).reshape(b, -1, self.patch_embed_dim)
         channel_pos_embed = channel_pos_embed.unsqueeze(2).repeat(1, 1, self.num_windows, 1).reshape(b, -1, self.patch_embed_dim)
         participant_pos_embed = repeat(participant_pos_embed, 'b 1 d-> b n d', n=self.num_patches)
 

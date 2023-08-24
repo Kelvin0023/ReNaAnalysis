@@ -7,15 +7,13 @@ import time
 import matplotlib.pyplot as plt
 import torch
 
-from renaanalysis.learning.Conformer import Conformer
-from renaanalysis.learning.grid_search import grid_search_ht_eeg, grid_search_eeg
-from renaanalysis.multimodal.ChannelSpace import create_discretize_channel_space
+from renaanalysis.learning.grid_search import grid_search_ht_eeg
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
 # user parameters
 n_folds = 2
-is_pca_ica = False # apply pca and ica on data or not
+is_pca_ica = True # apply pca and ica on data or not
 is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
@@ -32,9 +30,10 @@ data_root = 'D:/Dataset/auditory_oddball'
 # dataset_name = 'auditory_oddball'
 dataset_name = 'auditory_oddball'
 # dataset_name = 'BCICIVA'
-# mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
-mmarray_fn = f'{dataset_name}_mmarray_class-weight.p'
-rebalance_method = 'class_weight'
+mmarray_fn = f'{dataset_name}_mmarray_smote_pica.p'
+# mmarray_fn = f'{dataset_name}_mmarray_class-weight.p'
+# rebalance_method = 'class_weight'
+rebalance_method = 'SMOTE'
 
 task_name = TaskName.TrainClassifier
 # task_name = TaskName.TrainClassifier
@@ -135,7 +134,6 @@ start_time = time.time()  # record the start time of the analysis
 mmarray_path = os.path.join(export_data_root, mmarray_fn)
 if not os.path.exists(mmarray_path):
     mmarray = get_dataset(dataset_name, epochs_root=export_data_root, dataset_root=data_root, reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs, subject_picks=subject_pick, subject_group_picks=subject_group_picks, random_seed=random_seed, filename=mmarray_path, rebalance_method=rebalance_method)
-    create_discretize_channel_space(mmarray['eeg'])
     mmarray.save_to_path(mmarray_path)
 else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))

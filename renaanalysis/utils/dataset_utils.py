@@ -23,8 +23,14 @@ from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.preprocess import preprocess_samples_and_save
 from renaanalysis.params.params import eeg_name, pupil_name, random_seed
 from renaanalysis.utils.Bidict import Bidict
+<<<<<<< HEAD
 from renaanalysis.utils.data_utils import epochs_to_class_samples, epochs_to_class_samples_TUH
 from renaanalysis.multimodal.multimodal import PhysioArray, MultiModalArrays
+=======
+from renaanalysis.utils.data_utils import epochs_to_class_samples
+from renaanalysis.multimodal.multimodal import MultiModalArrays
+from renaanalysis.multimodal.PhysioArray import PhysioArray
+>>>>>>> 05899af38f3c3ff19aaff2e9741d1c89272c49cc
 from renaanalysis.utils.eeg_utils import is_standard_10_20_name
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.utils import preprocess_standard_eeg, add_annotations_to_raw, is_button_after_oddball
@@ -225,6 +231,7 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
 
         """
     subjects = {}
+    session_count = 0
     for i in range(num_subs):
         subject = '{:0>{}}'.format(i + 1, subject_id_width)
         runs = {}
@@ -244,7 +251,7 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
 
             eventID_mat = np.zeros((epochs_info.shape[0], 3))
             event_dict_this_run = {}
-            metadata_dict = {'subject_id': [], 'run': []}
+            metadata_dict = {'subject_id': [], 'run': [], 'session': []}
             for k in range(epochs_info.shape[0]):
                 eventID_mat[k, 0] = epochs_info['sample'][k]
                 eventID_mat[k, 2] = event_label_dict[epochs_info['value'][k]]
@@ -252,12 +259,14 @@ def load_epoched_data_tsv_event_info(num_subs, num_runs, bids_root, subject_id_w
                     event_dict_this_run[epochs_info['value'][k]] = int(eventID_mat[k, 2])
                 metadata_dict['subject_id'].append(subject)
                 metadata_dict['run'].append(str(j))
+                metadata_dict['session'].append(session_count)  # give each subject's each run a unique
             eventID_mat = eventID_mat.astype(int)
             epoch_start_times = raw.times[eventID_mat[:, 0]]
             metadata_dict['epoch_start_times'] = epoch_start_times
             metadata = pd.DataFrame(metadata_dict)
             data = mne.Epochs(raw, eventID_mat, event_id=event_dict_this_run, metadata=metadata, tmin=epoch_tmin, tmax=epoch_tmax, baseline=baseline_tuple, preload=True)
             runs['run-' + str(j + 1)] = data
+            session_count += 1
     return subjects
 
 def load_auditory_oddball_data(bids_root, srate=256, epoch_tmin = -0.1, epoch_tmax = 0.8, include_last=False, colors=None):
@@ -327,6 +336,7 @@ def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tma
     x_path = os.path.join(export_data_root, 'x_sim.p')
     y_path = os.path.join(export_data_root, 'y_sim.p')
     metadata_path = os.path.join(export_data_root, 'metadata_sim.p')
+    montage_path = os.path.join(export_data_root, 'montage_sim.p')
     if is_regenerate_epochs:
         epochs = load_SIM_epochs(fdt_root=data_root, colors=event_viz_colors, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax, eeg_resample_rate=eeg_resample_rate)
         eeg_viz_picks = [x for x in epochs.ch_names if x.endswith('z')]
@@ -334,14 +344,17 @@ def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tma
         pickle.dump(x, open(x_path, 'wb'))
         pickle.dump(y, open(y_path, 'wb'))
         pickle.dump(metadata, open(metadata_path, 'wb'))
+        montage = epochs.get_montage()
+        pickle.dump(epochs.montage, open(montage_path, 'wb'))
     else:
         assert os.path.exists(x_path) and os.path.exists(y_path) and os.path.exists(metadata_path), "Data files not found, please regenerate epochs by setting is_regenerate_epochs=True"
         x = pickle.load(open(x_path, 'rb'))
         y = pickle.load(open(y_path, 'rb'))
         metadata = pickle.load(open(metadata_path, 'rb'))
+        montage = pickle.load(open(montage_path, 'rb'))
 
     print(f"Load data took {time.perf_counter() - loading_start_time} seconds")
-    return x, y, metadata, event_viz_colors
+    return x, y, metadata, event_viz_colors, montage
 
 def get_BCICIVA_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tmax=3, is_regenerate_epochs=True, export_data_root=None):
     '''
@@ -734,12 +747,17 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == 'SIM':
+<<<<<<< HEAD
         x, y, metadata, event_viz_colors = get_SIM_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     # elif dataset_name == 'fNIRSMA':
     #     x, y , metadata, event_viz_colors = getasdfasfasdf()
     #     physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
     #
+=======
+        x, y, metadata, event_viz_colors, montage = get_SIM_samples(dataset_root, eeg_resample_rate=eeg_resample_rate, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name, info={'montage': montage})]
+>>>>>>> 05899af38f3c3ff19aaff2e9741d1c89272c49cc
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 

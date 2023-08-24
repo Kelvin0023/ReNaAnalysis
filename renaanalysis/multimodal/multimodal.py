@@ -11,12 +11,13 @@ from sklearn import preprocessing
 from sklearn.model_selection import StratifiedShuffleSplit, train_test_split, ShuffleSplit
 from sklearn.preprocessing import LabelEncoder
 from torch import nn
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import DataLoader
 
-from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain, HierarchicalTransformer, \
-    ContrastiveLoss
-from renaanalysis.learning.MutiInputDataset import MultiInputDataset
+from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain
 from renaanalysis.multimodal.BatchIterator import OrderedBatchIterator
+from renaanalysis.multimodal.MultimodalDataset import MultiModalDataset
+from renaanalysis.multimodal.PhysioArray import PhysioArray
+from renaanalysis.utils.TorchUtils import batch_to_tensor
 from renaanalysis.params.params import TaskName
 from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, rebalance_classes
 
@@ -134,7 +135,7 @@ class MultiModalArrays:
     """
 
     """
-    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str='', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None, experiment_info: dict=None):
+    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str= '', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None, experiment_info: dict=None):
         """
         mmarray will assume the ordered set of labels correpond to each event in event_viz_colors
         @param physio_arrays:
@@ -183,6 +184,8 @@ class MultiModalArrays:
         self.train_batch_sample_indices = None
         self.filename = filename
 
+        self.multi_modal_dataset = MultiModalDataset(self.physio_arrays, self.labels_array)
+
     def keys(self):
         return self._physio_types_arrays.keys()
 
@@ -204,7 +207,7 @@ class MultiModalArrays:
     def get_indices_by_subject_run(self, subject, run):
         return [i for i, (s, r) in enumerate(zip(self.experiment_info['subject_id'], self.experiment_info['run'])) if s == subject and r == run]
 
-    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, task_name=TaskName.TrainClassifier, return_metainfo=False):
+    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, *args, **kwargs):
         """
         get the dataloader for a given fold
         this function must be called after training_val_split
@@ -214,109 +217,87 @@ class MultiModalArrays:
         """
         if self.rebalance_method == 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
             warnings.warn("Using class_weight as rebalancing method while encoder is LabelEncoder because BCELoss can not apply class weights ")
-        if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
-        # assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
-            assert self._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
-            training_indices, val_indices = self.training_val_split_indices[fold_index]
-            x_train = []
-            x_val = []
-            y_train = self.labels_array[training_indices]
-            y_val = self.labels_array[val_indices]
+        # if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
+        # # assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
+        #     assert self._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
+        #     training_indices, val_indices = self.training_val_split_indices[fold_index]
+        #     x_train = []
+        #     x_val = []
+        #     y_train = self.labels_array[training_indices]
+        #     y_val = self.labels_array[val_indices]
+        #
+        #     labels = []
+        #     for parray in self.physio_arrays:
+        #         this_x_train, this_y_train = parray[training_indices], y_train
+        #         if self.rebalance_method == 'SMOTE' and is_rebalance_training:
+        #             assert self.labels_array is not None, 'get_dataloader_fold: labels array must be provided to use rebalancing'
+        #             this_x_train, this_y_train = rebalance_classes(parray[training_indices], y_train, by_channel=parray.is_rebalance_by_channel, random_seed=random_seed)
+        #         x_train.append(torch.Tensor(this_x_train).to(device))
+        #         x_val.append(torch.Tensor(parray[val_indices]).to(device))
+        #
+        #         labels.append(this_y_train)  # just for assertion
+        #
+        #         # meta_info_train.append({name: values[training_indices] for name, values in parray.meta_info.items()})
+        #         # meta_info_val.append({name: values[val_indices] for name, values in parray.meta_info.items()})
+        #     meta_info_train = [{name: torch.Tensor(value[training_indices]).to(device) for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
+        #     meta_info_val = [{name: torch.Tensor(value[val_indices]).to(device) for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
+        #
+        #     meta_info_train = [v for d in meta_info_train for k, v in d.items()]
+        #     meta_info_val = [v for d in meta_info_val for k, v in d.items()]
+        #
+        #     n_train, n_val = len(x_train[0]), len(x_val[0])
+        #     if len(meta_info_train) > 0 and len(meta_info_train[0]) != n_train and return_metainfo:
+        #         warnings.warn("get_dataloader_fold: return_metainfo is not supported for SMOTE. The meta info will be duplicated using the first sample's")
+        #         meta_info_train = [v[0].repeat(n_train,  *([1] * (len(v.shape)-1) ) ) for v in meta_info_train]
+        #         meta_info_val = [v[0].repeat(n_val, *([1] * (len(v.shape)-1) ) ) for v in meta_info_val]
+        #
+        #     assert np.all([label_set == labels[0] for label_set in labels])
+        #     y_train = labels[0]
+        #     y_train_encoded = self._encoder(y_train)
+        #     y_val_encoded = self._encoder(y_val)
+        #     y_train_encoded = torch.Tensor(y_train_encoded)
+        #     y_val_encoded = torch.Tensor(y_val_encoded)
+        #
+        #     if len(x_train) == 1:   # how many input modalities
+        #         dataset_class = TensorDataset
+        #     else:
+        #         dataset_class = MultiInputDataset
+        #     train_set = (*x_train, *meta_info_train, y_train_encoded ) if return_metainfo else (*x_train, y_train_encoded)
+        #     val_set = (*x_val, *meta_info_val, y_val_encoded )if return_metainfo else (*x_val, y_val_encoded)
+        #     train_dataset = dataset_class(*train_set)
+        #     val_dataset = dataset_class(*val_set)
+        # elif task_name == TaskName.PreTrain:
+        #     training_indices, val_indices = self.training_val_split_indices[fold_index]
+        #     x_train = []
+        #     x_val = []
+        #     for parray in self.physio_arrays:
+        #         x_train.append(torch.Tensor(parray[training_indices]).to(device))
+        #         x_val.append(torch.Tensor(parray[val_indices]).to(device))
+        #     if len(x_train) == 1:
+        #         dataset_class = TensorDataset
+        #         x_train = x_train[0]
+        #         x_val = x_val[0]
+        #     else:
+        #         dataset_class = MultiInputDataset
+        #     train_dataset = dataset_class(x_train)
+        #     val_dataset = dataset_class(x_val)
+        training_indices, val_indices = self.training_val_split_indices[fold_index]
+        val_dataset = MultiModalDataset(self.physio_arrays, labels=(encoded_labels := self.get_encoded_labels()), indices=val_indices)
 
-            labels = []
-            for parray in self.physio_arrays:
-                this_x_train, this_y_train = parray[training_indices], y_train
-                if self.rebalance_method == 'SMOTE' and is_rebalance_training:
-                    assert self.labels_array is not None, 'get_dataloader_fold: labels array must be provided to use rebalancing'
-                    this_x_train, this_y_train = rebalance_classes(parray[training_indices], y_train, by_channel=parray.is_rebalance_by_channel, random_seed=random_seed)
-                x_train.append(torch.Tensor(this_x_train).to(device))
-                x_val.append(torch.Tensor(parray[val_indices]).to(device))
+        # rebalance training set
+        if self.rebalance_method == 'SMOTE' and is_rebalance_training:
+            train_dataset = MultiModalDataset(self.physio_arrays, labels=self.labels_array, indices=training_indices)
+            train_dataset.get_rebalanced_set(random_seed=random_seed, encoder=self._encoder)
+        else:
+            train_dataset = MultiModalDataset(self.physio_arrays, labels=encoded_labels, indices=training_indices)
 
-                labels.append(this_y_train)  # just for assertion
-
-                # meta_info_train.append({name: values[training_indices] for name, values in parray.meta_info.items()})
-                # meta_info_val.append({name: values[val_indices] for name, values in parray.meta_info.items()})
-            meta_info_train = [{name: torch.Tensor(value[training_indices]).to(device) for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
-            meta_info_val = [{name: torch.Tensor(value[val_indices]).to(device) for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
-
-            meta_info_train = [v for d in meta_info_train for k, v in d.items()]
-            meta_info_val = [v for d in meta_info_val for k, v in d.items()]
-
-            n_train, n_val = len(x_train[0]), len(x_val[0])
-            if len(meta_info_train) > 0 and len(meta_info_train[0]) != n_train and return_metainfo:
-                warnings.warn("get_dataloader_fold: return_metainfo is not supported for SMOTE. The meta info will be duplicated using the first sample's")
-                meta_info_train = [v[0].repeat(n_train,  *([1] * (len(v.shape)-1) ) ) for v in meta_info_train]
-                meta_info_val = [v[0].repeat(n_val, *([1] * (len(v.shape)-1) ) ) for v in meta_info_val]
-
-            assert np.all([label_set == labels[0] for label_set in labels])
-            y_train = labels[0]
-            y_train_encoded = self._encoder(y_train)
-            y_val_encoded = self._encoder(y_val)
-            y_train_encoded = torch.Tensor(y_train_encoded)
-            y_val_encoded = torch.Tensor(y_val_encoded)
-
-            if len(x_train) == 1:   # how many input modalities
-                dataset_class = TensorDataset
-            else:
-                dataset_class = MultiInputDataset
-            train_set = (*x_train, *meta_info_train, y_train_encoded ) if return_metainfo else (*x_train, y_train_encoded)
-            val_set = (*x_val, *meta_info_val, y_val_encoded )if return_metainfo else (*x_val, y_val_encoded)
-            train_dataset = dataset_class(*train_set)
-            val_dataset = dataset_class(*val_set)
-        elif task_name == TaskName.PreTrain:
-            training_indices, val_indices = self.training_val_split_indices[fold_index]
-            x_train = []
-            x_val = []
-            for parray in self.physio_arrays:
-                x_train.append(torch.Tensor(parray[training_indices]).to(device))
-                x_val.append(torch.Tensor(parray[val_indices]).to(device))
-
-                # meta_info_train.append({name: values[training_indices] for name, values in parray.meta_info.items()})
-                # meta_info_val.append({name: values[val_indices] for name, values in parray.meta_info.items()})
-            meta_info_train = [{name: torch.Tensor(value[training_indices]).to(device) for name, value in
-                                darray.meta_info_encoded.items()} for darray in self.physio_arrays]
-            meta_info_val = [
-                {name: torch.Tensor(value[val_indices]).to(device) for name, value in darray.meta_info_encoded.items()}
-                for darray in self.physio_arrays]
-
-            meta_info_train = [v for d in meta_info_train for k, v in d.items()]
-            meta_info_val = [v for d in meta_info_val for k, v in d.items()]
-
-            n_train, n_val = len(x_train[0]), len(x_val[0])
-            if len(meta_info_train) > 0 and len(meta_info_train[0]) != n_train and return_metainfo:
-                warnings.warn(
-                    "get_dataloader_fold: return_metainfo is not supported for SMOTE. The meta info will be duplicated using the first sample's")
-                meta_info_train = [v[0].repeat(n_train, *([1] * (len(v.shape) - 1))) for v in meta_info_train]
-                meta_info_val = [v[0].repeat(n_val, *([1] * (len(v.shape) - 1))) for v in meta_info_val]
-
-            if len(x_train) == 1:  # how many input modalities
-                dataset_class = TensorDataset
-            else:
-                dataset_class = MultiInputDataset
-            train_set = (*x_train, *meta_info_train) if return_metainfo else (*x_train,)
-            val_set = (*x_val, *meta_info_val) if return_metainfo else (*x_val,)
-            train_dataset = dataset_class(*train_set)
-            val_dataset = dataset_class(*val_set)
-            # x_train = []
-            # x_val = []
-            # for parray in self.physio_arrays:
-            #     x_train.append(torch.Tensor(parray[training_indices]).to(device))
-            #     x_val.append(torch.Tensor(parray[val_indices]).to(device))
-            # if len(x_train) == 1:
-            #     dataset_class = TensorDataset
-            #     x_train = x_train[0]
-            #     x_val = x_val[0]
-            # else:
-            #     dataset_class = MultiInputDataset
-            # train_dataset = dataset_class(x_train)
-            # val_dataset = dataset_class(x_val)
+        val_dataset.to_tensor(device=device)
+        train_dataset.to_tensor(device=device)
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
         return train_dataloader, val_dataloader
-
-    # def get_ordered_dataloader_fold(self, fold_index, batch_size, val_size, test_size, random_seed=None, device=None):
 
 
     def training_val_split(self, n_folds, val_size=0.1, random_seed=None):
@@ -324,6 +305,8 @@ class MultiModalArrays:
         split the train set into training and validation sets
 
         this function must be called after train_test_split
+
+        @param val_size: proportion of to the dataset excluding the test set
         @return:
         """
         assert self.train_indices is not None, 'train indices have not been set, please call train_test_split first'
@@ -348,6 +331,8 @@ class MultiModalArrays:
         else:
             uses simple train-test split from sklearn
         The array must have labels for this to work.
+
+        @param test_size: proportion of the ENTIRE dataset
         @return:
         """
         if self.labels_array is not None:
@@ -358,6 +343,22 @@ class MultiModalArrays:
         else:
             self.train_indices, self.test_indices = train_test_split(list(range(self.physio_arrays[0].array.shape[0])), test_size=test_size, random_state=random_seed, stratify=self.labels_array)
         self.save()
+
+
+    def test_train_val_split(self, n_folds, test_size=0.1, val_size=0.1, random_seed=None):
+        """
+        create indices for test, train and validation sets
+
+        @param n_folds:
+        @param test_size: proportional to the size of the ENTIRE dataset
+        @param val_size: proportional to the size of the ENTIRE dataset
+        @param random_seed:
+        @return:
+        """
+        self.train_test_split(test_size=test_size, random_seed=random_seed)
+        val_size = val_size / (1 - test_size)  # adjust the val size to be a percentage of the training set
+        self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed)
+
 
     def set_training_val_set(self, train_indices, val_indices):
         """
@@ -399,75 +400,95 @@ class MultiModalArrays:
         indices = indices[indices != None].astype(int)
         return indices
 
-    def get_test_set(self, encode_y=False, convert_to_tensor=False, device=None, return_metainfo=False, use_ordered=False):
+    def get_ordered_test_set(self, convert_to_tensor=False, device=None):
+        test_indices = self.get_ordered_test_indices()
+        if self.labels_array is None:
+            warnings.warn('labels array is None, make sure label is not needed for this model')
+        test_set = self.multi_modal_dataset[test_indices]
+        if convert_to_tensor:
+            test_set = batch_to_tensor(test_set, device=device)
+        return test_set
+
+    def get_test_set(self, convert_to_tensor=False, device=None):
         """
         get the test set
         @return:
         """
         assert self.test_indices is not None or self.test_batch_sample_indices is not None, 'test indices have not been set, please call train_test_split first, or training_val_test_split_ordered_by_subject_run'
-        if use_ordered:
-            test_indices = self.get_ordered_test_indices()
-        else:
-            test_indices = self.test_indices
-        x_test = []
-        for parray in self.physio_arrays:
-            is_pca_ica_preprocessed = 'pca' in parray.data_processor.keys() or 'ica' in parray.data_processor.keys()
-            if is_pca_ica_preprocessed:
-                print("\033[93m  {}\033[00m".format('test set is pca or ica preprocessed, make sure preprocessing is needed for this model'))
-            else:
-                print("\033[93m  {}\033[00m".format('test set is not pca or ica preprocessed, make sure preprocessing is not needed for this model'))
-            if convert_to_tensor:
-                x_test.append(torch.Tensor(parray[test_indices]).to(device))
-            else:
-                x_test.append(parray[test_indices])
+        # if use_ordered:
+        #     test_indices = self.get_ordered_test_indices()
+        # else:
+        test_indices = self.test_indices
+        # x_test = []
+        # for parray in self.physio_arrays:
+        #     is_pca_ica_preprocessed = 'pca' in parray.data_processor.keys() or 'ica' in parray.data_processor.keys()
+        #     if is_pca_ica_preprocessed:
+        #         print("\033[93m  {}\033[00m".format('test set is pca or ica preprocessed, make sure preprocessing is needed for this model'))
+        #     else:
+        #         print("\033[93m  {}\033[00m".format('test set is not pca or ica preprocessed, make sure preprocessing is not needed for this model'))
+        #     if convert_to_tensor:
+        #         x_test.append(torch.Tensor(parray[test_indices]).to(device))
+        #     else:
+        #         x_test.append(parray[test_indices])
+        #
+        #
+        # if self.labels_array is not None:
+        #     y_test = self.labels_array[test_indices]
+        #     if encode_y:
+        #         y_test = self._encoder(y_test)
+        #     if convert_to_tensor:
+        #         y_test = torch.Tensor(y_test).to(device)
+        # else:
+        #     warnings.warn('labels array is None, make sure label is not needed for this model')
+        #     y_test = None
+        #
+        # meta_info = [{name: value[test_indices] for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
+        # meta_info = {k: v for d in meta_info for k, v in d.items()}
+        # if convert_to_tensor:
+        #     meta_info = {k: torch.Tensor(v).to(device) for k, v in meta_info.items()}
+        # test_set = (*x_test, *list(meta_info.values()), y_test) if return_metainfo else (*x_test, y_test)
 
-        meta_info = [{name: value[test_indices] for name, value in darray.meta_info_encoded.items()} for darray in
-                     self.physio_arrays]
-        meta_info = {k: v for d in meta_info for k, v in d.items()}
-        if convert_to_tensor:
-            meta_info = {k: torch.Tensor(v).to(device) for k, v in meta_info.items()}
+        # return test_set
 
-        if self.labels_array is not None:
-            y_test = self.labels_array[test_indices]
-            if encode_y:
-                y_test = self._encoder(y_test)
-            if convert_to_tensor:
-                y_test = torch.Tensor(y_test).to(device)
-            test_set = (*x_test, *list(meta_info.values()), y_test) if return_metainfo else (*x_test, y_test)
-        else:
+        if self.labels_array is None:
             warnings.warn('labels array is None, make sure label is not needed for this model')
-            test_set = (*x_test, *list(meta_info.values())) if return_metainfo else (*x_test,)
-
+        test_set = MultiModalDataset(self.physio_arrays, labels=self.get_encoded_labels(), indices=test_indices)
+        if convert_to_tensor:
+            test_set.to_tensor(device=device)
         return test_set
 
-    def get_test_dataloader(self, batch_size, encode_y=False, device=None, return_metainfo=False):
-        test_set = self.get_test_set(encode_y=encode_y, convert_to_tensor=True, device=device, return_metainfo=return_metainfo)
-        if len(self.physio_arrays) == 1:
-            dataset_class = TensorDataset
-        else:
-            dataset_class = MultiInputDataset
-        test_dataset = dataset_class(*test_set)
-        test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
+    def get_test_dataloader(self, batch_size, device=None):
+        test_set = self.get_test_set(convert_to_tensor=True, device=device)
+        # if len(self.physio_arrays) == 1:
+        #     dataset_class = TensorDataset
+        # else:
+        #     dataset_class = MultiInputDataset
+        # test_dataset = dataset_class(*test_set)
+        test_dataloader = DataLoader(test_set, batch_size=batch_size)
         return test_dataloader
 
-    def get_random_sample(self, convert_to_tensor=False, device=None, include_metainfo=False):
+    def get_random_sample(self, convert_to_tensor=False, device=None):
         """
         @return: a random sample from each of the physio arrays
         """
         random_sample_index = np.random.randint(0, len(self.physio_arrays[0]))
-        rtn = [(parray[random_sample_index][None, :]) for parray in self.physio_arrays]
-        rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn] if convert_to_tensor else rtn
-        rtn = rtn if len(rtn) > 1 else rtn[0]
-
-        meta_info = None
-        if include_metainfo:
-            meta_info = [parray.get_meta_info(random_sample_index, encoded=True) for parray in self.physio_arrays]
-            meta_info = [[torch.tensor([value], device=device) for name, value in m.items()] for m in meta_info] if convert_to_tensor else meta_info
-            meta_info = list(itertools.chain.from_iterable(meta_info))
-        if include_metainfo:
-            return rtn, *meta_info
-        else:
-            return rtn
+        sample = self.multi_modal_dataset[random_sample_index:random_sample_index+1]
+        if convert_to_tensor:
+            sample = batch_to_tensor(sample, device=device)
+        return sample
+        # rtn = [(parray[random_sample_index][None, :]) for parray in self.physio_arrays]
+        # rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn] if convert_to_tensor else rtn
+        # rtn = rtn if len(rtn) > 1 else rtn[0]
+        #
+        # meta_info = None
+        # if include_metainfo:
+        #     meta_info = [parray.get_meta_info(random_sample_index, encoded=True) for parray in self.physio_arrays]
+        #     meta_info = [[torch.tensor([value], device=device) for name, value in m.items()] for m in meta_info] if convert_to_tensor else meta_info
+        #     meta_info = list(itertools.chain.from_iterable(meta_info))
+        # if include_metainfo:
+        #     return rtn, *meta_info
+        # else:
+        #     return rtn
 
     def get_class_weight(self, convert_to_tensor=False, device=None):
         """
@@ -522,7 +543,7 @@ class MultiModalArrays:
             self._encoder = lambda y: self.label_onehot_encoder.transform(y.reshape(-1, 1)).toarray()
 
 
-    def get_label_encoder_criterion_for_model(self, model, device=None, include_metainfo=False):
+    def get_label_encoder_criterion_for_model(self, model, device=None):
         """
         this function must be called
 
@@ -532,7 +553,7 @@ class MultiModalArrays:
         @return:
         """
         assert not isinstance(model, HierarchicalTransformerContrastivePretrain), "Model is HierarchicalTransformerContrastivePretrain, which does not have label encoder, please use function get_critierion_for_pretrain"
-        rand_input = self.get_random_sample(convert_to_tensor=True, device=device, include_metainfo=include_metainfo) if include_metainfo else self.get_random_sample(convert_to_tensor=True, device=device)
+        rand_input = self.get_random_sample(convert_to_tensor=True, device=device)
         with torch.no_grad():
             model.eval()
             rand_input= rand_input if isinstance(rand_input, tuple) else (rand_input,)
@@ -621,14 +642,15 @@ class MultiModalArrays:
 
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size
+            if n_batches == 0:
+                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
+                continue
             n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
             sample_indices = np.concatenate([sample_indices, [None] * n_add])
             n_batches = len(sample_indices) / batch_size
             assert n_batches.is_integer()
             n_batches = int(n_batches)
-            if n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
-                continue
+
             n_test_batches = math.floor(test_size * n_batches)
             n_val_batches = math.floor(val_size * n_batches)
             if n_test_batches == 0 or n_val_batches == 0:
@@ -654,7 +676,7 @@ class MultiModalArrays:
         self.train_batch_sample_indices = np.array(train_batch_sample_indices)
         self.save()
 
-    def get_train_val_ordered_batch_iterator_fold(self, fold, device, return_metainfo=False, shuffle_within_batches=False):
+    def get_train_val_ordered_batch_iterator_fold(self, fold, device, shuffle_within_batches=False, *args, **kwargs):
         """
         get a batch iterator for a specific fold
         @param fold:
@@ -668,13 +690,13 @@ class MultiModalArrays:
 
         labels_encoded = self._encoder(self.labels_array)
 
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, return_metainfo, shuffle_within_batches), \
-            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, return_metainfo, shuffle_within_batches)
+        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
+            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
 
-    def get_test_ordered_batch_iterator(self, device, encode_y=True, return_metainfo=False, shuffle_within_batches=False):
+    def get_test_ordered_batch_iterator(self, device, encode_y=True, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
         labels = self._encoder(self.labels_array) if encode_y else self.labels_array
-        return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, return_metainfo, shuffle_within_batches=shuffle_within_batches, encode_y=encode_y)
+        return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)
@@ -690,6 +712,11 @@ class MultiModalArrays:
     #     val_sample_indices = batch_indices[val_batch_indices]
         # self.physio_arrays[0][]
 
+    def get_encoded_labels(self):
+        labels_encoded = None
+        if self.labels_array is not None:
+            labels_encoded = self._encoder(self.labels_array)
+        return labels_encoded
 
 def load_mmarray(path):
     """

@@ -407,11 +407,13 @@ class HierarchicalTransformer(nn.Module):
         if plot:
             fig.show()
 
-    def forward(self, x_eeg, *args, **kwargs):
-        x = self.encode(x_eeg, *args, **kwargs)
-        return self.mlp_head(x)
+    def forward(self, x, *args, **kwargs):
+            x = self.encode(x, *args, **kwargs)
+            return self.mlp_head(x)
 
-    def encode(self, x_eeg, *args, **kwargs):
+    def encode(self, x, *args, **kwargs):
+        x_eeg = x['eeg']
+
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
@@ -421,7 +423,7 @@ class HierarchicalTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[-1]  # batch_size x num_channels
+            channel_pos = x['channel_voxel_indices'] # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
@@ -537,11 +539,12 @@ class HierarchicalConvalueTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = args[-1]  # batch_size x num_channels
+            channel_pos = x['channel_positions'] # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
-            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+            # time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)  # in case where each batach has different time positions
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(b, self.num_channels, 1, 1)
             channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
             time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
             channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
@@ -639,6 +642,13 @@ class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
 
     def prepare_data(self, x):
         return x
+
+    def reset(self):
+        """
+        HT does not have reset defined
+        @return:
+        """
+        pass
 
 class HierarchicalTransformerContrastivePretrain(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',

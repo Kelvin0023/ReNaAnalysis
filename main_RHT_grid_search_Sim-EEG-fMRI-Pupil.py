@@ -98,7 +98,7 @@ else:
 
 
 param_performance, training_histories, models = grid_search_rht_eeg(grid_search_params, mmarray, n_folds, training_results_path, task_name=TaskName.TrainClassifier,
-                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
+                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed, batch_size=8)
 
 pickle.dump(training_histories, open(os.path.join(training_results_path, f'model_training_histories_pcaica_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
 pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_performances_pcaica_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
