@@ -78,11 +78,12 @@ class FeedForward(nn.Module):
 
 
 class RecurrentGeneralizedPFAttention(nn.Module):
-    def __init__(self, embedding_dim, num_heads=8, dim_head=64, drop_attention=0., dropout=0.1, pos_embed_activation=None):
+    def __init__(self, embedding_dim, pos_embed_mode, num_heads=8, dim_head=64, drop_attention=0., dropout=0.1, pos_embed_activation=None):
         super().__init__()
         all_heads_dim = dim_head * num_heads
         project_out = not (num_heads == 1 and dim_head == embedding_dim)
 
+        self.pos_embed_mod = pos_embed_mode
         self.dim_head = dim_head
         self.num_heads = num_heads
         self.scale = dim_head ** -0.5
@@ -162,9 +163,14 @@ class RecurrentGeneralizedPFAttention(nn.Module):
         Ex_Wq_e_biased = Ex_Wq + bias_pf  # batch_size, n query, num_heads, dim_head treating bias_time_e as the generalized content bias
 
         # time relative position bias
-        W_kr_R_t = rearrange(self.k_r_time_net(r_t), 'b n (h d)-> n b h d', h=self.num_heads)
-        W_kr_R_c = rearrange(self.k_r_channel_net(r_c), 'b n (h d)-> n b h d', h=self.num_heads)
-        W_kr_R_p = rearrange(self.k_r_participant_net(r_p), 'b n (h d)-> n b h d', h=self.num_heads)  # n = 1 + 1 the first is cls token, the second is the participant token, same for all tokens in a sample
+        if self.pos_embed_mod == 'sinusoidal':
+            W_kr_R_t = rearrange(self.k_r_time_net(r_t), 'b n (h d)-> n b h d', h=self.num_heads)
+            W_kr_R_c = rearrange(self.k_r_channel_net(r_c), 'b n (h d)-> n b h d', h=self.num_heads)
+            W_kr_R_p = rearrange(self.k_r_participant_net(r_p), 'b n (h d)-> n b h d', h=self.num_heads)  # n = 1 + 1 the first is cls token, the second is the participant token, same for all tokens in a sample
+        else:
+            W_kr_R_t = rearrange(r_t, 'b n h d -> n b h d')
+            W_kr_R_c = rearrange(r_c, 'b n h d -> n b h d')
+            W_kr_R_p = rearrange(r_p, 'b n h d -> n b h d')
 
         # without relative shift ######
         # Ex_Wke_r_biased = Ex_Wke + (W_kr_R_t + W_kr_R_c) * 0.5   # batch_size, n query, num_heads, dim_head
@@ -242,14 +248,14 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
     self.mems
      [  [layerouts, r_t, r_c, r_p] ]
     """
-    def __init__(self, embedding_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=0., dropout=0.1, mem_len=0):
+    def __init__(self, embedding_dim, depth, num_heads, dim_head, feedforward_mlp_dim, pos_embed_mode, drop_attention=0., dropout=0.1, mem_len=0):
         super().__init__()
 
         self.depth = depth
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                PreNorm(embedding_dim, RecurrentGeneralizedPFAttention(embedding_dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
+                PreNorm(embedding_dim, RecurrentGeneralizedPFAttention(embedding_dim, pos_embed_mode, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
                 # RecurrentGeneralizedPFAttention(embedding_dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout),
                 PreNorm(embedding_dim, FeedForward(embedding_dim, feedforward_mlp_dim, dropout=dropout))  # use pre norm for the attention output residual
             ]))
@@ -351,8 +357,8 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=5000, mem_len=1,
-                 reset_mem_each_session=True):
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=13, mem_len=1,
+                 reset_mem_each_session=False, pos_embed_mode='learnable'):
         """
 
         # a token is a time slice of data on a single channel
@@ -368,6 +374,7 @@ class RecurrentHierarchicalTransformer(nn.Module):
         super().__init__()
         self.depth = depth
         self.num_heads = num_heads
+        self.dim_head = dim_head
         self.window_duration = window_duration
 
         self.num_channels = num_channels
@@ -379,22 +386,27 @@ class RecurrentHierarchicalTransformer(nn.Module):
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
 
+        self.max_tlen = self.num_windows * (mem_len + 1)  # mem plus the current query
+
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
         self.to_patch_embedding = nn.Sequential(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
             nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
         )
-
-        self.learnablepos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
-        self.pos_embedding = SinusoidalPositionalEmbedding(patch_embed_dim)
-        self.learnable_p_embeddings = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        self.pos_embed_mode = pos_embed_mode
+        if self.pos_embed_mode == 'sinusoidal':
+            self.pos_embedding = SinusoidalPositionalEmbedding(patch_embed_dim)
+        elif self.pos_embed_mode == 'learnable':
+            self.learnable_time_embedding = nn.Parameter(torch.randn(1, self.max_tlen, num_heads, dim_head))
+            self.learnable_channel_embedding = nn.Parameter(torch.randn(1, self.num_channels, num_heads, dim_head))
+            self.learnable_participant_embedding_list = nn.Parameter(torch.randn(n_participant, 1, 1, self.num_heads, self.dim_head)) # keeps embedding for every participant
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
-        self.cls_token_pos_embedding = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
+        self.cls_token_pos_embedding = nn.Parameter(torch.randn(1, 1, patch_embed_dim )) if pos_embed_mode == 'sinusoidal' else nn.Parameter(torch.randn(1, 1, num_heads, dim_head))
         self.dropout = nn.Dropout(emb_dropout)
 
         self.mem_len = (self.num_channels * self.num_windows * mem_len + 1 ) if mem_len != 0 else 0  # +1 for cls token
-        self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=attn_dropout, dropout=dropout, mem_len=self.mem_len)
+        self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, pos_embed_mode, drop_attention=attn_dropout, dropout=dropout, mem_len=self.mem_len)
 
         self.pool = pool
         self.to_latent = nn.Identity()
@@ -449,30 +461,40 @@ class RecurrentHierarchicalTransformer(nn.Module):
         mem_timesteps = int(self.transformer.mems[0][0].size(1) / self.num_channels) if (self.transformer.mems is not None and torch.numel(self.transformer.mems[0][0]) != 0) else 0
         mem_num_epochs = mem_timesteps // self.num_windows
         tlen = mem_timesteps + self.num_windows
-        # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
-        # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
-        # time_pos = torch.stack([torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
-        time_pos = torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long)[None, :]  # batch_size x num_windows  # use sample-relative time positions
 
-        # compute channel positions that are voxel discretized
-        channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
+        participant_pos = torch.unique(x['subject_id']).item()
 
-        # get the participant embeddings
-        participant_pos = x['subject_id']
-        participant_pos = self.randomized_participant_pos[(participant_pos.to(torch.int))][:, None]  # batch_size x 1
+        if self.pos_embed_mode == 'sinusoidal':
+            # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
+            # time_pos = torch.stack([torch.arange(a, a+self.num_windows, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use session-relative time positions
+            # time_pos = torch.stack([torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long) for a in discretized_start_times])  # batch_size x num_windows  # use sample-relative time positions
+            time_pos = torch.arange(0, tlen, device=x_eeg.device, dtype=torch.long)[None, :]  # batch_size x num_windows  # use sample-relative time positions
 
-        # each sample in a batch must have the same participant embedding
-        time_pos_embed = self.pos_embedding(time_pos)
-        channel_pos_embed = self.pos_embedding(channel_pos)
-        participant_pos_embed = self.pos_embedding(participant_pos)  # no need to repeat because every token in the same sample has the same participant embedding
+            # compute channel positions that are voxel discretized
+            channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
 
+            # get the participant embeddings
+            participant_pos = self.randomized_participant_pos[participant_pos][:, None]  # batch_size x 1, get random participant pos
+
+            # each sample in a batch must have the same participant embedding
+            time_pos_embed = self.pos_embedding(time_pos)
+            channel_pos_embed = self.pos_embedding(channel_pos)
+            participant_pos_embed = self.pos_embedding(participant_pos)  # no need to repeat because every token in the same sample has the same participant embedding
+
+            time_pos_embed = time_pos_embed.unsqueeze(1).repeat(b, nchannel, 1, 1).reshape(b, -1, self.patch_embed_dim)
+            channel_pos_embed = channel_pos_embed.unsqueeze(2).repeat(1, 1, self.num_windows, 1).reshape(b, -1,self.patch_embed_dim)
+            participant_pos_embed = repeat(participant_pos_embed, 'b 1 d-> b n d', n=self.num_patches)
+        else:  # learnable
+            time_pos_embed = self.learnable_time_embedding[:, -tlen:]
+            channel_pos_embed = self.learnable_channel_embedding
+            participant_pos_embed = repeat(self.learnable_participant_embedding_list[int(participant_pos)], '1 1 h d -> b n h d', b=b, n=self.num_patches)  # repeat for batch
+
+            time_pos_embed = repeat(time_pos_embed.unsqueeze(1), '1 1 t h d -> b (c t) h d', b=b, c=nchannel)
+            channel_pos_embed = repeat(channel_pos_embed.unsqueeze(2), '1 c 1 h d -> b (c t) h d', b=b, t=self.num_windows)
         # viz_time_positional_embedding(time_pos_embed)  # time embedding differs in batch
         # viz_time_positional_embedding(channel_pos_embed)  # time embedding differs in batch
 
         # prepare the positional features that are different among tokens in the same sample
-        time_pos_embed = time_pos_embed.unsqueeze(1).repeat(b, nchannel, 1, 1).reshape(b, -1, self.patch_embed_dim)
-        channel_pos_embed = channel_pos_embed.unsqueeze(2).repeat(1, 1, self.num_windows, 1).reshape(b, -1, self.patch_embed_dim)
-        participant_pos_embed = repeat(participant_pos_embed, 'b 1 d-> b n d', n=self.num_patches)
 
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
@@ -481,12 +503,15 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
         cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
         x = torch.cat((cls_tokens, x), dim=1)
-        cls_tokens_pos_embedding = repeat(self.cls_token_pos_embedding, '1 1 d -> b 1 d', b=b)
+
+        if self.pos_embed_mode == 'sinusoidal':
+            cls_tokens_pos_embedding = repeat(self.cls_token_pos_embedding, '1 1 d -> b 1 d', b=b)
+        else:
+            cls_tokens_pos_embedding = repeat(self.cls_token_pos_embedding, '1 1 h d -> b 1 h d', b=b)
 
         # insert cls pos embedding based on the number of mem steps
         for i in range(mem_num_epochs + 1):
             time_pos_embed = torch.cat((time_pos_embed[:, :i * ntoken, :], cls_tokens_pos_embedding, time_pos_embed[:, i * ntoken:, :]), dim=1)  # only time pos embedding can be of klen before the transformer
-
         channel_pos_embed = torch.cat((cls_tokens_pos_embedding, channel_pos_embed), dim=1)
         participant_pos_embed = torch.cat((cls_tokens_pos_embedding, participant_pos_embed), dim=1)
 

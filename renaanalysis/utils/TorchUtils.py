@@ -12,12 +12,12 @@ def prepare_image_for_sim_score(img):
     return img
 
 
-def batch_to_tensor(batch: Dict[str, np.ndarray], device):
+def batch_to_tensor(batch: Dict[str, np.ndarray], device, dtype=torch.float32):
     """
     Convert a batch dict of numpy arrays to a batch of torch tensors.
     @param batch:
     @param device:
     @return:
     """
-    rtn = {name: torch.tensor(x, dtype=torch.float32, device=device) for name, x in batch.items()}
+    rtn = {name: torch.tensor(x, dtype=dtype, device=device) for name, x in batch.items()}
     return rtn

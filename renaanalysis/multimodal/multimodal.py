@@ -185,6 +185,7 @@ class MultiModalArrays:
         self.filename = filename
 
         self.multi_modal_dataset = MultiModalDataset(self.physio_arrays, self.labels_array)
+        # print('check if physio and label arrays are the same after previous call')
 
     def keys(self):
         return self._physio_types_arrays.keys()
@@ -283,6 +284,7 @@ class MultiModalArrays:
         #     val_dataset = dataset_class(x_val)
         training_indices, val_indices = self.training_val_split_indices[fold_index]
         val_dataset = MultiModalDataset(self.physio_arrays, labels=(encoded_labels := self.get_encoded_labels()), indices=val_indices)
+        # print('check if physio and label arrays are the same after previous call')
 
         # rebalance training set
         if self.rebalance_method == 'SMOTE' and is_rebalance_training:
@@ -290,6 +292,7 @@ class MultiModalArrays:
             train_dataset.get_rebalanced_set(random_seed=random_seed, encoder=self._encoder)
         else:
             train_dataset = MultiModalDataset(self.physio_arrays, labels=encoded_labels, indices=training_indices)
+            # print('check if physio and label arrays are the same after previous call')
 
         val_dataset.to_tensor(device=device)
         train_dataset.to_tensor(device=device)
@@ -453,6 +456,8 @@ class MultiModalArrays:
         if self.labels_array is None:
             warnings.warn('labels array is None, make sure label is not needed for this model')
         test_set = MultiModalDataset(self.physio_arrays, labels=self.get_encoded_labels(), indices=test_indices)
+        # print('check if physio and label arrays are the same after previous call')
+
         if convert_to_tensor:
             test_set.to_tensor(device=device)
         return test_set
@@ -643,7 +648,7 @@ class MultiModalArrays:
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size
             if n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
+                warnings.warn(f"Subject {subject} run {run} has fewer samples than batch size. Ignored.")
                 continue
             n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
             sample_indices = np.concatenate([sample_indices, [None] * n_add])
@@ -689,9 +694,9 @@ class MultiModalArrays:
             "Please call training_val_test_split_ordered_by_subject_run() first."
 
         labels_encoded = self._encoder(self.labels_array)
-
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
-            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
+        rtn = OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
+                OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, shuffle_within_batches),
+        return rtn
 
     def get_test_ordered_batch_iterator(self, device, encode_y=True, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
