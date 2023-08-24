@@ -260,24 +260,6 @@ def get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir, epoch_t_min, epo
 
     return x, y, metadata, event_color, epochs.info['sfreq']
 
-#
-# if __name__ == '__main__':
-#     epoch_t_min = -1.5
-#     epoch_t_max = 20
-#     dataset_root_dir = 'D:/HaowenWei/Data/HT_Data/fNIRS/FingerFootTapping'
-#
-#     # epoch_data_dict = get_fnirs_finger_and_foot_tapping_epoch_dict(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
-#
-#     x, y, metadata, event_color, fs = get_fnirs_finger_and_foot_tapping_dataset(dataset_root_dir=dataset_root_dir, epoch_t_min=epoch_t_min, epoch_t_max=epoch_t_max)
-#     x_train, x_test, y_train, y_test = train_test_split(x, y, stratify=y, test_size=0.1)
-#     x_train = x_train.reshape(x_train.shape[0], -1)
-#     x_test = x_test.reshape(x_test.shape[0], -1)
-#
-#     model.fit(x_train, y_train)
 
-# if __name__ == '__main__':
-#     create_montage(fnirs_finger_and_foot_tapping_dataset_montage_channel_names)
-#
-#
 
 
