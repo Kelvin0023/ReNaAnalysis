@@ -3,10 +3,12 @@ import copy
 import math
 import os
 import pickle
+import warnings
 
 import mne
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
 from sklearn import preprocessing, metrics
 from sklearn.model_selection import StratifiedShuffleSplit, ShuffleSplit
 from sklearn.preprocessing import LabelEncoder
@@ -16,6 +18,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
 
 from renaanalysis.learning.Conformer import interaug
+from renaanalysis.learning.HATC import HierarchicalAutoTranscoder
 from renaanalysis.learning.HT import ContrastiveLoss
 
 from tqdm import tqdm
@@ -27,7 +30,7 @@ from renaanalysis.learning.MutiInputDataset import MultiInputDataset
 from renaanalysis.learning.models import EEGPupilCNN, EEGCNN, EEGInceptionNet
 from renaanalysis.learning.preprocess import preprocess_samples_eeg_pupil
 from renaanalysis.params.params import epochs, batch_size, model_save_dir, patience, random_seed, \
-    export_data_root, TaskName
+    export_data_root, TaskName, verbose
 from renaanalysis.utils.training_utils import count_standard_error, count_target_error, get_class_weight
 from renaanalysis.utils.data_utils import rebalance_classes, mean_max_sublists, \
     mean_min_sublists
@@ -420,7 +423,7 @@ def cv_train_test_model(X, Y, model, test_name="", task_name=TaskName.TrainClass
 
     return models, training_histories_folds, criterion, last_activation, _encoder, test_auc, test_loss, test_acc
 
-def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTrain, n_folds=10, lr=1e-4, verbose=1, l2_weight=1e-6,
+def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTrain, n_folds=10, lr=1e-4, l2_weight=1e-6,
                             lr_scheduler_type='exponential', temperature=1, n_neg=20, is_plot_conf_matrix=False,
                             X_test=None, plot_histories=True):
 
@@ -511,11 +514,11 @@ def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTr
             #     prev_para.append(param.cpu().detach().numpy())
             train_batch_losses, train_mean_loss = _run_one_epoch_self_sup(
                 model_copy, train_dataloader, criterion, optimizer, mode='train', device=device,
-                l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+                l2_weight=l2_weight, test_name=test_name, task_name=task_name)
             scheduler.step()
             val_batch_losses, val_mean_loss = _run_one_epoch_self_sup(
                 model_copy, val_dataloader, criterion, optimizer, mode='val', device=device,
-                l2_weight=l2_weight, test_name=test_name, task_name=task_name, verbose=verbose)
+                l2_weight=l2_weight, test_name=test_name, task_name=task_name)
 
             train_mean_losses.append(train_mean_loss)
             val_mean_losses.append(val_mean_loss)
@@ -552,8 +555,8 @@ def self_supervised_pretrain(X, model, test_name="CNN", task_name=TaskName.PreTr
 
     return models, training_histories_folds, criterion, last_activation
 
-def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, mode, rebalance_method, l2_weight=1e-5, device=None, test_name='',
-                                  task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
+def _run_one_epoch_classification(model, dataloader, criterion, last_activation, optimizer, encoder, mode, rebalance_method, l2_weight=1e-5, device=None, test_name='',
+                                  task_name=TaskName.TrainClassifier, check_param=1, is_augment_batch=False):
     """
 
     @param model:
@@ -574,12 +577,12 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         # determine which layer to require grad
         if task_name == TaskName.PretrainedClassifierFineTune:
             for param in model.parameters():
-                param.requires_grad = False
-            for param in model.transformer.parameters():
                 param.requires_grad = True
-            for param in model.mlp_head.parameters():
-                param.requires_grad = True
-            model.cls_token.requires_grad = True
+            # for param in model.transformer.parameters():
+            #     param.requires_grad = True
+            # for param in model.mlp_head.parameters():
+            #     param.requires_grad = True
+            # model.cls_token.requires_grad = True
     elif mode == 'val':
         model.eval()
     else:
@@ -597,10 +600,22 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
     y_all_pred_post_logits = None
     num_standard_errors = 0
     num_target_errors = 0
+    num_epochs = 0
+    if len(dataloader) == 0:
+        return 0, 0, 0, 0, 0, 0, 0
     for batch_data in dataloader:
         y = batch_data['y']
         x = batch_data
-        if mode == 'train': optimizer.zero_grad()
+        if mode == 'train':
+            optimizer.zero_grad()
+            if is_augment_batch:
+                aug_data, aug_labels = interaug(dataloader.dataset.data['eeg'][:, None, :, :], dataloader.dataset.labels, encoder)
+                aug_data = torch.squeeze(aug_data, dim=1)
+                aug_data = aug_data.to(device)
+                aug_labels = aug_labels.to(device)
+                x['eeg'] = torch.cat((x['eeg'], aug_data), dim=0)
+                y = torch.cat((y, aug_labels), dim=0)
+        num_epochs += y.shape[0]
 
         mini_batch_i += 1
         if verbose >= 1:
@@ -616,7 +631,8 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
-            y_pred = model(x)
+            # y_pred = model(x)
+            y_pred = model(x['eeg'][:, None, :, :])
 
             y_tensor = y.to(device)
             if isinstance(criterion, nn.CrossEntropyLoss):
@@ -637,6 +653,16 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         loss = classification_loss + l2_penalty
         if mode == 'train':
             loss.backward()
+            if verbose >= 2:
+                for param_name, params in model.named_parameters():
+                    if hasattr(model, 'pos_embed_mode') and model.pos_embed_mode == 'sinusoidal' and param_name == 'learnable_pos_embedding':
+                        continue
+                    if hasattr(model, 'pos_embed_mode') and model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
+                        continue
+                    if torch.abs(params).median() <= 1e-15:
+                        warnings.warn(f'median value of parameter {param_name} is {torch.abs(params).median()}')
+                    if torch.abs(params.grad).median() <= 1e-30:
+                        warnings.warn(f'median grad value of parameter {param_name} is {torch.abs(params).median()}')
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
             nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
             optimizer.step()
@@ -645,11 +671,11 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         y_all_pred_post_logits = np.concatenate([y_all_pred_post_logits, y_pred_postlogits.detach().cpu().numpy()]) if y_all_pred_post_logits is not None else y_pred_postlogits.detach().cpu().numpy()
 
         batch_losses.append(loss.item())
-        if y_pred.shape[1] == 1:
-            predicted_labels = (y_pred > .5).int()
+        if y_pred_postlogits.shape[1] == 1:
+            predicted_labels = (y_pred_postlogits > .5).int()
             true_label = y_tensor
         else:
-            predicted_labels = torch.argmax(y_pred, dim=1)
+            predicted_labels = torch.argmax(y_pred_postlogits, dim=1)
             true_label = torch.argmax(y_tensor, dim=1)
         num_correct_preds += torch.sum(true_label == predicted_labels).item()
         num_standard_errors += count_standard_error(true_label, predicted_labels)
@@ -657,13 +683,13 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
     if verbose >= 1: pbar.close()
-    return metrics.roc_auc_score(y_all, y_all_pred_post_logits), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred_post_logits
+    return metrics.roc_auc_score(y_all, y_all_pred_post_logits), np.mean(batch_losses), num_correct_preds / num_epochs, num_standard_errors, num_target_errors, y_all, y_all_pred_post_logits
 
 
 # def _run_one_epoch_classification_ordered_batch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='',
 #                                                 task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
 def _run_one_epoch_classification_ordered_batch(model, dataloader, criterion, last_activation, optimizer, mode, rebalance_method, l2_weight=1e-5, device=None, test_name='',
-                                  task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
+                                  task_name=TaskName.TrainClassifier, check_param=1):
     """
 
     @param model:
@@ -770,7 +796,7 @@ def _run_one_epoch_classification_ordered_batch(model, dataloader, criterion, la
     return metrics.roc_auc_score(y_all, y_all_pred), np.mean(batch_losses), num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
 
 
-def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.TrainClassifier, verbose=1, check_param=1):
+def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.TrainClassifier, check_param=1):
     """
 
     @param model:
@@ -791,12 +817,12 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
         # determine which layer to require grad
         if task_name == TaskName.PretrainedClassifierFineTune:
             for param in model.parameters():
-                param.requires_grad = False
-            for param in model.transformer.parameters():
                 param.requires_grad = True
-            for param in model.mlp_head.parameters():
-                param.requires_grad = True
-            model.cls_token.requires_grad = True
+            # for param in model.transformer.parameters():
+            #     param.requires_grad = True
+            # for param in model.mlp_head.parameters():
+            #     param.requires_grad = True
+            # model.cls_token.requires_grad = True
     elif mode == 'val':
         model.eval()
     else:
@@ -876,7 +902,7 @@ def _run_one_epoch_classification_augmented(model, dataloader, encoder, criterio
     if verbose >= 1: pbar.close()
     return np.mean(batch_losses), num_correct_preds / num_epochs if mode == 'train' else num_correct_preds / len(dataloader.dataset), num_standard_errors, num_target_errors, y_all, y_all_pred
 
-def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.PreTrain, verbose=1, check_param=1):
+def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_weight=1e-5, device=None, test_name='', task_name=TaskName.PreTrain, check_param=1):
     """
 
     @param model:
@@ -906,6 +932,8 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
         pbar = tqdm(total=math.ceil(len(dataloader.dataset) / dataloader.batch_size), desc=f'{mode} {test_name}')
         pbar.update(mini_batch_i := 0)
     batch_losses = []
+
+    weights = []
     for x in dataloader:
         if mode == 'train': optimizer.zero_grad()
 
@@ -923,25 +951,41 @@ def _run_one_epoch_self_sup(model, dataloader, criterion, optimizer, mode, l2_we
         #             print(f"Tensor {key1} is not equal in both models.")
 
         with context_manager:
-            x = x if isinstance(x[0], tuple) else (x[0],)
-            pred_tokens, orig_tokens, mask_t, mask_c = model(*x)
-            # y_tensor = y.to(device)
-            classification_loss = criterion(pred_tokens, orig_tokens, metric='both')
+            x = x if isinstance(x, list) or isinstance(x, tuple) else (x,)
+            pred_series, encoded_tokens, mask_t, mask_c = model(*x)
+            # pred_series, original_x, mask_t, mask_c = model(*x)
+            loss = criterion(x[0]['eeg'], pred_series)
+            # loss = criterion(pred_series, original_x, metric='similarity')
 
         if mode == 'train' and l2_weight > 0:
             l2_penalty = l2_weight * sum([(p ** 2).sum() for p in model.parameters()])
         else:
             l2_penalty = 0
-        loss = classification_loss + l2_penalty
+        loss = loss + l2_penalty
         if mode == 'train':
             loss.backward()
+            if verbose >= 2:
+                for param_name, params in model.named_parameters():
+                    if hasattr(model, 'pos_embed_mode') and model.pos_embed_mode == 'sinusoidal' and param_name == 'learnable_pos_embedding':
+                        continue
+                    if hasattr(model, 'pos_embed_mode') and model.pos_embed_mode == 'learnable' and param_name == 'sinusoidal_pos_embedding':
+                        continue
+                    # if param_name == 'hierarchical_autotranscoder.encoder.layers.0.0.fn.to_qkv.weight':
+                    #     print(torch.abs(params).median())
+                    if torch.abs(params).median() <= 1e-15:
+                        warnings.warn(f'median value of parameter {param_name} is smaller than 1e-10')
+                    if params.grad is not None:
+                        if torch.abs(params.grad).median() <= 1e-30:
+                            warnings.warn(f'median grad value of parameter {param_name} is smaller than 1e-10')
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
             nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
-            optimizer.step()
+            # weights.append(model.hierarchical_autotranscoder.encoder.layers[0][0].fn.to_qkv.weight.data[0, 0].clone().detach().cpu().numpy())
 
+            optimizer.step()
         batch_losses.append(loss.item())
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
-
+    # plt.plot(weights)
+    # plt.show()
     if verbose >= 1: pbar.close()
     return batch_losses, np.mean(batch_losses)
 

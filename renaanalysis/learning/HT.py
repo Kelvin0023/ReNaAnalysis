@@ -9,6 +9,9 @@ from einops import rearrange, repeat, einops
 from einops.layers.torch import Rearrange
 import torch.nn.utils.rnn as rnn_utils
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+
+from renaanalysis.params.params import verbose
 
 
 class SinusoidalPositionalEmbedding(nn.Module):
@@ -22,7 +25,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
 
     def forward(self, p):
         # t has shape (batch_size, seq_len, embed_dim)
-        outer_product = torch.einsum('bn,nd->bnd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
+        outer_product = torch.einsum('n,nd->nd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
         pos_emb = torch.cat([outer_product.sin(), outer_product.cos()], dim=-1)
         return pos_emb
 
@@ -49,7 +52,6 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-
 
 class Attention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
@@ -225,7 +227,7 @@ def _make_span_from_seeds(seeds, span, total=None):
     return torch.tensor(inds)
 
 class MaskLayer(nn.Module):
-    def __init__(self, p_t, p_c, c_span, mask_t_span, mask_c_span, t_mask_replacement, c_mask_replacement):
+    def __init__(self, p_t, p_c, c_span, mask_t_span, mask_c_span, t_mask_replacement, c_mask_replacement, is_constant_size=False):
         super(MaskLayer, self).__init__()
         self.p_t = p_t
         self.p_c = p_c
@@ -234,31 +236,54 @@ class MaskLayer(nn.Module):
         self.mask_c_span = mask_c_span
         self.t_mask_replacement = t_mask_replacement
         self.c_mask_replacement = c_mask_replacement
+        if is_constant_size:
+            print("\033[93m  {}\033[00m".format('constant size mask is used, time mask will not have a span'))
+        self.is_constant_size = is_constant_size
 
     def make_t_mask(self, shape, p, span, allow_no_inds=False):
-        mask = torch.zeros(shape, requires_grad=False, dtype=bool)
+        if self.is_constant_size:
+            mask = torch.zeros(shape, dtype=bool)
 
-        for i in range(shape[0]):
-            mask_seeds = list()
-            while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
-                mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
+            for idx, row in enumerate(mask):
+                num_true = int(shape[1] * p)
+                true_indices = torch.random.choice(shape[1], num_true, replace=False)
+                mask[idx, true_indices] = True
 
-            mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
+            return mask
+        else:
+            mask = torch.zeros(shape, requires_grad=False, dtype=bool)
 
-        return mask
+            for i in range(shape[0]):
+                mask_seeds = list()
+                while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
+                    mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
+
+                mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
+
+            return mask
 
     def make_c_mask(self, shape, p, span, allow_no_inds=False):
-        mask = torch.zeros(shape, requires_grad=False, dtype=bool)
-        for i in range(shape[0]):
-            mask_seeds = list()
-            while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
-                mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
-            if self.c_span:
-                mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
-            else:
-                mask[i, mask_seeds] = True
+        if self.is_constant_size:
+            mask = torch.zeros(shape, dtype=bool)
 
-        return mask
+            for idx, row in enumerate(mask):
+                num_true = int(shape[1] * p)
+                true_indices = torch.random.choice(shape[1], num_true, replace=False)
+                mask[idx, true_indices] = True
+
+            return mask
+        else:
+            mask = torch.zeros(shape, requires_grad=False, dtype=bool)
+            for i in range(shape[0]):
+                mask_seeds = list()
+                while not allow_no_inds and len(mask_seeds) == 0 and p > 0:
+                    mask_seeds = torch.nonzero(torch.rand(shape[1]) < p)
+                if self.c_span:
+                    mask[i, _make_span_from_seeds(mask_seeds, span, total=shape[1])] = True
+                else:
+                    mask[i, mask_seeds] = True
+
+            return mask
 
     def forward(self, x):
         original_input = torch.clone(x)
@@ -277,6 +302,7 @@ class MaskLayer(nn.Module):
             mask_t = self.make_t_mask((batch_size, Width), self.p_t, self.mask_t_span)
         if self.p_c > 0:
             mask_c = self.make_c_mask((batch_size, Height), self.p_c, self.mask_c_span)
+
         if mask_t is not None:
             x.transpose(2, 1)[mask_t] = self.t_mask_replacement
         if mask_c is not None:
@@ -308,6 +334,11 @@ class HierarchicalTransformer(nn.Module):
         self.depth = depth
         self.num_heads = num_heads
         self.window_duration = window_duration
+        self.patch_embed_dim = patch_embed_dim
+        self.pos_embed_mode = pos_embed_mode
+        self.num_timesteps = num_timesteps
+        self.output = output
+        self.num_classes = num_classes
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
@@ -315,7 +346,6 @@ class HierarchicalTransformer(nn.Module):
         self.patch_length = int(window_duration * sampling_rate)
         self.num_windows = num_timesteps // self.patch_length
 
-        self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
@@ -324,7 +354,7 @@ class HierarchicalTransformer(nn.Module):
         #     nn.Linear(self.patch_length, patch_embed_dim),
         # )
         self.to_patch_embedding = nn.Sequential(
-            Rearrange('b eegc t -> b 1 eegc t', eegc=self.num_channels, t=self.num_timesteps),
+            Rearrange('b c t -> b 1 c t'),
             nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
             # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
         )
@@ -352,28 +382,95 @@ class HierarchicalTransformer(nn.Module):
                 nn.LayerNorm(patch_embed_dim),
                 nn.Linear(patch_embed_dim, num_classes))
 
-    def forward(self, x, *args, **kwargs):
-            x = self.encode(x, *args, **kwargs)
-            return self.mlp_head(x)
+    def disable_pretrain_parameters(self):
+        pass
+
+    def disable_classification_parameters(self):
+        for param in self.mlp_head.parameters():
+            param.requires_grad = False
+        if verbose is not None:
+            print('mlp_head parameters disabled')
+        self.cls_token.requires_grad = False
+        if verbose is not None:
+            print('cls_token parameters disabled')
+        if self.pos_embed_mode == 'sinusoidal':
+            self.learnable_pos_embedding.requires_grad = False
+            if verbose is not None:
+                print('learnable positional embedding disabled')
+
+    def enable_classification_parameters(self):
+        for param in self.mlp_head.parameters():
+            param.requires_grad = True
+        if verbose is not None:
+            print('mlp_head parameters enabled')
+        self.cls_token.requires_grad = True
+        if verbose is not None:
+            print('cls_token parameters enabled')
+        if self.pos_embed_mode == 'learnable':
+            self.learnable_pos_embedding.requires_grad = True
+            if verbose is not None:
+                print('learnable positional embedding enabled')
+
+    def adjust_model(self, num_timesteps, num_channels, sampling_rate, window_duration, num_classes, output, plot=False):
+        self.window_duration = window_duration
+        self.num_channels = num_channels
+        self.num_timesteps = num_timesteps
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
+        self.num_patches = self.num_channels * self.num_windows
+
+        if self.pos_embed_mode == 'learnable':
+            learnable_pos_embedding = self.learnable_pos_embedding.unsqueeze(0)
+            self.learnable_pos_embedding = F.interpolate(learnable_pos_embedding, size=(self.num_patches+1, self.patch_embed_dim), mode='bilinear',
+            align_corners=False).squeeze(0)
+        else:
+            self.learnable_pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.patch_embed_dim), requires_grad=False)
+
+        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+        patch_embed_projection = self.to_patch_embedding[1].weight.data
+        axs[0].imshow(patch_embed_projection.squeeze().squeeze().cpu().detach().numpy())
+        axs[0].set_title('pretrained projection matrix before resample')
+        d, a, b, t = patch_embed_projection.shape
+        resampled_weight = F.interpolate(
+            patch_embed_projection, size=(b, self.patch_length), mode='bilinear',
+            align_corners=False)
+        bias = self.to_patch_embedding[1].bias.data
+        self.to_patch_embedding[1] = nn.Conv2d(1, self.patch_embed_dim, kernel_size=(1, self.patch_length),
+                                               stride=(1, self.patch_length), bias=True)
+        self.to_patch_embedding[1].weight.data = resampled_weight
+        self.to_patch_embedding[1].bias.data = bias
+        axs[1].imshow(self.to_patch_embedding[1].weight.data.squeeze().squeeze().cpu().detach().numpy())
+        axs[1].set_title('pretrained projection matrix after resample')
+        if plot:
+            fig.show()
+
+        # reinitialize classification parameters
+        self.cls_token = nn.Parameter(torch.randn(1, 1, self.patch_embed_dim))
+        if output == 'single':
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(self.patch_embed_dim),
+                nn.Linear(self.patch_embed_dim, 1))
+        else:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(self.patch_embed_dim),
+                nn.Linear(self.patch_embed_dim, num_classes))
+
+
+    def forward(self, x_eeg, *args, **kwargs):
+        x = self.encode(x_eeg, *args, **kwargs)
+        return self.mlp_head(x)
 
     def encode(self, x, *args, **kwargs):
         x_eeg = x['eeg']
-
-        x = self.to_patch_embedding(x_eeg)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-
-        b, n, _ = x.shape
-
-        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
+        b, nchannel, _ = x_eeg.shape
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = x['channel_voxel_indices'] # batch_size x num_channels
-            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
-            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
-
-            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
-            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            channel_pos = x['channel_voxel_indices'][0] # batch_size x num_channels
+            assert channel_pos.shape[0] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+            time_pos = torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long)  # batch_size x num_windows  # use sample-relative time positions
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(0).repeat(b, self.num_channels, 1, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(1).repeat(b, 1, self.num_windows, 1)
             time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
             channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
 
@@ -382,9 +479,27 @@ class HierarchicalTransformer(nn.Module):
             pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
 
         elif self.pos_embed_mode == 'learnable':
-            pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
+            pos_embed = self.learnable_pos_embedding[:, :(self.num_channels * self.num_windows + 1)]
+        elif self.pos_embed_mode == 'concate':
+            channel_pos = x['channel_voxel_indices'][0] # num_channels
+            time_pos = torch.arange(0, self.num_windows, device=x_eeg.device,
+                                    dtype=torch.long)  # batch_size x num_windows  # use sample-relative time positions
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(0).repeat(b, self.num_channels, 1, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(1).repeat(b, 1, self.num_windows,
+                                                                                               1)
+            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
         else:
             raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
+
+        x = self.to_patch_embedding(x_eeg)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        n = x.shape[1]
+
+        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
+
 
         x += pos_embed
         x = self.dropout(x)
@@ -400,27 +515,7 @@ class HierarchicalTransformer(nn.Module):
 
     def prepare_data(self, x):
         return x
-    # def test(self, img):
-    #     x = self.to_patch_embedding(img)
-    #     b, n, _ = x.shape
-    #
-    #     cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
-    #     x = torch.cat((cls_tokens, x), dim=1)
-    #     x += self.learnable_pos_embedding[:, :(n + 1)]
-    #     x = self.dropout(x)
-    #
-    #     x, att_matrix = self.transformer(x)
-    #     att_matrix = att_matrix[:, :, 1:, 1:]
-    #     att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
-    #     att_matrix = torch.sum(att_matrix, dim=2)
-    #     # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
-    #     # note test does not have lstm and sequence
-    #     x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-    #
-    #     return self.mlp_head(x), att_matrix
 
-    # def get_grid_size(self):
-    #     return self.grid_size
 
 class HierarchicalConvalueTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
@@ -545,9 +640,9 @@ class HierarchicalConvalueTransformer(nn.Module):
         """
         pass
 
-class HierarchicalTransformerContrastivePretrain(nn.Module):
+class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
-                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', p_t=0.1, p_c=0.2, mask_t_span=2, mask_c_span=5):
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', p_t=0.1, p_c=0.2, mask_t_span=2, mask_c_span=5, pos_embed_mode='sinusoidal'):
         if output == 'single':
             assert num_classes == 2, 'output can only be single when num_classes is 2'
         super().__init__()
@@ -557,38 +652,140 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
-        self.path_embed_dim = patch_embed_dim
+        self.patch_embed_dim = patch_embed_dim
         self.patch_length = int(window_duration * sampling_rate)
         self.num_windows = num_timesteps // self.patch_length
+        self.pos_embed_mode = pos_embed_mode
+
+        self.grid_dims = self.num_channels, self.num_windows
+        self.num_patches = self.num_channels * self.num_windows
+        self.encoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, window_duration=window_duration, pool=pool,
+                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode)
+        self.decoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth,
+                                               num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim,
+                                               window_duration=window_duration, pool=pool,
+                                               patch_embed_dim=patch_embed_dim, dim_head=dim_head,
+                                               attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode).transformer
+        self.to_time_series = nn.Linear(patch_embed_dim, self.patch_length)
+        self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
+                                    t_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
+                                    c_mask_replacement=torch.nn.Parameter(
+                                        torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True))
+
+    def disable_classification_parameters(self):
+        self.encoder.disable_classification_parameters()
+
+    def forward(self, x_eeg, *args, **kwargs):
+        b = x_eeg['eeg'].shape[0]
+        if self.pos_embed_mode == 'sinusoidal':
+            channel_pos = x_eeg['channel_voxel_indices']  # batch_size x num_channels
+            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg['eeg'].device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+
+            time_pos_embed = self.encoder.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+            channel_pos_embed = self.encoder.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
+
+            pos_embed = time_pos_embed + channel_pos_embed
+            cls_tokens_pos_embedding = repeat(self.encoder.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+            pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
+
+        elif self.pos_embed_mode == 'learnable':
+            pos_embed = self.encoder.learnable_pos_embedding[:, :(n + 1)]
+
+        x = self.encoder.to_patch_embedding(x_eeg['eeg'])
+        x, original_x, mask_t, mask_c = self.mask_layer(x)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        cls_tokens = repeat(self.encoder.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
+
+        x += pos_embed
+        x = self.encoder.dropout(x)
+
+        x_encoded, encoder_att_matrix = self.encoder.transformer(x)
+        x, decoder_att_matrix = self.decoder(x_encoded)
+        x = rearrange(x[:, 1:], 'b nt ps -> (b nt) ps')
+        x = self.to_time_series(x)
+        x = rearrange(x, '(b c w) ps -> b c (w ps)', b=b, c=self.num_channels, w=self.num_windows)
+        return x, x_encoded, mask_t, mask_c
+
+    def prepare_data(self, x):
+        return x
+
+class HierarchicalTransformerContrastivePretrain(nn.Module):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+                 patch_embed_dim=32, dim_head=32, attn_dropout=0.5, emb_dropout=0.5, output='multi', p_t=0.1, p_c=0.2, mask_t_span=2, mask_c_span=5, pos_embed_mode='learnable'):
+        if output == 'single':
+            assert num_classes == 2, 'output can only be single when num_classes is 2'
+        super().__init__()
+        self.depth = depth
+        self.num_heads = num_heads
+        self.window_duration = window_duration
+
+        self.num_channels = num_channels
+        self.num_timesteps = num_timesteps
+        self.patch_embed_dim = patch_embed_dim
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
+        self.pos_embed_mode = pos_embed_mode
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
         self.HierarchicalTransformer = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, window_duration=window_duration, pool=pool,
-                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output)
+                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode)
         self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
                                     t_mask_replacement=torch.nn.Parameter(
-                                        torch.zeros(self.num_channels, self.path_embed_dim), requires_grad=True),
+                                        torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),
                                     c_mask_replacement=torch.nn.Parameter(
-                                        torch.zeros(self.num_windows, self.path_embed_dim), requires_grad=True))
-    def forward(self, x_eeg):
-        x = self.HierarchicalTransformer.to_patch_embedding(x_eeg)
-        x, original_x, mask_t, mask_c = self.mask_layer(x)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+                                        torch.zeros(self.num_windows, self.patch_embed_dim), requires_grad=True))
+        self.print_forward = True
 
-        b, n, _ = x.shape
+    def disable_classification_parameters(self):
+        self.HierarchicalTransformer.disable_classification_parameters()
+
+    def forward(self, x, *args, **kwargs):
+        if verbose is not None and self.print_forward:
+            print(f'\nPretrain model input type: {type(x)}, containing: {list(x.keys())}')
+        data = self.HierarchicalTransformer.to_patch_embedding(x['eeg'])
+        data, original_data, mask_t, mask_c = self.mask_layer(data)
+        data = data.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        b, n, _ = data.shape
 
         cls_tokens = repeat(self.HierarchicalTransformer.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x += self.HierarchicalTransformer.learnable_pos_embedding[:, :(n + 1)]
-        x = self.HierarchicalTransformer.dropout(x)
+        data = torch.cat((cls_tokens, data), dim=1)
+        if self.pos_embed_mode == 'sinusoidal':
+            channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
+            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=data.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
-        x, att_matrix = self.HierarchicalTransformer.transformer(x)
+            time_pos_embed = self.HierarchicalTransformer.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+            channel_pos_embed = self.HierarchicalTransformer.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
+
+            pos_embed = time_pos_embed + channel_pos_embed
+            cls_tokens_pos_embedding = repeat(self.HierarchicalTransformer.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+            pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
+
+        elif self.pos_embed_mode == 'learnable':
+            pos_embed = self.HierarchicalTransformer.learnable_pos_embedding[:, :(n + 1)]
+        data += pos_embed
+        data = self.HierarchicalTransformer.dropout(data)
+
+        data, att_matrix = self.HierarchicalTransformer.transformer(data)
         # att_matrix = att_matrix[:, :, 1:, 1:]
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
         # att_matrix = torch.sum(att_matrix, dim=2)
         # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
-        x = self.HierarchicalTransformer.to_latent(x[:, 1:].transpose(1, 2).view(original_x.shape))  # exclude cls
-        return x, original_x, mask_t, mask_c
+        data = self.HierarchicalTransformer.to_latent(data[:, 1:].transpose(1, 2).view(original_data.shape))  # exclude cls
+
+        self.print_forward = False # only print once
+
+        return data, original_data, mask_t, mask_c
 
     def prepare_data(self, x):
         return x
@@ -602,6 +799,23 @@ def viz_ht(model: HierarchicalTransformer, x_eeg, y, label_encoder):
     pickle.dump(x_eeg, open(os.path.join('HT/RSVP-itemonset-locked', 'x_eeg.pkl'), 'wb'))
     pickle.dump(y, open(os.path.join('HT/RSVP-itemonset-locked', 'y.pkl'), 'wb'))
     pickle.dump(label_encoder, open(os.path.join('HT/RSVP-itemonset-locked', 'label_encoder.pkl'), 'wb'))
+
+
+class ReconstructionLoss(nn.Module):
+    """
+    Compute the reconstruction loss between the input_data and reconstructed_data.
+    Args:
+        input_data (torch.Tensor): The original input data.
+        reconstructed_data (torch.Tensor): The reconstructed data obtained from a model.
+    Returns:
+        torch.Tensor: The reconstruction loss.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_data, reconstructed_data):
+        mse_loss = F.mse_loss(reconstructed_data, input_data, reduction='mean')
+        return mse_loss
 
 class SimularityLoss(nn.Module):
     def __init__(self):
@@ -664,12 +878,12 @@ class ContrastiveLoss(nn.Module):
 
         return logits.view(-1, logits.shape[-1])
 
-    def forward(self, pred_tokens, original_tokens, metric='simularity'):
+    def forward(self, pred_tokens, original_tokens, metric='similarity'):
         batch_size, token_dim, num_channels, num_windows = pred_tokens.shape
         negt_tokens = self._generate_negatives(pred_tokens)
         pred_tokens = pred_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)
         original_tokens = original_tokens.permute(0, 2, 3, 1).view(batch_size, -1, token_dim)  # Shape: (32, 576, 128)
-        if metric == 'simularity':
+        if metric == 'similarity':
             logits = self._calculate_similarity(original_tokens, pred_tokens, negt_tokens)
         elif metric == 'distance':
             logits = self._calculate_distance(original_tokens, pred_tokens, negt_tokens)

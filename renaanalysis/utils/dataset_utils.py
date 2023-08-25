@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import scipy
 import pickle
 
+from autoreject import AutoReject
 from mne.io import read_raw_eeglab
 
 from RenaAnalysis import get_rdf
@@ -21,16 +22,16 @@ from mne_bids import (BIDSPath, read_raw_bids)
 
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
 from renaanalysis.learning.preprocess import preprocess_samples_and_save
-from renaanalysis.params.params import eeg_name, pupil_name
+from renaanalysis.params.params import eeg_name, pupil_name, random_seed
 from renaanalysis.utils.Bidict import Bidict
-from renaanalysis.utils.data_utils import epochs_to_class_samples
+from renaanalysis.utils.data_utils import epochs_to_class_samples, epochs_to_class_samples_TUH, _epoch_to_samples
 from renaanalysis.multimodal.multimodal import MultiModalArrays
 from renaanalysis.multimodal.PhysioArray import PhysioArray
 from renaanalysis.utils.eeg_utils import is_standard_10_20_name
 from renaanalysis.utils.rdf_utils import rena_epochs_to_class_samples_rdf
 from renaanalysis.utils.utils import preprocess_standard_eeg, add_annotations_to_raw, is_button_after_oddball
 
-TUH_valid_channels = ['A1', 'A2', 'C3', 'C4', 'Cz', 'F3', 'F4', 'F7', 'F8', 'Fp1', 'Fp2', 'Fz', 'O1', 'O2', 'Oz', 'P3', 'P4', 'Pz', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6']
+TUH_valid_channels = ['A1', 'A2', 'C3', 'C4', 'Cz', 'F3', 'F4', 'F7', 'F8', 'Fp1', 'Fp2', 'Fz', 'O1', 'O2', 'P3', 'P4', 'Pz', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6']
 
 def TUH_mapping(channel_name: str):
     if 'EEG' in channel_name:
@@ -339,7 +340,7 @@ def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tma
         pickle.dump(y, open(y_path, 'wb'))
         pickle.dump(metadata, open(metadata_path, 'wb'))
         montage = epochs.get_montage()
-        pickle.dump(epochs.montage, open(montage_path, 'wb'))
+        pickle.dump(montage, open(montage_path, 'wb'))
     else:
         assert os.path.exists(x_path) and os.path.exists(y_path) and os.path.exists(metadata_path), "Data files not found, please regenerate epochs by setting is_regenerate_epochs=True"
         x = pickle.load(open(x_path, 'rb'))
@@ -350,7 +351,7 @@ def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tma
     print(f"Load data took {time.perf_counter() - loading_start_time} seconds")
     return x, y, metadata, event_viz_colors, montage
 
-def get_BCICIVA_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tmax=3, is_regenerate_epochs=True, export_data_root=None):
+def get_BCICIVA_samples(data_root, export_data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tmax=3, is_regenerate_epochs=True, reject='auto'):
     '''
     This function returns the samples of the BCICIV dataset
 
@@ -361,61 +362,132 @@ def get_BCICIVA_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tm
     x_path = os.path.join(export_data_root, 'x_BCICIVA.p')
     y_path = os.path.join(export_data_root, 'y_BCICIVA.p')
     metadata_path = os.path.join(export_data_root, 'metadata_BCICIVA.p')
+    kept_channels = ['Fz', 'FC3', 'FC1', 'FCz', 'FC2', 'FC4', 'C5', 'C3', 'C1', 'Cz', 'C2', 'C4', 'C6', 'CP3', 'CP1',
+                     'CPz', 'CP2', 'CP4', 'P1', 'Pz', 'P2', 'POz']
     if is_regenerate_epochs:
         file_tree_dict = parse_file_tree(data_root)
-        kept_channels = ['Fz', 'FC3', 'FC1', 'FCz', 'FC2', 'FC4', 'C5', 'C3', 'C1', 'Cz', 'C2', 'C4', 'C6', 'CP3', 'CP1',
-                         'CPz', 'CP2', 'CP4', 'P1', 'Pz', 'P2', 'POz']
         channel_mapping = {'EEG-Fz': 'Fz', 'EEG-0': 'FC3', 'EEG-1': 'FC1', 'EEG-2': 'FCz', 'EEG-3': 'FC2', 'EEG-4': 'FC4', 'EEG-5': 'C5', 'EEG-C3': 'C3', 'EEG-6': 'C1', 'EEG-Cz': 'Cz', 'EEG-7': 'C2', 'EEG-C4': 'C4', 'EEG-8': 'C6', 'EEG-9': 'CP3', 'EEG-10': 'CP1', 'EEG-11': 'CPz', 'EEG-12': 'CP2', 'EEG-13': 'CP4', 'EEG-14': 'P1', 'EEG-Pz': 'Pz', 'EEG-15': 'P2', 'EEG-16': 'POz'}
         mont1020 = get_BCI_montage('standard_1020', picks=kept_channels)
-        event_id_mapping = {'769': 0, '770': 1, '771': 2, '772': 3, '276': 4, '277': 5, '768': 6, '783': 7, '1023': 8, '1072': 9, '32766': 10}
-        subjects = []
-        for file_name, direc in file_tree_dict.items():
+        # event_id_mapping = {'769': 0, '770': 1, '771': 2, '772': 3, '276': 4, '277': 5, '768': 6, '783': 7, '1023': 8, '1072': 9, '32766': 10}
+        event_id_mapping = {'769': 0, '770': 1, '771': 2, '772': 3, '783': 7}
+
+        subjects = {file_name[:3] for file_name in file_tree_dict.keys() if file_name.startswith('A')}
+        subject_epochs = []
+        for s in subjects:
             metadata_dict = {}
-            if 'T' in file_name:
-                subject_id = int(re.findall(r'\d+', file_name)[0])
-                epoch_tmax_copy = copy.copy(epoch_tmax)
-                raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
-                epoch_tmax_copy -= 1 / raw.info['sfreq']
-                mne.rename_channels(raw.info, channel_mapping)
-                raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right']) # otherwise the channel names are not consistent with montage
-                events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
-                is_merge_event = 'drop'
-                data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax_copy, baseline=(epoch_tmin, epoch_tmin + (epoch_tmax-epoch_tmin)*0.1), preload=True, event_repeated=is_merge_event)
-                metadata_dict['subject_id'] = [subject_id] * len(data)
-                metadata_dict['run'] = [1] * len(data)
-                metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
-                metadata = pd.DataFrame(metadata_dict)
-                data.metadata = metadata
-                data.set_montage(mont1020)
-                subjects.append(data)
-            elif 'E' in file_name:
-                subject_id = int(re.findall(r'\d+', file_name)[0])
-                epoch_tmax_copy = copy.copy(epoch_tmax)
-                raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
-                epoch_tmax_copy -= 1 / raw.info['sfreq']
-                mne.rename_channels(raw.info, channel_mapping)
-                raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right'])  # otherwise the channel names are not consistent with montage
-                events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
-                is_merge_event = 'drop'
-                data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax_copy,
-                                  baseline=(epoch_tmin, epoch_tmin + (epoch_tmax - epoch_tmin) * 0.1), preload=True,
-                                  event_repeated=is_merge_event)
-                data = data['783']
-                metadata_dict['subject_id'] = [subject_id] * len(data)
-                metadata_dict['run'] = [2] * len(data)
-                metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
-                metadata = pd.DataFrame(metadata_dict)
-                data.metadata = metadata
-                data.set_montage(mont1020)
-                true_label_path = os.path.join(data_root, 'true_labels', file_name.replace('gdf', 'mat'))
-                true_label = scipy.io.loadmat(true_label_path)
-                data.events[:, -1] = (true_label['classlabel'] - 1).squeeze(axis=-1)
-                data.event_id = {'769': 0, '770': 1, '771': 2, '772': 3}
-                subjects.append(data)
-        epochs = mne.concatenate_epochs(subjects)
-        x, y, metadata = epochs_to_class_samples(epochs, list(event_viz_colors.keys()), picks=kept_channels,
-                                                             reject=None, n_jobs=16,
-                                                             eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, low_freq=4, high_freq=40, eeg_viz_picks=kept_channels, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax)
+            train_path = os.path.join(data_root, f'{s}T.gdf')
+            eval_path = os.path.join(data_root, f'{s}E.gdf')
+
+            raw_train = mne.io.read_raw_gdf(os.path.join(data_root, train_path), preload=True)
+            raw_train, _ = mne.set_eeg_reference(raw_train, 'average', projection=False)
+
+            raw_val = mne.io.read_raw_gdf(os.path.join(data_root, eval_path), preload=True)
+            raw_val, _ = mne.set_eeg_reference(raw_val, 'average', projection=False)
+
+
+            assert raw_train.info['sfreq'] == raw_val.info['sfreq']
+            this_epoch_tmax = epoch_tmax - 1 / raw_train.info['sfreq']
+
+            raw = mne.concatenate_raws([raw_train, raw_val])
+
+            mne.rename_channels(raw.info, channel_mapping)
+            raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right'])  # otherwise the channel names are not consistent with montage
+            raw.set_montage(mont1020)
+            events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
+
+            data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=this_epoch_tmax,
+                              baseline=(epoch_tmin, epoch_tmin + (epoch_tmax - epoch_tmin) * 0.1), preload=True,
+                              event_repeated='drop')
+            metadata_dict['subject_id'] = [s] * len(data)
+            metadata_dict['run'] = np.ones(len(data))
+            metadata_dict['run'][events[:, -1] == event_id_mapping['783']] = 2
+            metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
+            metadata = pd.DataFrame(metadata_dict)
+            data.metadata = metadata
+
+            # add the labels to the val epochs
+            val_len = np.sum(events[:, -1] == event_id_mapping['783'])
+            true_label_path_eval = os.path.join(data_root, 'true_labels', f'{s}E.mat')
+            true_label_eval = scipy.io.loadmat(true_label_path_eval)
+
+            true_label_path_train = os.path.join(data_root, 'true_labels', f'{s}T.mat')
+            true_label_train = scipy.io.loadmat(true_label_path_train)
+            assert np.all(data.events[:, -1][events[:, -1] != event_id_mapping['783']] == (true_label_train['classlabel'] - 1).squeeze(axis=-1)), f"Labels don't match for subject {s} train"
+
+            # data.events[:, -1] = (true_label['classlabel'] - 1).squeeze(axis=-1)
+            # data.event_id = {'769': 0, '770': 1, '771': 2, '772': 3}
+            assert np.all(np.argwhere(events[:, -1] == event_id_mapping['783'])[:, 0] == np.arange(288, len(data))), f"Labels don't match for subject {s} eval"
+            data.events[:, -1][events[:, -1] == event_id_mapping['783']] = (true_label_eval['classlabel'] - 1).squeeze(axis=-1)
+            data.event_id.pop('783')
+            # if low_freq is not None and high_freq is not None:
+            #     epochs.filter(low_freq, high_freq, n_jobs=n_jobs)
+            if eeg_resample_rate is not None and data.info['sfreq'] != eeg_resample_rate:
+                data.resample(eeg_resample_rate, n_jobs=16)
+            if reject == 'auto':
+                print(f"Auto rejecting epochs for subject {s}")
+                ar = AutoReject(n_jobs=16, verbose=False, random_state=random_seed)
+                data, log = ar.fit_transform(data, return_log=True)
+            subject_epochs.append(data)
+            # from renaanalysis.utils.utils import visualize_eeg_epochs
+            # visualize_eeg_epochs(data, data.event_id, event_viz_colors, tmin_eeg_viz=epoch_tmin, tmax_eeg_viz=this_epoch_tmax,
+            #                      eeg_picks=kept_channels, sfreq=eeg_resample_rate, title='EEG Epochs ' + 'title',
+            #                      low_frequency=0, high_frequency=40, is_plot_PSD=True,
+            #                      is_plot_ERD=True)
+
+            # if 'T' in file_name:
+            #     subject_id = int(re.findall(r'\d+', file_name)[0])
+            #     epoch_tmax_copy = copy.copy(epoch_tmax)
+            #     raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
+            #     epoch_tmax_copy -= 1 / raw.info['sfreq']
+            #     mne.rename_channels(raw.info, channel_mapping)
+            #     raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right']) # otherwise the channel names are not consistent with montage
+            #     events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
+            #     is_merge_event = 'drop'
+            #     data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax_copy, baseline=(epoch_tmin, epoch_tmin + (epoch_tmax-epoch_tmin)*0.1), preload=True, event_repeated=is_merge_event)
+            #     metadata_dict['subject_id'] = [subject_id] * len(data)
+            #     metadata_dict['run'] = [1] * len(data)
+            #     metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
+            #     metadata = pd.DataFrame(metadata_dict)
+            #     data.metadata = metadata
+            #     data.set_montage(mont1020)
+            #     subjects.append(data)
+            # elif 'E' in file_name:
+            #     subject_id = int(re.findall(r'\d+', file_name)[0])
+            #     epoch_tmax_copy = copy.copy(epoch_tmax)
+            #     raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
+            #     epoch_tmax_copy -= 1 / raw.info['sfreq']
+            #     mne.rename_channels(raw.info, channel_mapping)
+            #     raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right'])  # otherwise the channel names are not consistent with montage
+            #     events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
+            #     is_merge_event = 'drop'
+            #     data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax_copy,
+            #                       baseline=(epoch_tmin, epoch_tmin + (epoch_tmax - epoch_tmin) * 0.1), preload=True,
+            #                       event_repeated=is_merge_event)
+            #     data = data['783']
+            #     metadata_dict['subject_id'] = [subject_id] * len(data)
+            #     metadata_dict['run'] = [2] * len(data)
+            #     metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
+            #     metadata = pd.DataFrame(metadata_dict)
+            #     data.metadata = metadata
+            #     data.set_montage(mont1020)
+            #     true_label_path = os.path.join(data_root, 'true_labels', file_name.replace('gdf', 'mat'))
+            #     true_label = scipy.io.loadmat(true_label_path)
+            #     data.events[:, -1] = (true_label['classlabel'] - 1).squeeze(axis=-1)
+            #     data.event_id = {'769': 0, '770': 1, '771': 2, '772': 3}
+            #     subjects.append(data)
+            T = {}
+            E = {}
+            T['data'] = data[np.where(data.metadata['run'] == 1)[0]].get_data()
+            T['label'] = data[np.where(data.metadata['run'] == 1)[0]].events[:, -1] + 1
+            E['data'] = data[np.where(data.metadata['run'] == 2)[0]].get_data()
+            E['label'] = data[np.where(data.metadata['run'] == 2)[0]].events[:, -1] + 1
+            pickle.dump(T, open(os.path.join(export_data_root, s + 'T.p'), 'wb'))
+            pickle.dump(E, open(os.path.join(export_data_root, s + 'E.p'), 'wb'))
+        epochs = mne.concatenate_epochs(subject_epochs)
+        # x, y, metadata = epochs_to_class_samples(epochs, list(event_viz_colors.keys()), picks=kept_channels,
+        #                                                      reject='auto', n_jobs=16,
+        #                                                      eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, low_freq=None, high_freq=None, eeg_viz_picks=kept_channels, epoch_tmin=epoch_tmin, epoch_tmax=epoch_tmax)
+        x, y, metadata = _epoch_to_samples(epochs, epochs.event_id, require_metainfo=True, event_marker_to_label=False)
         pickle.dump(x, open(x_path, 'wb'))
         pickle.dump(y, open(y_path, 'wb'))
         pickle.dump(metadata, open(metadata_path, 'wb'))
@@ -423,30 +495,47 @@ def get_BCICIVA_samples(data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tm
         x = pickle.load(open(x_path, 'rb'))
         y = pickle.load(open(y_path, 'rb'))
         metadata = pickle.load(open(metadata_path, 'rb'))
-    return x, y, metadata, event_viz_colors
+    return x, y, metadata, event_viz_colors, kept_channels
 
 
-def get_DEAP_preprocessed_samples(data_root):
-    ratings = pd.read_csv(os.path.join(data_root, 'metadata_csv/participant_ratings.csv'))
+def get_DEAP_preprocessed_samples(data_root, export_data_root, eeg_resample_rate=200, epoch_tmin=1, epoch_tmax=3, is_regenerate_epochs=True, reject='auto', event_viz_colors=None, subject_picks=None, *args, **kwargs):
+    x_path = os.path.join(export_data_root, 'x_BCICIVA.p')
+    y_path = os.path.join(export_data_root, 'y_BCICIVA.p')
+    metadata_path = os.path.join(export_data_root, 'metadata_BCICIVA.p')
+    kept_channels = ['Fp1', 'AF3', 'F3', 'F7', 'FC5', 'FC1', 'C3', 'T7', 'CP5', 'CP1', 'P3', 'P7', 'PO3', 'O1', 'Oz',
+                     'Pz', 'Fp2', 'AF4', 'Fz', 'F4', 'F8', 'FC6', 'FC2', 'Cz', 'C4', 'T8', 'CP6', 'CP2', 'P4', 'P8',
+                     'PO4', 'O2']
+    if is_regenerate_epochs:
+        ratings = pd.read_csv(os.path.join(data_root, 'metadata_csv/participant_ratings.csv'))
+        metadata = {'subject_id': [], 'run': [], 'epoch_start_times': []}
+        data_directory = os.path.join(data_root, 'data_preprocessed_python')
+        file_tree_dict = parse_file_tree(data_directory)
+        mont1020 = mne.channels.make_standard_montage('standard_1020')
+        subjects_data = []
+        subjects_label = []
+        for file_name, _ in file_tree_dict.items():
+            data = pickle.load(open(os.path.join(data_directory, file_name), 'rb'), encoding='latin1')
+            subjects_data.append(data['data'][:, :32, :])
+            subjects_label.append(data['labels'][:, :2])
+            metadata['subject_id'] += file_name.replace('.dat', '') * len(data['labels'])
+            metadata['run'] += range(len(data['labels']))
+        x = np.concatenate(subjects_data, axis=0)
+        y = np.concatenate(subjects_label, axis=0)
+        subject_id = ratings['Participant_id'].values
+        sorted_ratings = ratings.sort_values(['Participant_id', 'Experiment_id'])
+        start_time = sorted_ratings['Start_time'].values
+        pickle.dump(x, open(x_path, 'wb'))
+        pickle.dump(y, open(y_path, 'wb'))
+        # pickle.dump(metadata, open(metadata_path, 'wb'))
+    else:
+        assert os.path.exists(x_path) and os.path.exists(y_path) and os.path.exists(metadata_path), "Data files not found, please regenerate epochs by setting is_regenerate_epochs=True"
+        x = pickle.load(open(x_path, 'rb'))
+        y = pickle.load(open(y_path, 'rb'))
+        # metadata = pickle.load(open(metadata_path, 'rb'))
+        # montage = pickle.load(open(montage_path, 'rb'))
+    return x, y, kept_channels
 
-    data_directory = os.path.join(data_root, 'data_preprocessed_python')
-    file_tree_dict = parse_file_tree(data_directory)
-    kept_channels = ['Fp1', 'AF3', 'F3', 'F7', 'FC5', 'FC1', 'C3', 'T7', 'CP5', 'CP1', 'P3', 'P7', 'PO3', 'O1', 'Oz', 'Pz', 'Fp2', 'AF4', 'Fz', 'F4', 'F8', 'FC6', 'FC2', 'Cz', 'C4', 'T8', 'CP6', 'CP2', 'P4', 'P8', 'PO4', 'O2']
-    mont1020 = mne.channels.make_standard_montage('standard_1020', picks=kept_channels)
-    subjects_data = []
-    subjects_label = []
-    for file_name, _ in file_tree_dict.items():
-        data = pickle.load(open(os.path.join(data_directory, file_name), 'rb'), encoding='latin1')
-        subjects_data.append(data['data'])
-        subjects_label.append(data['labels'])
-    x = np.concatenate(subjects_data, axis=0)
-    y = np.concatenate(subjects_label, axis=0)
-    subject_id = ratings['Participant_id'].values
-    sorted_ratings = ratings.sort_values(['Participant_id', 'Experiment_id'])
-    start_time = sorted_ratings['Start_time'].values
-    return x, y, subject_id, start_time, mont1020
-
-def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=None, eeg_resample_rate=200, subject_picks=None):
+def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=None, eeg_resample_rate=200, subject_picks=None, *args, **kwargs):
 
     # Read metadata participant rating
     ratings = pd.read_csv(os.path.join(data_root,'metadata_csv/participant_ratings.csv'))
@@ -458,7 +547,7 @@ def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=N
     file_tree_dict = parse_file_tree(data_directory)
     idx = 1
     kept_channels = ['Fp1', 'AF3', 'F7', 'F3', 'FC1', 'FC5', 'T7', 'C3', 'CP1', 'CP5', 'P7', 'P3', 'Pz', 'PO3', 'O1', 'Oz', 'O2', 'PO4', 'P4', 'P8', 'CP6', 'CP2', 'C4', 'T8', 'FC6', 'FC2', 'F4', 'F8', 'AF4', 'Fp2', 'Fz', 'Cz']
-    mont1020 = mne.channels.make_standard_montage('standard_1020', picks=kept_channels)
+    mont1020 = mne.channels.make_standard_montage('standard_1020')
     subjects = []
     event_name_map = {'HighValanceHighArousal': 0, 'HighValanceLowArousal': 1, 'LowValanceHighArousal': 2, 'LowValanceLowArousal': 3}
     for file_name, _ in file_tree_dict.items():
@@ -491,7 +580,7 @@ def get_DEAP_samples(data_root, event_names=None, picks=None, event_viz_colors=N
     all_epochs = mne.concatenate_epochs(subjects)
     x, y, start_time, metadata = epochs_to_class_samples(all_epochs, list(event_viz_colors.keys()), picks=picks,
                                                          reject='auto', n_jobs=16,
-                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors)
+                                                         eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, *args, **kwargs)
 
 def get_DEAP_epoch_label(ratings_data, k):
     if ratings_data['Valence'][k] >= 5 and ratings_data['Arousal'][k] >= 5:
@@ -504,7 +593,7 @@ def get_DEAP_epoch_label(ratings_data, k):
         return 3
 
 
-def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epoch_length=4, picks='eeg', reject='auto', eeg_resample_rate=200, subject_picks=None, subject_group_picks=None):
+def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epoch_length=4, picks='eeg', reject='auto', eeg_resample_rate=200, subject_picks=None, subject_group_picks=None, *args, **kwargs):
     '''
 
     @param data_root: The data root of the TUH EEG Corpus
@@ -515,10 +604,14 @@ def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epo
     @param subject_picks: If is not None, only the subjects in the list will be picked. If None, all subjects will be picked.
     @return:
     '''
+    event_viz_colors = {
+        "02_tcp_le": "red",
+        '01_tcp_ar': "blue",
+        '03_tcp_ar_a': "green",
+        '04_tcp_le_a': "yellow",
+    }
+    # montage_names = []
     if is_regenerate_epochs:
-        event_viz_colors = {
-            "standard": "red"
-        }
         # Specify the root directory of the file tree
         root_directory = data_root
         mont1020 = mne.channels.make_standard_montage('standard_1020')
@@ -531,29 +624,34 @@ def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epo
                 for subject_name, subject in subject_group.items():
                     if subject_picks is None or subject_name in subject_picks:
                         for session_name, session in subject.items():
+                            match = re.search(r's(\d+)', session_name)
+                            session_number = match.group(1)
                             for montage_type_name, montage_type in session.items():
+                                # if montage_type_name not in montage_names:
+                                #     montage_names.append(montage_type_name)
                                 for data_file_name, _ in montage_type.items():
-                                    metadata_dict = {'subject_group_id': [], 'subject_name': [], 'session_name': [],
+                                    metadata_dict = {'subject_group_id': [], 'subject_id': [], 'run': [],
                                                      'montage_type_name': []}
                                     raw = mne.io.read_raw_edf(os.path.join(data_root,
                                                                            f'{subject_group_id}/{subject_name}/{session_name}/{montage_type_name}/{data_file_name}'),
                                                               preload=True)
-                                    if raw.info['sfreq'] != 256:
-                                        raw.resample(256)
+                                    if raw.info['sfreq'] != 250:
+                                        raw.resample(250)
+                                    raw.notch_filter(60, n_jobs=16)
                                     mne.rename_channels(raw.info, TUH_mapping)
                                     num_epochs = math.ceil(raw.__len__() / (epoch_length * raw.info['sfreq']))
                                     eventID_mat = np.zeros((num_epochs, 3), dtype='int')
                                     for k in range(num_epochs):
                                         eventID_mat[k, 0] = int(k * epoch_length * raw.info['sfreq'])
                                         metadata_dict['subject_group_id'].append(subject_group_id)
-                                        metadata_dict['subject_name'].append(subject_name)
-                                        metadata_dict['session_name'].append(session_name)
+                                        metadata_dict['subject_id'].append(subject_name)
+                                        metadata_dict['run'].append(session_number)
                                         metadata_dict['montage_type_name'].append(montage_type_name)
                                     epoch_start_times = raw.times[eventID_mat[:, 0]]
                                     metadata_dict['epoch_start_times'] = epoch_start_times
                                     metadata = pd.DataFrame(metadata_dict)
                                     data = mne.Epochs(raw, eventID_mat, {'standard': 0}, metadata=metadata, tmin=0,
-                                                      tmax=epoch_length, preload=True, baseline=(0, 0))
+                                                      tmax=epoch_length-1/raw.info['sfreq'], preload=True, baseline=(0, 0))
                                     data.pick_channels(TUH_valid_channels, ordered=False)
                                     data.set_montage(mont1020)
                                     if len(data.info['ch_names']) not in subjects.keys():
@@ -575,14 +673,14 @@ def get_TUHG_samples(data_root, export_data_root, is_regenerate_epochs=True, epo
                     data_dict[str(data.ch_names)].append(data)
             for channel_names, data in data_dict.items():
                 data = mne.concatenate_epochs(data)
-                x_dict[num_channels][channel_names], _, metadata_dict[num_channels][channel_names] = epochs_to_class_samples(data, list(event_viz_colors.keys()), picks=picks, reject='auto', n_jobs=16,
-                                                             eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, title=str(num_channels) + 'channels', eeg_viz_picks=data.ch_names)
+                x_dict[num_channels][channel_names], _, metadata_dict[num_channels][channel_names] = epochs_to_class_samples_TUH(data, list(event_viz_colors.keys()), picks=picks, reject='auto', n_jobs=16,
+                                                             eeg_resample_rate=eeg_resample_rate, colors=event_viz_colors, title=str(num_channels) + 'channels', eeg_viz_picks=data.ch_names, low_freq=1, high_freq=120, random_seed=random_seed, *args, **kwargs)
         pickle.dump(x_dict, open(os.path.join(export_data_root, 'x_TUH.p'), 'wb'))
         pickle.dump(metadata_dict, open(os.path.join(export_data_root, 'metadata_TUH.p'), 'wb'))
     else:
         x_dict = pickle.load(open(os.path.join(export_data_root, 'x_TUH.p'), 'rb'))
         metadata_dict = pickle.load(open(os.path.join(export_data_root, 'metadata_TUH.p'), 'rb'))
-    return x_dict, y_dict, metadata_dict
+    return x_dict, None, metadata_dict, event_viz_colors
 
 def get_auditory_oddball_samples(bids_root, export_data_root, is_regenerate_epochs, reject, eeg_resample_rate, picks='eeg', random_seed=None, baseline=(-0.1, 0.)):
     loading_start_time = time.perf_counter()
@@ -721,17 +819,23 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         physio_arrays = [PhysioArray(x[0], sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name),
               PhysioArray(x[1], sampling_rate=eyetracking_resample_srate, physio_type=pupil_name, dataset_name=dataset_name)]
     elif dataset_name == "TUH":
-        x, y, start_time, metadata = get_TUHG_samples(dataset_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=eeg_resample_rate, subject_picks=subject_picks, subject_group_picks=subject_group_picks)
+        x_dict, y, metadata_dict, event_viz_colors = get_TUHG_samples(dataset_root, epochs_root, epoch_length=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=250, subject_picks=subject_picks, subject_group_picks=subject_group_picks, *args, **kwargs)
+        for ch_names, x in x_dict[21].items():
+            metadata = metadata_dict[21][ch_names]
+            physio_arrays = [PhysioArray(x, metadata, sampling_rate=250, physio_type=eeg_name, dataset_name=dataset_name, info={'ch_names': eval(next(iter(x_dict[21].keys())))})]
+    elif dataset_name == "DEAP":
+        x, y, metadata, event_viz_colors = get_DEAP_preprocessed_samples(dataset_root, epochs_root, is_regenerate_epochs=is_regenerate_epochs, reject=reject, eeg_resample_rate=128, *args, **kwargs)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=128, physio_type=eeg_name, dataset_name=dataset_name)]
     elif dataset_name == 'BCICIVA':
-        x, y, metadata, event_viz_colors = get_BCICIVA_samples(dataset_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root)
-        physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]
+        x, y, metadata, event_viz_colors, ch_names = get_BCICIVA_samples(dataset_root, epochs_root, eeg_resample_rate=250, epoch_tmin=0, epoch_tmax=4, is_regenerate_epochs=is_regenerate_epochs, reject=reject)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=250, physio_type=eeg_name, dataset_name=dataset_name, ch_names=ch_names)]
     elif dataset_name == 'SIM':
         x, y, metadata, event_viz_colors, montage = get_SIM_samples(dataset_root, eeg_resample_rate=eeg_resample_rate, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name, info={'montage': montage})]
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 
-    physio_arrays = preprocess_samples_and_save(physio_arrays, epochs_root, is_apply_pca_ica_eeg, pca_ica_eeg_n_components)
+    physio_arrays = preprocess_samples_and_save(physio_arrays, epochs_root, is_apply_pca_ica_eeg, pca_ica_eeg_n_components, dataset_name=dataset_name)
     experiment_info = {'subject_id': metadata['subject_id'], 'run': metadata['run']}
 
     return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors, rebalance_method=rebalance_method, filename=filename, experiment_info=experiment_info)

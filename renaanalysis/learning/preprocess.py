@@ -18,7 +18,7 @@ def preprocess_eeg(x_eeg, n_top_components=20):
     x_eeg_pca_ica, pca, ica = compute_pca_ica(x_eeg, n_top_components)
     return x_eeg_znormed, x_eeg_pca_ica, pca, ica
 
-def preprocess_samples_and_save(physio_arrays: List[PhysioArray], epochs_root: str, is_apply_pca_ica_eeg, pca_ica_eeg_n_components=20):
+def preprocess_samples_and_save(physio_arrays: List[PhysioArray], epochs_root: str, is_apply_pca_ica_eeg, pca_ica_eeg_n_components=20, dataset_name=None):
     """
     For eeg, this function checks if preprocessed data exists, if not, it will preprocess the data and save it.
 
@@ -35,7 +35,10 @@ def preprocess_samples_and_save(physio_arrays: List[PhysioArray], epochs_root: s
     for i in range(len(physio_arrays)):
         parray_preprocessed_eeg_file_path = f'{epochs_root}/x_{str(physio_arrays[i])}_preprocessed.p'
         if physio_arrays[i].physio_type == eeg_name:
-            physio_arrays[i].apply_znorm_by_trial()
+            if dataset_name == 'BCICIVA':
+                physio_arrays[i].apply_znorm_by_run()
+            else:
+                physio_arrays[i].apply_znorm_by_trial()
             if is_apply_pca_ica_eeg:
                 if os.path.exists(parray_preprocessed_eeg_file_path):
                     physio_arrays[i] = pickle.load(open(parray_preprocessed_eeg_file_path, "rb"))
