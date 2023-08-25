@@ -340,7 +340,7 @@ def get_SIM_samples(data_root, eeg_resample_rate=200, epoch_tmin=-0.1, epoch_tma
         pickle.dump(y, open(y_path, 'wb'))
         pickle.dump(metadata, open(metadata_path, 'wb'))
         montage = epochs.get_montage()
-        pickle.dump(epochs.montage, open(montage_path, 'wb'))
+        pickle.dump(montage, open(montage_path, 'wb'))
     else:
         assert os.path.exists(x_path) and os.path.exists(y_path) and os.path.exists(metadata_path), "Data files not found, please regenerate epochs by setting is_regenerate_epochs=True"
         x = pickle.load(open(x_path, 'rb'))
