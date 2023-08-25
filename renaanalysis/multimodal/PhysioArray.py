@@ -110,6 +110,12 @@ class PhysioArray:
         self.array_preprocessed = z_norm_by_subject_run(self)
         self.data_processor['znorm_by_run'] = True
 
+    def apply_znorm_global(self):
+        self.array_preprocessed = self.array.copy()
+        self.array_preprocessed -= self.array_preprocessed.mean()
+        self.array_preprocessed /= self.array_preprocessed.std()
+        self.data_processor['znorm'] = True
+
     def apply_pca_ica(self, n_top_components=20):
         """
         @param n_top_components: number of top components to keep for pca and ica
