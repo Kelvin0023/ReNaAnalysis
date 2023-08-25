@@ -20,7 +20,7 @@ is_by_channel = False # use by channel version of SMOT rebalance or not, no big 
 is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
 viz_rebalance = False # viz training data after rebalance or not
 is_regenerate_epochs = True
-is_augment_batch = True
+is_augment_batch = False
 
 eeg_resample_rate = 200
 
@@ -121,7 +121,7 @@ grid_search_params = {
     "lr": [1e-4],
     # "lr": [1e-3],
 
-    "l2_weight": [1e-5],
+    "l2_weight": [0],
 
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
