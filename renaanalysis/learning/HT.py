@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 
 from renaanalysis.params.params import verbose
 
+from renaanalysis.params.params import eeg_name
+
 
 class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, embed_dim):
@@ -25,7 +27,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
 
     def forward(self, p):
         # t has shape (batch_size, seq_len, embed_dim)
-        outer_product = torch.einsum('n,nd->nd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
+        outer_product = torch.einsum('bn,nd->bnd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
         pos_emb = torch.cat([outer_product.sin(), outer_product.cos()], dim=-1)
         return pos_emb
 
@@ -312,9 +314,9 @@ class MaskLayer(nn.Module):
 
 
 class HierarchicalTransformer(nn.Module):
-    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, physio_type=eeg_name, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
                  patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi',
-                 pos_embed_mode='learnable'):
+                 pos_embed_mode='learnable', *args, **kwargs):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
         """
@@ -339,6 +341,7 @@ class HierarchicalTransformer(nn.Module):
         self.num_timesteps = num_timesteps
         self.output = output
         self.num_classes = num_classes
+        self.physio_type = physio_type
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
@@ -456,21 +459,34 @@ class HierarchicalTransformer(nn.Module):
                 nn.Linear(self.patch_embed_dim, num_classes))
 
 
-    def forward(self, x_eeg, *args, **kwargs):
-        x = self.encode(x_eeg, *args, **kwargs)
-        return self.mlp_head(x)
+    def forward(self, x, *args, **kwargs):
+            x = self.encode(x, *args, **kwargs)
+            return self.mlp_head(x)
 
     def encode(self, x, *args, **kwargs):
-        x_eeg = x['eeg']
-        b, nchannel, _ = x_eeg.shape
+        x_eeg = x[self.physio_type]
+
+        x = self.to_patch_embedding(x_eeg)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        b, n, _ = x.shape
+
+        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
-            channel_pos = x['channel_voxel_indices'][0] # batch_size x num_channels
-            assert channel_pos.shape[0] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
-            # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
-            time_pos = torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long)  # batch_size x num_windows  # use sample-relative time positions
-            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(0).repeat(b, self.num_channels, 1, 1)
-            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(1).repeat(b, 1, self.num_windows, 1)
+            channel_pos = x['channel_voxel_indices'] # batch_size x num_channels
+            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            # channel_pos = x['channel_voxel_indices'][0] # batch_size x num_channels
+            # assert channel_pos.shape[0] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            # # time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+            # time_pos = torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long)  # batch_size x num_windows  # use sample-relative time positions
+            # time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(0).repeat(b, self.num_channels, 1, 1)
+            # channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(1).repeat(b, 1, self.num_windows, 1)
             time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
             channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
 
@@ -491,15 +507,6 @@ class HierarchicalTransformer(nn.Module):
             channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
         else:
             raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
-
-        x = self.to_patch_embedding(x_eeg)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-
-        n = x.shape[1]
-
-        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
-
 
         x += pos_embed
         x = self.dropout(x)
@@ -678,6 +685,7 @@ class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
 
     def forward(self, x_eeg, *args, **kwargs):
         b = x_eeg['eeg'].shape[0]
+        n = self.num_windows * self.num_channels
         if self.pos_embed_mode == 'sinusoidal':
             channel_pos = x_eeg['channel_voxel_indices']  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
@@ -714,6 +722,13 @@ class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
 
     def prepare_data(self, x):
         return x
+
+    def reset(self):
+        """
+        HT does not have reset defined
+        @return:
+        """
+        pass
 
 class HierarchicalTransformerContrastivePretrain(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',

@@ -21,9 +21,14 @@ from RenaAnalysis import get_rdf
 from mne_bids import (BIDSPath, read_raw_bids)
 
 from renaanalysis.eye.eyetracking import Fixation, GazeRayIntersect
+from renaanalysis.fNIRS.fnirs_dataset.fNIRS_finger_and_foot_tapping_dataset import \
+    get_fnirs_finger_and_foot_tapping_dataset
 from renaanalysis.learning.preprocess import preprocess_samples_and_save
-from renaanalysis.params.params import eeg_name, pupil_name, random_seed
+from renaanalysis.params.params import eeg_name, pupil_name, random_seed, fnirs_name
 from renaanalysis.utils.Bidict import Bidict
+from renaanalysis.utils.data_utils import epochs_to_class_samples_TUH
+from renaanalysis.multimodal.multimodal import PhysioArray
+from renaanalysis.utils.data_utils import epochs_to_class_samples
 from renaanalysis.utils.data_utils import epochs_to_class_samples, epochs_to_class_samples_TUH, _epoch_to_samples
 from renaanalysis.multimodal.multimodal import MultiModalArrays
 from renaanalysis.multimodal.PhysioArray import PhysioArray
@@ -832,6 +837,9 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
     elif dataset_name == 'SIM':
         x, y, metadata, event_viz_colors, montage = get_SIM_samples(dataset_root, eeg_resample_rate=eeg_resample_rate, epoch_tmin=-0.1, epoch_tmax=0.8, is_regenerate_epochs=is_regenerate_epochs, export_data_root=epochs_root, reject=reject, *args, **kwargs)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name, info={'montage': montage})]
+    elif dataset_name == 'fNIRS_finger_foot_tapping':
+        x, y , metadata, event_viz_colors, fnirs_srate = get_fnirs_finger_and_foot_tapping_dataset(dataset_root, *args, **kwargs)
+        physio_arrays = [PhysioArray(x, metadata, sampling_rate=fnirs_srate, physio_type=fnirs_name, dataset_name=dataset_name)]
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 
