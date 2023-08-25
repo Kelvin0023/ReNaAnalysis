@@ -835,7 +835,7 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 
-    physio_arrays = preprocess_samples_and_save(physio_arrays, epochs_root, is_apply_pca_ica_eeg, pca_ica_eeg_n_components)
+    physio_arrays = preprocess_samples_and_save(physio_arrays, epochs_root, is_apply_pca_ica_eeg, pca_ica_eeg_n_components, dataset_name=dataset_name)
     experiment_info = {'subject_id': metadata['subject_id'], 'run': metadata['run']}
 
     return MultiModalArrays(physio_arrays, labels_array=y, dataset_name=dataset_name, event_viz_colors=event_viz_colors, rebalance_method=rebalance_method, filename=filename, experiment_info=experiment_info)

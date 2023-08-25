@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
 from renaanalysis.multimodal.ChannelSpace import create_discretize_channel_space
-from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica
+from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, z_norm_by_subject_run
 
 
 class PhysioArray:
@@ -104,7 +104,11 @@ class PhysioArray:
 
     def apply_znorm_by_trial(self):
         self.array_preprocessed = z_norm_by_trial(self.array)
-        self.data_processor['znorm'] = True
+        self.data_processor['znorm_by_trial'] = True
+
+    def apply_znorm_by_run(self):
+        self.array_preprocessed = z_norm_by_subject_run(self)
+        self.data_processor['znorm_by_run'] = True
 
     def apply_pca_ica(self, n_top_components=20):
         """
