@@ -992,7 +992,7 @@ class PhysioTransformer(nn.Module):
 #         self.transformer.init_mems()
 
 
-batch_size = 18
+batch_size = 36
 n_epochs = 2000
 c_dim = 4
 lr = 0.0002
