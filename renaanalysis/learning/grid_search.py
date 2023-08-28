@@ -135,7 +135,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
         if task_name == TaskName.TrainClassifier:
-            model = HierarchicalTransformer(num_timesteps, num_channels, fs, num_classes=num_classes, physio_type=physio_type, **params)
+            # model = HierarchicalTransformer(num_timesteps, num_channels, fs, num_classes=num_classes, physio_type=physio_type, **params)
             # model = EEGCNN(mmarray['eeg'].array.shape, 4)
             model = Conformer_copy()
             models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(

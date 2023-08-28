@@ -664,7 +664,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
                     if torch.abs(params.grad).median() <= 1e-30:
                         warnings.warn(f'median grad value of parameter {param_name} is {torch.abs(params).median()}')
             grad_norms.append([torch.mean(param.grad.norm()).item() for _, param in model.named_parameters() if  param.grad is not None])
-            nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
+            # nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
             optimizer.step()
 
         y_all = np.concatenate([y_all, y.detach().cpu().numpy()]) if y_all is not None else y.detach().cpu().numpy()
