@@ -25,7 +25,8 @@ from torch import nn
 from torch import Tensor
 
 # data_root = r'C:\Users\apoca\Downloads'
-data_root = r'D:\Dropbox\Dropbox\EEGDatasets\BCICompetitionIV2a'
+# data_root = r'D:\Dropbox\Dropbox\EEGDatasets\BCICompetitionIV2a'
+data_root = r'D:/Dataset/BCICIV_2a/'
 
 subject = 'A03'
 eeg_channels = {'Fz', 'FC3', 'FC1', 'FCz', 'FC2', 'FC4', 'C5', 'C3', 'C1', 'Cz', 'C2', 'C4', 'C6',  'CP3', 'CP1', 'CPz',  'CP2', 'CP4', 'P1', 'Pz', 'P2', 'POz'}
@@ -137,150 +138,203 @@ eval_path = os.path.join(data_root, f'{subject}E.gdf')
 train_epochs, eval_epochs= load_gdf_sessions(train_path, eval_path, f'{subject} Train')
 
 
-# class PatchEmbedding(nn.Module):
-#     def __init__(self, emb_size=40):
-#         # self.patch_size = patch_size
-#         super().__init__()
-#
-#         self.shallownet = nn.Sequential(
-#             nn.Conv2d(1, 40, (1, 25), (1, 1)),
-#             nn.Conv2d(40, 40, (22, 1), (1, 1)),
-#             nn.BatchNorm2d(40),
-#             nn.ELU(),
-#             nn.AvgPool2d((1, 75), (1, 15)),
-#             # pooling acts as slicing to obtain 'patch' along the time dimension as in ViT
-#             nn.Dropout(0.5),
-#         )
-#
-#         self.projection = nn.Sequential(
-#             nn.Conv2d(40, emb_size, (1, 1), stride=(1, 1)),  # transpose, conv could enhance fiting ability slightly
-#             Rearrange('b e (h) (w) -> b (h w) e'),
-#         )
-#
-#     def forward(self, x: Tensor) -> Tensor:
-#         b, _, _, _ = x.shape
-#         x = self.shallownet(x)
-#         x = self.projection(x)
-#         return x
-#
-#
-# class MultiHeadAttention(nn.Module):
-#     def __init__(self, emb_size, num_heads, dropout):
-#         super().__init__()
-#         self.emb_size = emb_size
-#         self.num_heads = num_heads
-#         self.keys = nn.Linear(emb_size, emb_size)
-#         self.queries = nn.Linear(emb_size, emb_size)
-#         self.values = nn.Linear(emb_size, emb_size)
-#         self.att_drop = nn.Dropout(dropout)
-#         self.projection = nn.Linear(emb_size, emb_size)
-#
-#     def forward(self, x: Tensor, mask: Tensor = None) -> Tensor:
-#         queries = rearrange(self.queries(x), "b n (h d) -> b h n d", h=self.num_heads)
-#         keys = rearrange(self.keys(x), "b n (h d) -> b h n d", h=self.num_heads)
-#         values = rearrange(self.values(x), "b n (h d) -> b h n d", h=self.num_heads)
-#         energy = torch.einsum('bhqd, bhkd -> bhqk', queries, keys)
-#         if mask is not None:
-#             fill_value = torch.finfo(torch.float32).min
-#             energy.mask_fill(~mask, fill_value)
-#
-#         scaling = self.emb_size ** (1 / 2)
-#         att = F.softmax(energy / scaling, dim=-1)
-#         att = self.att_drop(att)
-#         out = torch.einsum('bhal, bhlv -> bhav ', att, values)
-#         out = rearrange(out, "b h n d -> b n (h d)")
-#         out = self.projection(out)
-#         return out
-#
-#
-# class ResidualAdd(nn.Module):
-#     def __init__(self, fn):
-#         super().__init__()
-#         self.fn = fn
-#
-#     def forward(self, x, **kwargs):
-#         res = x
-#         x = self.fn(x, **kwargs)
-#         x += res
-#         return x
-#
-#
-# class FeedForwardBlock(nn.Sequential):
-#     def __init__(self, emb_size, expansion, drop_p):
-#         super().__init__(
-#             nn.Linear(emb_size, expansion * emb_size),
-#             nn.GELU(),
-#             nn.Dropout(drop_p),
-#             nn.Linear(expansion * emb_size, emb_size),
-#         )
-#
-#
-# class GELU(nn.Module):
-#     def forward(self, input: Tensor) -> Tensor:
-#         return input * 0.5 * (1.0 + torch.erf(input / math.sqrt(2.0)))
-#
-#
-# class TransformerEncoderBlock(nn.Sequential):
-#     def __init__(self,
-#                  emb_size,
-#                  num_heads=10,
-#                  drop_p=0.5,
-#                  forward_expansion=4,
-#                  forward_drop_p=0.5):
-#         super().__init__(
-#             ResidualAdd(nn.Sequential(
-#                 nn.LayerNorm(emb_size),
-#                 MultiHeadAttention(emb_size, num_heads, drop_p),
-#                 nn.Dropout(drop_p)
-#             )),
-#             ResidualAdd(nn.Sequential(
-#                 nn.LayerNorm(emb_size),
-#                 FeedForwardBlock(
-#                     emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
-#                 nn.Dropout(drop_p)
-#             )
-#             ))
-#
-#
-# class TransformerEncoder(nn.Sequential):
-#     def __init__(self, depth, emb_size):
-#         super().__init__(*[TransformerEncoderBlock(emb_size) for _ in range(depth)])
-#
-#
-# class ClassificationHead(nn.Sequential):
-#     def __init__(self, emb_size, n_classes):
-#         super().__init__()
-#
-#         # global average pooling
-#         self.clshead = nn.Sequential(
-#             Reduce('b n e -> b e', reduction='mean'),
-#             nn.LayerNorm(emb_size),
-#             nn.Linear(emb_size, n_classes)
-#         )
-#         self.fc = nn.Sequential(
-#             nn.Linear(2440, 256),
-#             nn.ELU(),
-#             nn.Dropout(0.5),
-#             nn.Linear(256, 32),
-#             nn.ELU(),
-#             nn.Dropout(0.3),
-#             nn.Linear(32, 4)
-#         )
-#
-#     def forward(self, x):
-#         x = x.contiguous().view(x.size(0), -1)
-#         out = self.fc(x)
-#         return x, out
-#
-#
-# class Conformer(nn.Sequential):
-#     def __init__(self, emb_size=40, depth=6, n_classes=4, **kwargs):
-#         super().__init__(
-#
-#             PatchEmbedding(emb_size),
-#             TransformerEncoder(depth, emb_size),
-#             ClassificationHead(emb_size, n_classes)
-#         )
+class PatchEmbedding(nn.Module):
+    def __init__(self, emb_size=40):
+        # self.patch_size = patch_size
+        super().__init__()
+
+        self.shallownet = nn.Sequential(
+            nn.Conv2d(1, 40, (1, 25), (1, 1)),
+            nn.Conv2d(40, 40, (22, 1), (1, 1)),
+            nn.BatchNorm2d(40),
+            nn.ELU(),
+            nn.AvgPool2d((1, 75), (1, 15)),
+            # pooling acts as slicing to obtain 'patch' along the time dimension as in ViT
+            nn.Dropout(0.5),
+        )
+
+        self.projection = nn.Sequential(
+            nn.Conv2d(40, emb_size, (1, 1), stride=(1, 1)),  # transpose, conv could enhance fiting ability slightly
+            Rearrange('b e (h) (w) -> b (h w) e'),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        b, _, _, _ = x.shape
+        x = self.shallownet(x)
+        x = self.projection(x)
+        return x
+
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, emb_size, num_heads, dropout):
+        super().__init__()
+        self.emb_size = emb_size
+        self.num_heads = num_heads
+        self.keys = nn.Linear(emb_size, emb_size)
+        self.queries = nn.Linear(emb_size, emb_size)
+        self.values = nn.Linear(emb_size, emb_size)
+        self.att_drop = nn.Dropout(dropout)
+        self.projection = nn.Linear(emb_size, emb_size)
+
+    def forward(self, x: Tensor, mask: Tensor = None) -> Tensor:
+        queries = rearrange(self.queries(x), "b n (h d) -> b h n d", h=self.num_heads)
+        keys = rearrange(self.keys(x), "b n (h d) -> b h n d", h=self.num_heads)
+        values = rearrange(self.values(x), "b n (h d) -> b h n d", h=self.num_heads)
+        energy = torch.einsum('bhqd, bhkd -> bhqk', queries, keys)
+        if mask is not None:
+            fill_value = torch.finfo(torch.float32).min
+            energy.mask_fill(~mask, fill_value)
+
+        scaling = self.emb_size ** (1 / 2)
+        att = F.softmax(energy / scaling, dim=-1)
+        att = self.att_drop(att)
+        out = torch.einsum('bhal, bhlv -> bhav ', att, values)
+        out = rearrange(out, "b h n d -> b n (h d)")
+        out = self.projection(out)
+        return out
+
+
+class ResidualAdd(nn.Module):
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        res = x
+        x = self.fn(x, **kwargs)
+        x += res
+        return x
+
+
+class FeedForwardBlock(nn.Sequential):
+    def __init__(self, emb_size, expansion, drop_p):
+        super().__init__(
+            nn.Linear(emb_size, expansion * emb_size),
+            nn.GELU(),
+            nn.Dropout(drop_p),
+            nn.Linear(expansion * emb_size, emb_size),
+        )
+
+
+class GELU(nn.Module):
+    def forward(self, input: Tensor) -> Tensor:
+        return input * 0.5 * (1.0 + torch.erf(input / math.sqrt(2.0)))
+
+
+class TransformerEncoderBlock(nn.Sequential):
+    def __init__(self,
+                 emb_size,
+                 num_heads=10,
+                 drop_p=0.5,
+                 forward_expansion=4,
+                 forward_drop_p=0.5):
+        super().__init__(
+            ResidualAdd(nn.Sequential(
+                nn.LayerNorm(emb_size),
+                MultiHeadAttention(emb_size, num_heads, drop_p),
+                nn.Dropout(drop_p)
+            )),
+            ResidualAdd(nn.Sequential(
+                nn.LayerNorm(emb_size),
+                FeedForwardBlock(
+                    emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
+                nn.Dropout(drop_p)
+            )
+            ))
+
+
+class TransformerEncoder(nn.Sequential):
+    def __init__(self, depth, emb_size):
+        super().__init__(*[TransformerEncoderBlock(emb_size) for _ in range(depth)])
+
+
+class ClassificationHead(nn.Sequential):
+    def __init__(self, emb_size, n_classes):
+        super().__init__()
+
+        # global average pooling
+        self.clshead = nn.Sequential(
+            Reduce('b n e -> b e', reduction='mean'),
+            nn.LayerNorm(emb_size),
+            nn.Linear(emb_size, n_classes)
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(2440, 256),
+            # nn.Linear(1600, 256),
+            # nn.Linear(39040, 256),
+            nn.ELU(),
+            nn.Dropout(0.5),
+            nn.Linear(256, 32),
+            nn.ELU(),
+            nn.Dropout(0.3),
+            nn.Linear(32, 4)
+        )
+
+    def forward(self, x):
+        x = x.contiguous().view(x.size(0), -1)
+        out = self.fc(x)
+        return x, out
+
+
+class Conformer(nn.Sequential):
+    def __init__(self, emb_size=40, depth=6, n_classes=4, **kwargs):
+        super().__init__(
+
+            PatchEmbedding(emb_size),
+            TransformerEncoder(depth, emb_size),
+            ClassificationHead(emb_size, n_classes)
+        )
+
+# EEGCNN ##############################################################################
+class EEGCNN(nn.Module):
+    def __init__(self, in_shape, num_classes, num_filters=16):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_shape[1], num_filters, 5),
+            nn.ReLU(),
+            nn.BatchNorm1d(num_filters),
+            nn.MaxPool1d(2),
+
+            nn.Conv1d(num_filters, num_filters, 5),
+            nn.ReLU(),
+            nn.BatchNorm1d(num_filters),
+            nn.MaxPool1d(2),
+
+            nn.Conv1d(num_filters, num_filters, 5),
+            nn.ReLU(),
+            nn.BatchNorm1d(num_filters),
+            nn.MaxPool1d(2),
+            nn.Flatten()
+        )
+
+        # with torch.no_grad():
+        #     cnn_flattened_size = self.conv(torch.rand(in_shape)).shape[1]
+
+        out_size = math.floor((math.floor((math.floor((in_shape[-1] -6)/2+1) -6)/2+1) - 6)/2 + 1) * num_filters
+
+        self.fcs = nn.Sequential(
+            nn.Linear(out_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, num_classes)
+        )
+
+    def forward(self, input):
+        x = self.conv(input)
+        x = self.fcs(x)
+        return x
+
+    def prepare_data(self, x):
+        return x
+
+    def forward_without_classification(self, input):
+        x = self.conv(input)
+        for fc in self.fcs[:-1]:
+            x = fc(x)
+        return x
 
 # HT ##############################################################################################
 class PreNorm(nn.Module):
@@ -386,12 +440,23 @@ class PhysioTransformer(nn.Module):
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
+        # self.num_patches = 4313
+        # self.num_patches = 1343
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
 
+        # self.to_patch_embedding = nn.Sequential(
+        #     Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
+        #     nn.Conv2d(1, patch_embed_dim, kernel_size=(1, int(self.patch_length*1.5)), stride=(1, self.patch_length), bias=True),
+        # )
         self.to_patch_embedding = nn.Sequential(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
-            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
+            nn.Conv2d(1, patch_embed_dim, (1, 25), (1, 1)),
+            nn.Conv2d(patch_embed_dim, patch_embed_dim, (22, 1), (1, 1)),
+            nn.BatchNorm2d(patch_embed_dim),
+            nn.ELU(),
+            nn.AvgPool2d((1, 75), (1, 15)),  # pooling acts as slicing to obtain 'patch' along the time dimension as in ViT
+            nn.Dropout(0.5),
         )
 
         self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
@@ -408,13 +473,24 @@ class PhysioTransformer(nn.Module):
                 nn.LayerNorm(patch_embed_dim),
                 nn.Linear(patch_embed_dim, 1))
         else:
+            # self.mlp_head = nn.Sequential(
+            #     nn.LayerNorm(patch_embed_dim),
+            #     nn.Linear(patch_embed_dim, num_classes))
             self.mlp_head = nn.Sequential(
-                nn.LayerNorm(patch_embed_dim),
-                nn.Linear(patch_embed_dim, num_classes))
+                # nn.Linear(576, 256),
+                # nn.Linear(12544, 256),
+                nn.Linear(3904, 256),
+                nn.ELU(),
+                nn.Dropout(0.5),
+                nn.Linear(256, 32),
+                nn.ELU(),
+                nn.Dropout(0.3),
+                nn.Linear(32, 4)
+            )
 
     def forward(self, x_eeg):
-            x = self.encode(x_eeg)
-            return self.mlp_head(x)
+        x = self.encode(x_eeg)
+        return self.mlp_head(x)
 
     def encode(self, x_eeg):
         x = self.to_patch_embedding(x_eeg)
@@ -428,9 +504,221 @@ class PhysioTransformer(nn.Module):
         x = self.dropout(x)
 
         x, att_matrix = self.transformer(x)
+        # x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
+        x = rearrange(x[:, 1:], 'b n d -> b (n d)')
+        x = self.to_latent(x)
+        return x
+
+# HCT ###############################################################################################
+class SinusoidalPositionalEmbedding(nn.Module):
+    def __init__(self, embed_dim):
+        super().__init__()
+
+        self.embed_dim = embed_dim
+        inverse_frequency = 1. / (10000 ** (torch.arange(0, embed_dim, 2).float() / embed_dim))
+        inverse_frequency = torch.unsqueeze(inverse_frequency, dim=0)  # unsequeeze for broadcasting to batches
+        self.register_buffer('inverse_frequency', inverse_frequency)
+
+    def forward(self, p):
+        # t has shape (batch_size, seq_len, embed_dim)
+        outer_product = torch.einsum('bn,nd->bnd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
+        pos_emb = torch.cat([outer_product.sin(), outer_product.cos()], dim=-1)
+        return pos_emb
+
+class Convalue(nn.Module):
+    def __init__(self, conv_channels=8, heads=8):
+        super().__init__()
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=conv_channels, kernel_size=(1, 25), stride=(1, 1)),
+            nn.Conv2d(in_channels=conv_channels, out_channels=conv_channels * 2, kernel_size=(1, 10), stride=(1, 1))
+        )
+        self.heads = heads
+
+    def forward(self, x):
+        x = rearrange(x, 'b t d -> b 1 t d')
+        x_list = []
+        for i in range(self.heads):
+            x_list.append(self.conv_layers(x))
+        x = torch.stack(x_list)
+        # x = repeat(x, 'b c t d -> (b h) c t d', h=self.heads)
+        # x = self.conv_layers(x)
+        x = rearrange(x, 'h b c t d -> b h t (c d)', h=self.heads)
+        return x
+
+class ConvalueAttention(nn.Module):
+    def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
+        super().__init__()
+        inner_dim = dim_head * heads
+        project_out = not (heads == 1 and dim_head == dim)
+
+        self.heads = heads
+        self.scale = dim_head ** -0.5
+        self.conv_layers = Convalue(conv_channels=2, heads=heads)
+
+        self.attend = nn.Softmax(dim=-1)
+        self.dropout = nn.Dropout(dropout)
+
+        self.to_qk = nn.Linear(dim, inner_dim * 2, bias=False)
+
+        self.to_out = nn.Sequential(
+            nn.Linear(992, dim),
+            nn.Dropout(dropout)
+        ) if project_out else nn.Identity()
+
+    def forward(self, x):
+        qk = self.to_qk(x).chunk(2, dim=-1)
+        q, k = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qk)
+        v = self.conv_layers(x)
+
+        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+
+        attention = self.attend(dots)
+        attention = self.dropout(attention)  # TODO
+
+        out = torch.matmul(attention, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
+        return self.to_out(out), attention
+
+class ConvalueTransformer(nn.Module):
+    def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
+        super().__init__()
+        self.layers = nn.ModuleList([])
+        for _ in range(depth):
+            self.layers.append(nn.ModuleList([
+                PreNorm(dim, ConvalueAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
+                PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
+            ]))
+
+    def forward(self, x):
+        for prenorm_attention, prenorm_feedforward in self.layers:
+            out, attention = prenorm_attention(x)
+            x = out + x
+            x = prenorm_feedforward(x) + x
+        return x, attention  # last layer
+
+class HierarchicalConvalueTransformer(nn.Module):
+    def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=4, num_heads=8, feedforward_mlp_dim=32, window_duration=0.1, pool='cls',
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi',
+                 pos_embed_mode='learnable'):
+    # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
+    #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
+        """
+
+        # a token is a time slice of data on a single channel
+
+        @param num_timesteps: int: number of timesteps in each sample
+        @param num_channels: int: number of channels of the input data
+        @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
+        note that 'single' only works when the number of classes is 2.
+        @param pos_embed_mode: str: can be 'learnable' or 'sinusoidal'. If 'learnable', the positional embedding is learned.
+        If 'sinusoidal', the positional embedding is sinusoidal. The sinusoidal positional embedding requires meta_info to be passed in with forward
+        """
+        if output == 'single':
+            assert num_classes == 2, 'output can only be single when num_classes is 2'
+        super().__init__()
+        self.depth = depth
+        self.num_heads = num_heads
+        self.window_duration = window_duration
+
+        self.num_channels = num_channels
+        self.num_timesteps = num_timesteps
+        self.patch_embed_dim = patch_embed_dim
+        self.patch_length = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.patch_length
+
+        self.grid_dims = self.num_channels, self.num_windows
+        self.num_patches = self.num_channels * self.num_windows
+
+        assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
+        # self.to_patch_embedding = nn.Sequential(
+        #     Rearrange('b c (nw ps) -> b (c nw) (ps)', nw=self.num_windows, ps=self.patch_length),
+        #     nn.Linear(self.patch_length, patch_embed_dim),
+        # )
+        self.to_patch_embedding = nn.Sequential(
+            Rearrange('b eegc t -> b 1 eegc t', eegc=self.num_channels, t=self.num_timesteps),
+            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
+            # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
+        )
+        # self.to_patch_embedding = ConvFeatureExtractionModel(self.extraction_layers, dropout=emb_dropout)
+        # x = torch.randn(10, self.num_channels, self.num_timesteps)
+
+        self.pos_embed_mode = pos_embed_mode
+        self.learnable_pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        self.sinusoidal_pos_embedding = SinusoidalPositionalEmbedding(patch_embed_dim)
+
+        self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
+        self.dropout = nn.Dropout(emb_dropout)
+
+        self.transformer = ConvalueTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
+
+        self.pool = pool
+        self.to_latent = nn.Identity()
+
+        if output == 'single':
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, 1))
+        else:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, num_classes))
+
+    def forward(self, x_eeg, *args, **kwargs):
+            x = self.encode(x_eeg, *args, **kwargs)
+            return self.mlp_head(x)
+
+    def encode(self, x_eeg, *args, **kwargs):
+        x = self.to_patch_embedding(x_eeg)
+        # x = rearrange(x_eeg, 'b c (t w) -> b (c w) t', t=self.patch_length)
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+
+        b, n, _ = x.shape
+
+        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
+        x = torch.cat((cls_tokens, x), dim=1)
+
+        if self.pos_embed_mode == 'sinusoidal':
+            channel_pos = x['channel_positions'] # batch_size x num_channels
+            assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
+            time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
+
+            # time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(1, self.num_channels, 1, 1)  # in case where each batach has different time positions
+            time_pos_embed = self.sinusoidal_pos_embedding(time_pos).unsqueeze(1).repeat(b, self.num_channels, 1, 1)
+            channel_pos_embed = self.sinusoidal_pos_embedding(channel_pos).unsqueeze(2).repeat(1, 1, self.num_windows, 1)
+            time_pos_embed = rearrange(time_pos_embed, 'b c t d -> b (c t) d')
+            channel_pos_embed = rearrange(channel_pos_embed, 'b c t d -> b (c t) d')
+
+            pos_embed = time_pos_embed + channel_pos_embed
+            cls_tokens_pos_embedding = repeat(self.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
+            pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
+
+        elif self.pos_embed_mode == 'learnable':
+            pos_embed = self.learnable_pos_embedding[:, :(n + 1)]
+        else:
+            raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
+
+        x += pos_embed
+        x = self.dropout(x)
+
+        x, att_matrix = self.transformer(x)
+        # att_matrix = att_matrix[:, :, 1:, 1:]
+        # att_matrix = att_matrix / torch.sum(att_matrix, dim=3, keepdim=True)
+        # att_matrix = torch.sum(att_matrix, dim=2)
+        # att_matrix = att_matrix / torch.sum(att_matrix, dim=2,keepdim= True)
         x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
         x = self.to_latent(x)
         return x
+
+    def prepare_data(self, x):
+        return x
+
+    def reset(self):
+        """
+        HT does not have reset defined
+        @return:
+        """
+        pass
+
 # RHT #########################################################################################################
 # import warnings
 #
@@ -992,7 +1280,7 @@ class PhysioTransformer(nn.Module):
 #         self.transformer.init_mems()
 
 
-batch_size = 18
+batch_size = 16
 n_epochs = 2000
 c_dim = 4
 lr = 0.0002
@@ -1009,10 +1297,10 @@ train_data = train_epochs.get_data().copy()
 train_data = np.expand_dims(train_data, axis=1)
 
 train_label = train_epochs.events[:, -1]
-shuffle_num = np.random.permutation(len(train_data))
+# shuffle_num = np.random.permutation(len(train_data))
 
-train_data = train_data[shuffle_num, :, :, :]
-train_label = train_label[shuffle_num]
+# train_data = train_data[shuffle_num, :, :, :]
+# train_label = train_label[shuffle_num]
 
 test_data = eval_epochs.get_data().copy()
 test_data = np.expand_dims(test_data, axis=1)
@@ -1026,19 +1314,22 @@ test_data = (test_data - target_mean) / target_std
 train_data = torch.from_numpy(train_data)
 train_label = torch.from_numpy(train_label)
 dataset = TensorDataset(train_data, train_label)
-train_dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
+train_dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
 
 test_data = torch.from_numpy(test_data).float().cuda()
 test_label = torch.from_numpy(test_label).long().cuda()
 test_dataset = torch.utils.data.TensorDataset(test_data, test_label)
-test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
 
 # model = Conformer().cuda()
 # model = model.cuda()
 _, _, num_channels, num_timesteps = train_data.shape
+# model = EEGCNN(train_data.squeeze().shape, num_classes=4)
 model = PhysioTransformer(num_timesteps=num_timesteps, num_channels=num_channels, sampling_rate=srate, num_classes=4,
-                          window_duration=0.25, feedforward_mlp_dim=512)
+                          window_duration=0.25, feedforward_mlp_dim=128, patch_embed_dim=64)
+# model = HierarchicalConvalueTransformer(num_timesteps=num_timesteps, num_channels=num_channels, sampling_rate=srate, num_classes=4,
+#                           window_duration=0.5, feedforward_mlp_dim=128, patch_embed_dim=64)
 # model = RecurrentHierarchicalTransformer(num_timesteps=num_timesteps, num_channels=num_channels, sampling_rate=srate,
 #                                          num_classes=4, window_duration=0.5, pos_embed_mode='learnable')
 model = model.cuda()
@@ -1087,6 +1378,8 @@ curr_lr = lr
 for e in range(n_epochs):
     # in_epoch = time.time()
     model.train()
+    pred_train_all = torch.Tensor([]).cuda()
+    label_train_all = torch.Tensor([]).cuda()
     for i, (img, label) in enumerate(train_dataloader):
 
         img = img.type(torch.cuda.FloatTensor).cuda()
@@ -1103,7 +1396,7 @@ for e in range(n_epochs):
         # if isinstance(model, RecurrentHierarchicalTransformer):
         #     img = torch.squeeze(img)
         #     outputs = model({'eeg': img, 'subject_id': torch.Tensor([3] * len(img)).cuda()})
-        if isinstance(model, PhysioTransformer):
+        if isinstance(model, PhysioTransformer) or isinstance(model, HierarchicalConvalueTransformer) or isinstance(model, EEGCNN):
             img = torch.squeeze(img)
             outputs = model(img)
         else:
@@ -1113,6 +1406,8 @@ for e in range(n_epochs):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        pred_train_all = torch.concat((pred_train_all, outputs))
+        label_train_all = torch.concat((label_train_all, label))
 
     # test process
     if (e + 1) % 1 == 0:
@@ -1121,17 +1416,23 @@ for e in range(n_epochs):
         # if isinstance(model, RecurrentHierarchicalTransformer):
         #     test_data = torch.squeeze(test_data)
         #     Cls = model({'eeg': test_data, 'subject_id': torch.Tensor([3] * len(test_data)).cuda()})
-        if isinstance(model, PhysioTransformer):
-            test_data = torch.squeeze(test_data)
-            Cls = model(test_data)
-        else:
-            Tok, Cls = model(test_data)
+        y_pred_all = torch.Tensor([]).cuda()
+        test_label_all = torch.Tensor([]).cuda()
+        for test_data, test_label in test_dataloader:
+            if isinstance(model, PhysioTransformer) or isinstance(model, HierarchicalConvalueTransformer) or isinstance(model, EEGCNN):
+                test_data = torch.squeeze(test_data)
+                Cls = model(test_data)
+            else:
+                Tok, Cls = model(test_data)
 
-        loss_test = criterion_cls(Cls, test_label)
-        y_pred = torch.max(Cls, 1)[1]
-        acc = float((y_pred == test_label).cpu().numpy().astype(int).sum()) / float(test_label.size(0))
-        train_pred = torch.max(outputs, 1)[1]
-        train_acc = float((train_pred == label).cpu().numpy().astype(int).sum()) / float(label.size(0))
+            loss_test = criterion_cls(Cls, test_label)
+            y_pred = torch.max(Cls, 1)[1]
+            y_pred_all = torch.concat((y_pred_all, y_pred))
+            test_label_all = torch.concat((test_label_all, test_label))
+        acc = float((y_pred_all == test_label_all).cpu().numpy().astype(int).sum()) / float(test_label_all.size(0))
+
+        train_pred = torch.max(pred_train_all, 1)[1]
+        train_acc = float((train_pred == label_train_all).cpu().numpy().astype(int).sum()) / float(label_train_all.size(0))
 
         print('Epoch:', e,
               '  Train loss: %.6f' % loss.detach().cpu().numpy(),
