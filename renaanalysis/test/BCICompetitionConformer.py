@@ -12,6 +12,7 @@ from torch import nn, LongTensor
 from torch.autograd import Variable
 from torch.utils.data import TensorDataset
 
+# from renaanalysis.learning.HT_viz import ht_eeg_viz_dataloader_batch
 from renaanalysis.utils.utils import visualize_eeg_epochs
 from torch import optim, nn
 from torch.optim import lr_scheduler
@@ -23,6 +24,8 @@ import matplotlib.pyplot as plt
 
 from torch import nn
 from torch import Tensor
+
+from renaanalysis.utils.viz_utils import viz_confusion_matrix
 
 # data_root = r'C:\Users\apoca\Downloads'
 data_root = r'D:\Dropbox\Dropbox\EEGDatasets\BCICompetitionIV2a'
@@ -38,10 +41,10 @@ n_jobs = 1
 epoch_tmin = 0.
 epoch_tmax = 4.
 event_id = {'left': 1, 'right': 2, 'foot': 3, 'tongue': 4}
+event_viz_colors = {'left': 'red', 'right': 'blue', 'foot': 'green', 'tongue': 'yellow'}
 
 
 def load_mat_sessions(file_path, figure_title):
-    event_viz_colors = {'left': 'red', 'right': 'blue', 'foot': 'green', 'tongue': 'yellow'}
     this_epoch_tmax = epoch_tmax - 1 / srate
     data = scipy.io.loadmat(file_path)['data']
     all_epochs = []
@@ -122,8 +125,8 @@ def load_gdf_sessions(train_file_path, val_file_path, figure_title):
                                                                                            len(data))), f"Labels don't match for eval"
     data.events[:, -1][events[:, -1] == event_id_mapping['783']] = (true_label_eval['classlabel'] - 1).squeeze(axis=-1)
     data.event_id.pop('783')
-    visualize_eeg_epochs(data, event_id, event_viz_colors, tmin_eeg_viz=epoch_tmin, tmax_eeg_viz=epoch_tmax,
-                         eeg_picks=eeg_channels, title=figure_title)
+    # visualize_eeg_epochs(data, event_id, event_viz_colors, tmin_eeg_viz=epoch_tmin, tmax_eeg_viz=epoch_tmax,
+    #                      eeg_picks=eeg_channels, title=figure_title)
     return data[:val_len], data[val_len:]
 
 # train_path = os.path.join(data_root, f'{subject}T.mat')
@@ -246,6 +249,7 @@ class TransformerEncoderBlock(nn.Sequential):
 class TransformerEncoder(nn.Sequential):
     def __init__(self, depth, emb_size):
         super().__init__(*[TransformerEncoderBlock(emb_size) for _ in range(depth)])
+        super().__init__(*[TransformerEncoderBlock(emb_size) for _ in range(depth)])
 
 
 class ClassificationHead(nn.Sequential):
@@ -343,8 +347,8 @@ class PreNorm(nn.Module):
         self.norm = nn.LayerNorm(dim)
         self.fn = fn
 
-    def forward(self, x, **kwargs):
-        return self.fn(self.norm(x), **kwargs)
+    def forward(self, x, *args, **kwargs):
+        return self.fn(self.norm(x), *args, **kwargs)
 
 
 class FeedForward(nn.Module):
@@ -381,11 +385,15 @@ class Attention(nn.Module):
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+        # apply mask if there is one
+        if 'mask' in kwargs and kwargs['mask'] is not None:
+            mask = kwargs['mask']
+            dots.masked_fill_(mask, torch.finfo(torch.float32).min)
 
         attention = self.attend(dots)
         attention = self.dropout(attention)  # TODO
@@ -405,9 +413,9 @@ class Transformer(nn.Module):
                 PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
             ]))
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         for prenorm_attention, prenorm_feedforward in self.layers:
-            out, attention = prenorm_attention(x)
+            out, attention = prenorm_attention(x, *args, **kwargs)
             x = out + x
             x = prenorm_feedforward(x) + x
         return x, attention  # last layer
@@ -447,19 +455,31 @@ class PhysioTransformer(nn.Module):
 
         # self.to_patch_embedding = nn.Sequential(
         #     Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
-        #     nn.Conv2d(1, patch_embed_dim, kernel_size=(1, int(self.patch_length*1.5)), stride=(1, self.patch_length), bias=True),
+        #     # nn.Conv2d(1, patch_embed_dim, kernel_size=(1, int(self.patch_length*1.5)), stride=(1, self.patch_length), bias=True),
+        #     nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
         # )
+        # self.to_patch_embedding = nn.Sequential(
+        #     Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
+        #     nn.Conv2d(1, patch_embed_dim, (1, 25), (1, 1)),
+        #     nn.Conv2d(patch_embed_dim, patch_embed_dim, (22, 1), (1, 1)),
+        #     nn.BatchNorm2d(patch_embed_dim),
+        #     nn.ELU(),
+        #     nn.AvgPool2d((1, 75), (1, 15)),  # pooling acts as slicing to obtain 'patch' along the time dimension as in ViT
+        #     nn.Dropout(0.5),
+        # )
+
         self.to_patch_embedding = nn.Sequential(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
-            nn.Conv2d(1, patch_embed_dim, (1, 25), (1, 1)),
+            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, 25), stride=(1, 1), bias=True),
             nn.Conv2d(patch_embed_dim, patch_embed_dim, (22, 1), (1, 1)),
             nn.BatchNorm2d(patch_embed_dim),
             nn.ELU(),
-            nn.AvgPool2d((1, 75), (1, 15)),  # pooling acts as slicing to obtain 'patch' along the time dimension as in ViT
+            nn.AvgPool2d((1, 75), (1, 15)),
             nn.Dropout(0.5),
         )
 
-        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        # self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, patch_embed_dim))
+        self.pos_embedding = nn.Parameter(torch.randn(1, 1343, patch_embed_dim))
         self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
         self.dropout = nn.Dropout(emb_dropout)
 
@@ -473,20 +493,21 @@ class PhysioTransformer(nn.Module):
                 nn.LayerNorm(patch_embed_dim),
                 nn.Linear(patch_embed_dim, 1))
         else:
-            # self.mlp_head = nn.Sequential(
-            #     nn.LayerNorm(patch_embed_dim),
-            #     nn.Linear(patch_embed_dim, num_classes))
             self.mlp_head = nn.Sequential(
-                # nn.Linear(576, 256),
-                # nn.Linear(12544, 256),
-                nn.Linear(3904, 256),
-                nn.ELU(),
-                nn.Dropout(0.5),
-                nn.Linear(256, 32),
-                nn.ELU(),
-                nn.Dropout(0.3),
-                nn.Linear(32, 4)
-            )
+                nn.LayerNorm(patch_embed_dim),
+                nn.Linear(patch_embed_dim, num_classes))
+            # self.mlp_head = nn.Sequential(
+            #     # nn.Linear(576, 256),
+            #     # nn.Linear(12544, 256),
+            #     nn.Linear(3904, 256),
+            #     nn.ELU(),
+            #     nn.Dropout(0.5),
+            #     nn.Linear(256, 32),
+            #     nn.ELU(),
+            #     nn.Dropout(0.3),
+            #     nn.Linear(32, 4)
+            # )
+
 
     def forward(self, x_eeg):
         x = self.encode(x_eeg)
@@ -494,6 +515,13 @@ class PhysioTransformer(nn.Module):
 
     def encode(self, x_eeg):
         x = self.to_patch_embedding(x_eeg)
+        # _, _, c, t = x.shape
+        # _mask = torch.tile(torch.triu(torch.ones(t, t), diagonal=1), (c, c))
+        # mask = torch.zeros((c*t+1, c*t+1)).to(x.device)  # cls token can attend to all tokens
+        # mask[1:, 1:] = _mask  # add the mask without cls token
+        # mask = mask.bool()
+        mask = None
+
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
         b, n, _ = x.shape
@@ -501,11 +529,11 @@ class PhysioTransformer(nn.Module):
         cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
         x = torch.cat((cls_tokens, x), dim=1)
         x += self.pos_embedding[:, :(n + 1)]
-        x = self.dropout(x)
+        # x = self.dropout(x)
 
-        x, att_matrix = self.transformer(x)
-        # x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-        x = rearrange(x[:, 1:], 'b n d -> b (n d)')
+        x, att_matrix = self.transformer(x, mask=mask)
+        x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
+        # x = rearrange(x[:, 1:], 'b n d -> b (n d)')
         x = self.to_latent(x)
         return x
 
@@ -1280,10 +1308,11 @@ class HierarchicalConvalueTransformer(nn.Module):
 #         self.transformer.init_mems()
 
 
-batch_size = 16
-n_epochs = 2000
+batch_size = 8
+n_epochs = 500
 c_dim = 4
 lr = 0.0002
+# lr = 1e-5
 b1 = 0.5
 b2 = 0.999
 dimension = (190, 50)
@@ -1322,12 +1351,12 @@ test_dataset = torch.utils.data.TensorDataset(test_data, test_label)
 test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
 
-# model = Conformer().cuda()
+model = Conformer().cuda()
 # model = model.cuda()
 _, _, num_channels, num_timesteps = train_data.shape
 # model = EEGCNN(train_data.squeeze().shape, num_classes=4)
-model = PhysioTransformer(num_timesteps=num_timesteps, num_channels=num_channels, sampling_rate=srate, num_classes=4,
-                          window_duration=0.25, feedforward_mlp_dim=128, patch_embed_dim=64)
+# model = PhysioTransformer(num_timesteps=num_timesteps, num_channels=num_channels, sampling_rate=srate, num_classes=4,
+#                           window_duration=0.4, feedforward_mlp_dim=128, patch_embed_dim=64)
 # model = HierarchicalConvalueTransformer(num_timesteps=num_timesteps, num_channels=num_channels, sampling_rate=srate, num_classes=4,
 #                           window_duration=0.5, feedforward_mlp_dim=128, patch_embed_dim=64)
 # model = RecurrentHierarchicalTransformer(num_timesteps=num_timesteps, num_channels=num_channels, sampling_rate=srate,
@@ -1450,3 +1479,16 @@ for e in range(n_epochs):
 averAcc = averAcc / num
 print('The average accuracy is:', averAcc)
 print('The best accuracy is:', bestAcc)
+
+device ='cuda:0' if torch.cuda.is_available() else 'cpu'
+if not isinstance(model, Conformer):
+    test_dataloader.dataset.tensors = (torch.squeeze(test_dataloader.dataset.tensors[0]), test_dataloader.dataset.tensors[1])
+ht_eeg_viz_dataloader_batch(model, test_dataloader, Attention, device, 'BCICompetitionResults',
+                            note='', load_saved_rollout=False, head_fusion='mean',
+                            cls_colors=event_viz_colors,
+                            discard_ratio=0.9, is_pca_ica=False, pca=None, ica=None, batch_size=256, srate=srate,
+                            event_ids={name: e_id-1 for name, e_id in event_id.items()}, eeg_channels=list(eeg_channels), picks=('C3', 'C4'))
+class_names = list(event_viz_colors.keys())
+viz_confusion_matrix(test_label_all.detach().cpu().numpy(), y_pred_all.detach().cpu().numpy(), class_names, n_epochs, 0, 'Test')
+viz_confusion_matrix(label_train_all.detach().cpu().numpy(), train_pred.detach().cpu().numpy(), class_names, n_epochs, 0, 'Train')
+

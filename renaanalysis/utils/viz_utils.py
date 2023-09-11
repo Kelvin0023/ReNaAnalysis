@@ -404,7 +404,7 @@ def viz_class_error(standard, target, type):
     # Display the plot
     plt.show()
 
-def viz_confusion_matrix(true_label, pred_label, epoch, fold, type):
+def viz_confusion_matrix(true_label, pred_label, class_names, epoch, fold, type):
     cm = confusion_matrix(true_label, pred_label)
 
     fig, ax = plt.subplots()
@@ -423,15 +423,15 @@ def viz_confusion_matrix(true_label, pred_label, epoch, fold, type):
     cbar = ax.figure.colorbar(im, ax=ax)
 
     # Display the tick labels on the x and y axes
-    ax.xaxis.set_ticklabels(['Standard', 'Target'])
-    ax.yaxis.set_ticklabels(['Standard', 'Target'])
+    ax.xaxis.set_ticklabels(class_names)
+    ax.yaxis.set_ticklabels(class_names)
 
     # Loop over data dimensions and create text annotations
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
             ax.text(j, i, str(cm[i, j]), ha='center', va='center', color='red')
 
-    plt.savefig(f'renaanalysis/learning/saved_images/confusion_matrixs/{fold}_{epoch}_{type}.png')
+    plt.savefig(f'renaanalysis/learning/saved_images/confusion_matrices/{fold}_{epoch}_{type}.png')
     # Show the plot
     plt.show()
 
