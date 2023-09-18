@@ -5,10 +5,7 @@ import pickle
 import torch
 from sklearn.model_selection import ParameterGrid
 
-from renaanalysis.learning.Conformer_copy import Conformer_copy
-from renaanalysis.learning.HT import HierarchicalTransformer, HierarchicalTransformerContrastivePretrain, \
-    HierarchicalConvalueTransformer, HierarchicalTransformerAutoEncoderPretrain
-from renaanalysis.learning.HATC import HierarchicalAutoTranscoder, HierarchicalAutoTranscoderPretrain
+from renaanalysis.learning.HT import HierarchicalTransformer, HierarchicalTransformerAutoEncoderPretrain
 from renaanalysis.learning.RHT import RecurrentHierarchicalTransformer, \
     RecurrentHierarchicalTransformerAutoEncoderPretrain
 from renaanalysis.learning.models import EEGCNN
@@ -135,9 +132,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
     for params in param_grid:
         print(f"Grid search params: {params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
         if task_name == TaskName.TrainClassifier:
-            # model = HierarchicalTransformer(num_timesteps, num_channels, fs, num_classes=num_classes, physio_type=physio_type, **params)
-            # model = EEGCNN(mmarray['eeg'].array.shape, 4)
-            model = Conformer_copy()
+            model = HierarchicalTransformer(num_timesteps, num_channels, fs, num_classes=num_classes, physio_type=physio_type, **params)
             models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(
                                                                                             mmarray, model, test_name, task_name=task_name, n_folds=n_folds,
                                                                                             is_plot_conf_matrix=is_plot_confusion_matrix, test_size=test_size, lr=params['lr'], l2_weight=params['l2_weight'], random_seed=random_seed, picks=picks, is_augment_batch=is_augment_batch,)

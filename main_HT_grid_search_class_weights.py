@@ -127,14 +127,16 @@ else:
 
 locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name,
                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
+if not os.path.isdir(f'HT_grid/{dataset_name}'):
+    os.mkdir(f'HT_grid/{dataset_name}')
 if task_name == TaskName.PreTrain:
     pickle.dump(training_histories,
-                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
+                open(f'HT_grid/{dataset_name}/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
     pickle.dump(locking_performance,
-                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
+                open(f'HT_grid/{dataset_name}/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/{dataset_name}/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
 else:
-    pickle.dump(training_histories, open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
-    pickle.dump(locking_performance, open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+    pickle.dump(training_histories, open(f'HT_grid/{dataset_name}/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+    pickle.dump(locking_performance, open(f'HT_grid/{dataset_name}/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
+    pickle.dump(models, open(f'HT_grid/{dataset_name}/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p', 'wb'))
 

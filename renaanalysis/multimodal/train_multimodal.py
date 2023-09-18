@@ -74,6 +74,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         num_val_target_errors = []
         best_auc = 0
         best_acc = 0
+        best_model = copy.deepcopy(model_copy)
         train_losses = []
         train_accs = []
         val_losses = []
@@ -143,7 +144,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         #                                  _encoder=mmarray.get_encoder_function(), task_name=task_name, verbose=1)
 
         test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, test_y_all, test_y_all_pred =\
-            _run_one_epoch_classification(best_model, test_dataloader, criterion, last_activation, encoder=mmarray._encoder, rebalance_method=mmarray.rebalance_method, optimizer=None, mode='val', device=device, task_name=task_name, verbose=verbose)
+            _run_one_epoch_classification(best_model, test_dataloader, criterion, last_activation, encoder=mmarray._encoder, rebalance_method=mmarray.rebalance_method, optimizer=None, mode='val', device=device, task_name=task_name)
 
         if verbose >= 1:
             print("Tested Fold {}: test auc = {:.8f}, test loss = {:.8f}, test acc = {:.8f}".format(f_index, test_auc_model, test_loss_model, test_acc_model))
