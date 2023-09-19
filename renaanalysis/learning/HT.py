@@ -302,6 +302,8 @@ class HierarchicalTransformer(nn.Module):
         self.n_conv_tokens = int((self.num_timesteps - self.patch_length) / 1 + 1)  # denominator is the stride of the time conv
         self.n_tokens = int((self.n_conv_tokens - self.pool_size) // self.pool_stride + 1)
 
+        self.grid_dims = 1, self.n_tokens
+
         self.to_patch_embedding = nn.Sequential(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
             nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, 1), bias=True),
@@ -415,7 +417,7 @@ class HierarchicalTransformer(nn.Module):
             return self.mlp_head(x)
 
     def encode(self, x, *args, **kwargs):
-        x_eeg = x[self.physio_type]
+        x_eeg = x[self.physio_type] if type(x) is dict else x
 
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
