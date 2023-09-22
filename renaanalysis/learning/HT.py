@@ -297,16 +297,17 @@ class HierarchicalTransformer(nn.Module):
         #     nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
         #     # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
         # )
-        self.pool_size = int(sampling_rate * (token_recep_field - window_duration))
-        self.pool_stride = self.pool_size + self.patch_length - int(token_recep_field_overlap * sampling_rate)
-        self.n_conv_tokens = int((self.num_timesteps - self.patch_length) / 1 + 1)  # denominator is the stride of the time conv
+        t_conv_stride = 10
+        self.pool_size = int(sampling_rate * (token_recep_field - window_duration) // t_conv_stride)
+        self.pool_stride = (int(sampling_rate * (token_recep_field - window_duration - token_recep_field_overlap)) + self.patch_length)  // t_conv_stride
+        self.n_conv_tokens = int((self.num_timesteps - self.patch_length) // t_conv_stride + 1)  # denominator is the stride of the time conv
         self.n_tokens = int((self.n_conv_tokens - self.pool_size) // self.pool_stride + 1)
 
         self.grid_dims = 1, self.n_tokens
 
         self.to_patch_embedding = nn.Sequential(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
-            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, 1), bias=True),
+            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, t_conv_stride), bias=True),
             nn.Conv2d(patch_embed_dim, patch_embed_dim, (self.num_channels, 1), (1, 1)),
             nn.BatchNorm2d(patch_embed_dim),
             nn.ELU(),

@@ -89,7 +89,8 @@ def ht_eeg_viz_cam(model, mmarray, attention_layer_class, device, data_root, cls
         x_eeg_from_iterator.append(batch_data['eeg'])
     rolls = {k: torch.cat(v, dim=0) for k, v in rolls.items()}
     cams = np.concatenate(cams, axis=0)
-
+    x_eeg_from_iterator = torch.cat(x_eeg_from_iterator, dim=0).detach().cpu().numpy()
+    y_from_iterator = torch.cat(y_from_iterator, dim=0).detach().cpu().numpy()
     # compute forward activation
     cams_forward = np.multiply(cams, x_eeg_from_iterator)
     cams_forward_normalized = (cams_forward - cams_forward.mean()) / cams_forward.std()

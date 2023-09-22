@@ -80,5 +80,5 @@ for pretrained_model_list in pretrained_models.values():
         model = pretrained_model.encoder
         model.adjust_model(mmarray['eeg'].array.shape[-1], mmarray['eeg'].array.shape[1], mmarray['eeg'].sampling_rate, window_duration, num_classes, 'multi')
         models, training_histories, criterion, _, test_auc, test_loss, test_acc = train_test_classifier_multimodal(mmarray, model, test_name='', patience=100, task_name=TaskName.PretrainedClassifierFineTune, test_size=test_size, val_size=val_size,
-                                                                                             n_folds=n_folds, lr=lr, is_plot_conf_matrix=is_plot_conf_matrix, random_seed=random_seed, l2_weight=l2_weight, picks=picks, is_augment_batch=True)
+                                                                                                                   n_folds=n_folds, lr=lr, is_plot_conf_matrix=is_plot_conf_matrix, random_seed=random_seed, l2_weight=l2_weight, picks_sbj_run=picks, is_augment_batch=True)
         pickle.dump(models, open(f'{result_path}/models_auditory_oddball.p', 'wb'))

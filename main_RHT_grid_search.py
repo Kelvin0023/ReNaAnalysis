@@ -7,7 +7,8 @@ import time
 import matplotlib.pyplot as plt
 import torch
 
-from renaanalysis.learning.grid_search import grid_search_rht_eeg
+from renaanalysis.learning.RHT import RecurrentHierarchicalTransformer
+from renaanalysis.learning.grid_search import grid_search_ht_eeg
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
@@ -24,12 +25,14 @@ eeg_resample_rate = 200
 
 reject = None  # whether to apply auto rejection
 # data_root = 'D:/Dataset/auditory_oddball'
-# data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
-data_root = 'J:\TUEH\edf'
-# dataset_name = 'auditory_oddball'
-dataset_name = 'TUH'
+data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'
+# data_root = 'J:\TUEH\edf'
+dataset_name = 'auditory_oddball'
+# dataset_name = 'TUH'
 mmarray_fn = f'{dataset_name}_mmarray.p'
-task_name = TaskName.PreTrain
+task_name = TaskName.TrainClassifier
+
+batch_size = 16
 
 training_results_dir = 'RHT_grid_search'
 training_results_path = os.path.join(os.getcwd(), training_results_dir)
@@ -49,7 +52,7 @@ grid_search_params = {
     # "dim_head": [64],
     "dim_head": [128],
     "attn_dropout": [0.0],
-    "emb_dropout": [0.1],
+    "emb_dropout": [0.5],
     "dropout": [0.1],
 
     "lr": [1e-4],
@@ -58,8 +61,8 @@ grid_search_params = {
 
     "lr_scheduler_type": ['cosine'],
 
-    "pos_embed_mode": ['learnable'],
-    # "pos_embed_mode": ['sinusoidal'],
+    # "pos_embed_mode": ['learnable'],
+    "pos_embed_mode": ['sinusoidal'],
 
     # "output": ['single'],
     "output": ['multi'],
@@ -92,8 +95,11 @@ else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
 
 
-param_performance, training_histories, models = grid_search_rht_eeg(grid_search_params, mmarray, n_folds, training_results_path, task_name=task_name,
-                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
+param_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name,
+                                                                   batch_size = batch_size,
+                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed,
+                                                                   use_ordered_batch=True,
+                                                                   model_class=RecurrentHierarchicalTransformer,)
 if task_name == TaskName.PreTrain:
     pickle.dump(training_histories,
                 open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))

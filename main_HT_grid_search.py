@@ -160,7 +160,7 @@ else:
 #             val_indices += mmarray.get_indices_by_subject_run(i+1, j+1)
 
 locking_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name, is_pca_ica=is_pca_ica, test_size=test_size, val_size=val_size,
-                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed, picks=picks, is_augment_batch=is_augment_batch)
+                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed, picks_sbj_run=picks, is_augment_batch=is_augment_batch)
 # locking_performance, training_histories, models = grid_search_eeg(grid_search_params, mmarray, model_class, n_folds, task_name=task_name,
 #                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed)
 if task_name == TaskName.PreTrain:
