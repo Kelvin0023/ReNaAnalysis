@@ -607,6 +607,23 @@ class MultiModalArrays:
 
         return criterion, last_activation
 
+    def get_label_encoder_criterion(self, multi_or_single: str, device=None):
+        """
+        call this function in place of get_label_encoder_criterion_for_model if the model is not available
+        @type multi_or_single: str: can be 'multi' or 'single' for multi-class or binary classification
+        """
+        self.create_label_encoder(1 if multi_or_single == 'single' else 2)
+        if multi_or_single == 'single':
+            criterion = nn.BCELoss(reduction='mean')
+            last_activation = nn.Sigmoid()
+        elif multi_or_single == 'multi':
+            criterion = nn.CrossEntropyLoss(weight=self.get_class_weight(True, device) if self.rebalance_method == 'class_weight' else None)
+            last_activation = nn.Softmax(dim=1)
+        else:
+            raise ValueError(f"multi_or_single must be either 'multi' or 'single', but got {multi_or_single}")
+        self.save()
+        return criterion, last_activation
+
     def get_encoder_function(self):
         return self._encoder
 
