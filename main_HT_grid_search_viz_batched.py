@@ -32,9 +32,9 @@ viz_pca_ica = False
 dataset_name = 'auditory_oddball'
 mmarray = pickle.load(open(f'{export_data_root}/{dataset_name}_mmarray_class-weight.p', 'rb'))
 
-training_histories = pickle.load(open(f'HT_grid/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
-locking_performance = pickle.load(open(f'HT_grid/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
-models = pickle.load(open(f'HT_grid/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+training_histories = pickle.load(open(f'HT_grid/{dataset_name}/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+locking_performance = pickle.load(open(f'HT_grid/{dataset_name}/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+models = pickle.load(open(f'HT_grid/{dataset_name}/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 
 criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(list(models.values())[0][0], device='cuda:0' if torch.cuda.is_available() else 'cpu')
 # x_test, y_test = mmarray.get_test_set(device=device, return_metainfo=True, shuffle_within_batches=True)
@@ -125,13 +125,13 @@ if is_plot_ROC:
         for i in range(len(model_list)):
             model = model_list[i]
             new_model = HierarchicalTransformer(180, 20, 200, num_classes=2,
-                                    extraction_layers=None,
-                                    depth=params['depth'], num_heads=params['num_heads'],
-                                    feedforward_mlp_dim=params['feedforward_mlp_dim'],
-                                    pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
-                                    dim_head=params['dim_head'], emb_dropout=params['emb_dropout'],
-                                    attn_dropout=params['attn_dropout'], output=params['output'],
-                                    training_mode='classification')
+                                                extraction_layers=None,
+                                                depth=params['depth'], num_heads=params['num_heads'],
+                                                feedforward_mlp_dim=params['feedforward_mlp_dim'],
+                                                pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
+                                                dim_head=params['dim_head'], emb_dropout=params['emb_dropout'],
+                                                attn_dropout=params['attn_dropout'], output=params['output'],
+                                                training_mode='classification')
             model = new_model.load_state_dict(model.state_dict())
             test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval(
                 model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder,

@@ -81,10 +81,10 @@ class VITAttentionRollout:
         self.attention_depths_list = []
         self.model.eval()
 
-        if isinstance(input_tensor, list) or isinstance(input_tensor, tuple):
-            input_tensor = [t.to(self.device) for t in input_tensor]
-        else:
-            input_tensor = (input_tensor.to(self.device), )
-        output = self.model(*input_tensor)
+        # if isinstance(input_tensor, list) or isinstance(input_tensor, tuple):
+        #     input_tensor = [t.to(self.device) for t in input_tensor]
+        # else:
+        #     input_tensor = (input_tensor.to(self.device), )
+        output = self.model(input_tensor)
 
         return rollout(depth, self.attention_depths_list, self.discard_ratio, self.head_fusion, token_shape=self.token_shape).detach().cpu().numpy()

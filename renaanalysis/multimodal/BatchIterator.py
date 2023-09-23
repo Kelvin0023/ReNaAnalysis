@@ -1,4 +1,5 @@
 import copy
+from typing import Dict
 
 import numpy as np
 import torch
@@ -42,8 +43,8 @@ class OrderedBatchIterator:
             np.random.shuffle(self.batch_sample_indices.reshape(-1))
             self.batch_sample_indices = self.batch_sample_indices.reshape(original_shape)
 
-        self.dataset = MultiModalDataset(self.data_arrays, self.labels)
-        self.dataset.to_tensor(device=self.device)
+        self.mm_dataset = MultiModalDataset(self.data_arrays, self.labels)
+        self.mm_dataset.to_tensor(device=self.device)
 
 
     def __len__(self):
@@ -67,14 +68,22 @@ class OrderedBatchIterator:
 
         # batch = {darray.physio_type: torch.Tensor(darray[this_batch_sample_indices]).to(self.device) for darray in self.data_arrays}
         # labels = torch.Tensor(self.labels[this_batch_sample_indices]).to(self.device)
-
+        #
         # if len(labels.shape) == 1:
         #     labels = labels.unsqueeze(1)
-        # if self.return_metainfo:
-        #     meta_info = [{darray.physio_type: torch.Tensor(value[this_batch_sample_indices]).to(self.device) for name, value in darray.meta_info_encoded.items()} for darray in self.data_arrays]
-        #     meta_info = check_and_merge_dicts(meta_info)
-        #     return batch, * meta_info, labels
-        # else:
-        #     return batch, labels
+        # labels = {'y': labels}
+        # meta_info: Dict[str, dict] = {parray.physio_type: parray.meta_info_encoded for parray in self.data_arrays}
+        # meta_info = check_and_merge_dicts(meta_info)
+        # return {**batch, **meta_info, **labels}
 
-        return self.dataset[this_batch_sample_indices]
+        return self.mm_dataset[this_batch_sample_indices]
+
+    def check_correctness(self):
+        '''
+        Check the correctness of the batch iterator.
+        1. Check the batch is ordered.
+        2. Check training, validation and test set do not overlap.
+        This should be called before the training starts if verbose is True.
+        @return:
+        '''
+        pass

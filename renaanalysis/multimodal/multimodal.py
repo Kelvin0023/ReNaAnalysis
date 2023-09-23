@@ -18,6 +18,120 @@ from renaanalysis.multimodal.BatchIterator import OrderedBatchIterator
 from renaanalysis.multimodal.MultimodalDataset import MultiModalDataset
 from renaanalysis.multimodal.PhysioArray import PhysioArray
 from renaanalysis.utils.TorchUtils import batch_to_tensor
+from renaanalysis.multimodal.MultimodalDataset import MultiModalDataset
+from renaanalysis.multimodal.PhysioArray import PhysioArray
+from renaanalysis.utils.TorchUtils import batch_to_tensor
+from renaanalysis.params.params import TaskName
+from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, rebalance_classes
+
+
+
+class PhysioArray:
+    """
+    when rebalance is applied, is this array rebalanced by channel or not
+    @attribute array: the raw array as was initially given at class's instantiation
+    @attribute meta_info:
+
+    @atttribute array: the raw array as was initially given at class's instantiation
+    @atttribute array_preprocessed: the array after preprocessing, e.g. znorm, pca, ica
+    @attribute sampling_rate
+    @attribute physio_type
+    @attribute is_rebalance_by_channel: when supersampling method such as SMOTE is applied as part of rebalancing,
+    whether to apply it by channel or not
+    """
+    def __init__(self, array: np.ndarray, meta_info: dict, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name='', ch_names=None):
+        assert np.all(array.shape[0] == np.array([len(m) for m in meta_info.values()])), 'all metainfo in a physio array must have the same number of trials/epochs'
+        self.array = array
+        self.meta_info = meta_info
+
+        self.meta_info_encoders = dict()
+        self.meta_info_encoded = dict()
+        self.encode_meta_info()
+
+        self.sampling_rate = sampling_rate
+        self.physio_type = physio_type
+        self.is_rebalance_by_channel = is_rebalance_by_channel
+        self.data_processor = dict()
+        self.dataset_name = dataset_name
+        self.ch_names = ch_names
+
+        self.array_preprocessed = None
+
+    def __getitem__(self, item):
+        if self.data_processor is not None:
+            return self.array_preprocessed[item]
+        else:
+            return self.array[item]
+
+    def __len__(self):
+        return len(self.array)
+
+    def __str__(self):
+        data_preprocessor_str = '-'.join(self.data_processor.keys())
+        return f'{self.dataset_name}_{self.physio_type}_{data_preprocessor_str}'
+
+    def encode_meta_info(self):
+        """
+        will encode any meta info that is not numeric
+        @return:
+        """
+        for name, value in self.meta_info.items():
+            if value.dtype == object:
+                self.meta_info_encoders[name] = LabelEncoder()
+                self.meta_info_encoded[name] = self.meta_info_encoders[name].fit_transform(value)
+            else:
+                self.meta_info_encoded[name] = value
+
+    def concatenate(self, other_physio_array):
+        """
+        concatenate two physio arrays, assuming they have the same meta info
+        @param other_physio_array:
+        @return:
+        """
+        assert np.all(self.meta_info.keys() == other_physio_array.meta_info.keys()), 'both arrays must have the same meta info keys'
+        assert self.physio_type == other_physio_array.physio_type, 'both arrays must have the same physio type'
+        assert self.array.shape[1:-1] == other_physio_array.array.shape[1:-1], 'both arrays must have the same number of channels and time stamps'
+        if self.array_preprocessed is not None and other_physio_array.array_preprocessed is not None:
+            assert self.array_preprocessed.shape[1:-1] == other_physio_array.array_preprocessed.shape[1:-1], 'both arrays must have the same number of channels and time stamps'
+            self.array_preprocessed = np.concatenate([self.array_preprocessed, other_physio_array.array_preprocessed])
+        else:
+            assert self.array_preprocessed is None and other_physio_array.array_preprocessed is None, 'both preprocessed arrays must have the same number of channels and time stamps'
+        assert self.data_processor.keys() == other_physio_array.data_processor.keys(), 'both arrays must have the same data processor'
+        # assert self.data_processor.values() == other_physio_array.data_processor.values(), 'both arrays must have the same data processor'
+        self.array = np.concatenate([self.array, other_physio_array.array])
+        for name, value in other_physio_array.meta_info.items():
+            self.meta_info[name] = np.concatenate([self.meta_info[name], value])
+        if self.meta_info_encoded is not None and other_physio_array.meta_info_encoded is not None:
+            for name, value in other_physio_array.meta_info_encoded.items():
+                self.meta_info_encoded[name] = np.concatenate([self.meta_info_encoded[name], value])
+        return self
+
+    def get_meta_info_by_name(self, meta_info_name):
+        return self.meta_info[meta_info_name]
+
+    def get_meta_info(self, index, encoded=False):
+        return {k: v[index] for k, v in (self.meta_info_encoded if encoded else self.meta_info).items()}
+
+    def apply_znorm_by_trial(self):
+        self.array_preprocessed = z_norm_by_trial(self.array)
+        self.data_processor['znorm'] = True
+
+    def apply_pca_ica(self, n_top_components=20):
+        """
+        @param n_top_components: number of top components to keep for pca and ica
+        @return:
+        """
+        if 'pca_ica_components' in self.data_processor.keys() and n_top_components == self.data_processor['pca_ica_components']:
+            return
+        if 'znorm' not in self.data_processor.keys():
+            self.apply_znorm_by_trial()
+        self.array_preprocessed, self.data_processor['pca'], self.data_processor['ica'] = compute_pca_ica(self.array_preprocessed, n_top_components)
+        self.data_processor['pca_ica_components'] = n_top_components
+
+    def get_pca_ica_array(self):
+        if 'pca_ica_components' not in self.data_processor.keys():
+            raise ValueError('pca ica has not been applied to this array')
+        return self.array_preprocessed
 
 
 class MultiModalArrays:
@@ -74,6 +188,7 @@ class MultiModalArrays:
         self.filename = filename
 
         self.multi_modal_dataset = MultiModalDataset(self.physio_arrays, self.labels_array)
+        # print('check if physio and label arrays are the same after previous call')
 
     def keys(self):
         return self._physio_types_arrays.keys()
@@ -96,12 +211,29 @@ class MultiModalArrays:
     def get_indices_by_subject_run(self, subject, run):
         return [i for i, (s, r) in enumerate(zip(self.experiment_info['subject_id'], self.experiment_info['run'])) if s == subject and r == run]
 
-    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, *args, **kwargs):
+    def get_indices_from_picks(self, picks):
+        train_indices_fold = []
+        val_indices_fold = []
+        for n_fold, subject_dict in enumerate(picks['subjects']):
+            this_train_indices = []
+            this_val_indices = []
+            for train_subject in subject_dict['train']:
+                for train_run in picks['run'][n_fold]['train']:
+                    this_train_indices += self.get_indices_by_subject_run(train_subject, train_run)
+            for val_subject in subject_dict['val']:
+                for val_run in picks['run'][n_fold]['val']:
+                    this_val_indices += self.get_indices_by_subject_run(val_subject, val_run)
+            train_indices_fold.append(this_train_indices)
+            val_indices_fold.append(this_val_indices)
+        return [(np.array(i), np.array(j)) for (i, j) in zip(train_indices_fold, val_indices_fold)]
+
+    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, picks=None, *args, **kwargs):
         """
         get the dataloader for a given fold
         this function must be called after training_val_split
         @param fold:
         @param random_seed:
+        @param picks: dict of subject and run to pick for train and val respectively, if None, dataloader split it randomly
         @return:
         """
         if self.rebalance_method == 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
@@ -172,6 +304,7 @@ class MultiModalArrays:
         #     val_dataset = dataset_class(x_val)
         training_indices, val_indices = self.training_val_split_indices[fold_index]
         val_dataset = MultiModalDataset(self.physio_arrays, labels=(encoded_labels := self.get_encoded_labels()), indices=val_indices)
+        # print('check if physio and label arrays are the same after previous call')
 
         # rebalance training set
         if self.rebalance_method == 'SMOTE' and is_rebalance_training:
@@ -179,6 +312,7 @@ class MultiModalArrays:
             train_dataset.get_rebalanced_set(random_seed=random_seed, encoder=self._encoder)
         else:
             train_dataset = MultiModalDataset(self.physio_arrays, labels=encoded_labels, indices=training_indices)
+            # print('check if physio and label arrays are the same after previous call')
 
         val_dataset.to_tensor(device=device)
         train_dataset.to_tensor(device=device)
@@ -189,7 +323,7 @@ class MultiModalArrays:
         return train_dataloader, val_dataloader
 
 
-    def training_val_split(self, n_folds, val_size=0.1, random_seed=None):
+    def training_val_split(self, n_folds, val_size=0.1, random_seed=None, picks=None):
         """
         split the train set into training and validation sets
 
@@ -200,14 +334,17 @@ class MultiModalArrays:
         """
         assert self.train_indices is not None, 'train indices have not been set, please call train_test_split first'
         self.training_val_split_indices = []
-        if self.labels_array is not None:
-            skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
-            for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices], self.labels_array[self.train_indices])):
-                self.training_val_split_indices.append((train, val))
+        if picks is None:
+            if self.labels_array is not None:
+                skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
+                for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices], self.labels_array[self.train_indices])):
+                    self.training_val_split_indices.append((self.train_indices[train], self.train_indices[val]))
+            else:
+                skf = ShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
+                for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
+                    self.training_val_split_indices.append((np.array(self.train_indices)[train], np.array(self.train_indices)[val]))
         else:
-            skf = ShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
-            for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
-                self.training_val_split_indices.append((train, val))
+            self.training_val_split_indices = self.get_indices_from_picks(picks)
         self.save()
 
 
@@ -225,16 +362,20 @@ class MultiModalArrays:
         @return:
         """
         if self.labels_array is not None:
-            skf = StratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=random_seed)
-            self.train_indices, self.test_indices = [(train, test) for train, test in skf.split(self.physio_arrays[0].array, self.labels_array)][0]
-            assert np.all(np.unique(self.labels_array[self.test_indices]) == np.unique(self.labels_array[self.train_indices])), "train and test labels are not the same"
-            assert len(np.unique(self.labels_array[self.test_indices])) == len(self.event_names), "number of unique labels is not the same as number of event names"
+            if test_size != 0:
+                skf = StratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=random_seed)
+                self.train_indices, self.test_indices = [(train, test) for train, test in skf.split(self.physio_arrays[0].array, self.labels_array)][0]
+                assert np.all(np.unique(self.labels_array[self.test_indices]) == np.unique(self.labels_array[self.train_indices])), "train and test labels are not the same"
+                assert len(np.unique(self.labels_array[self.test_indices])) == len(self.event_names), "number of unique labels is not the same as number of event names"
+            else:
+                self.train_indices = np.arange(self.physio_arrays[0].array.shape[0])
+                self.test_indices = np.array([], dtype=int)
         else:
             self.train_indices, self.test_indices = train_test_split(list(range(self.physio_arrays[0].array.shape[0])), test_size=test_size, random_state=random_seed, stratify=self.labels_array)
         self.save()
 
 
-    def test_train_val_split(self, n_folds, test_size=0.1, val_size=0.1, random_seed=None):
+    def test_train_val_split(self, n_folds, test_size=0.1, val_size=0.1, random_seed=None, picks=None):
         """
         create indices for test, train and validation sets
 
@@ -246,7 +387,11 @@ class MultiModalArrays:
         """
         self.train_test_split(test_size=test_size, random_seed=random_seed)
         val_size = val_size / (1 - test_size)  # adjust the val size to be a percentage of the training set
-        self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed)
+        self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed, picks=picks)
+        for i in range(n_folds):
+            assert set(self.training_val_split_indices[i][0]).intersection(set(self.test_indices)) == set(), 'train and test sets are not disjoint'
+            assert set(self.training_val_split_indices[i][0]).intersection(set(self.training_val_split_indices[i][1])) == set(), 'train and val sets are not disjoint'
+            assert set(self.training_val_split_indices[i][1]).intersection(set(self.test_indices)) == set(), 'val and test sets are not disjoint'
 
 
     def set_training_val_set(self, train_indices, val_indices):
@@ -342,6 +487,8 @@ class MultiModalArrays:
         if self.labels_array is None:
             warnings.warn('labels array is None, make sure label is not needed for this model')
         test_set = MultiModalDataset(self.physio_arrays, labels=self.get_encoded_labels(), indices=test_indices)
+        # print('check if physio and label arrays are the same after previous call')
+
         if convert_to_tensor:
             test_set.to_tensor(device=device)
         return test_set
@@ -447,6 +594,7 @@ class MultiModalArrays:
             model.eval()
             rand_input= rand_input if isinstance(rand_input, tuple) else (rand_input,)
             output_shape = model.to(device)(*rand_input).shape[1]
+            # output_shape = model.to(device)(rand_input['eeg'][:, None, :, :]).shape[1]
 
         self.create_label_encoder(output_shape)
         if output_shape == 1:
@@ -532,7 +680,7 @@ class MultiModalArrays:
         for (subject, run), sample_indices in subject_run_samples.items():
             n_batches = len(sample_indices) // batch_size
             if n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} has less samples than batch size. Ignored.")
+                warnings.warn(f"Subject {subject} run {run} has fewer samples than batch size. Ignored.")
                 continue
             n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
             sample_indices = np.concatenate([sample_indices, [None] * n_add])
@@ -563,6 +711,10 @@ class MultiModalArrays:
         self.test_batch_sample_indices = np.array(test_batch_sample_indices)
         self.val_batch_sample_indices = np.array(val_batch_sample_indices)
         self.train_batch_sample_indices = np.array(train_batch_sample_indices)
+        for i in range(n_folds):
+            assert set(self.test_batch_sample_indices[self.test_batch_sample_indices != None]).intersection(set(self.train_batch_sample_indices[i][self.train_batch_sample_indices[i] != None])) == set(), "test and train is not disjoint"
+            assert set(self.test_batch_sample_indices[self.test_batch_sample_indices != None]).intersection(set(self.val_batch_sample_indices[i][self.val_batch_sample_indices[i] != None])) == set(), "test and val is not disjoint"
+            assert set(self.train_batch_sample_indices[i][self.train_batch_sample_indices[i] != None]).intersection(set(self.val_batch_sample_indices[i][self.val_batch_sample_indices[i] != None])) == set(), "train and val is not disjoint"
         self.save()
 
     def get_train_val_ordered_batch_iterator_fold(self, fold, device, shuffle_within_batches=False, *args, **kwargs):
@@ -576,16 +728,21 @@ class MultiModalArrays:
         """
         assert self.val_batch_sample_indices is not None and self.train_batch_sample_indices is not None, \
             "Please call training_val_test_split_ordered_by_subject_run() first."
-
-        labels_encoded = self._encoder(self.labels_array)
-
-        return OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
-            OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
-
+        if self.labels_array is not None:
+            labels_encoded = self._encoder(self.labels_array)
+            rtn = OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
+                    OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, shuffle_within_batches),
+            return rtn
+        else:
+            return OrderedBatchIterator(self.physio_arrays, None, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
+                OrderedBatchIterator(self.physio_arrays, None, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
     def get_test_ordered_batch_iterator(self, device, encode_y=True, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
-        labels = self._encoder(self.labels_array) if encode_y else self.labels_array
-        return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
+        if self.labels_array is not None:
+            labels = self._encoder(self.labels_array) if encode_y else self.labels_array
+            return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
+        else:
+            return OrderedBatchIterator(self.physio_arrays, None, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
     # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
     #     n_batches = self.get_num_samples() // batch_size
     #     test_n_batches = math.floor(test_size * n_batches)
@@ -606,6 +763,16 @@ class MultiModalArrays:
         if self.labels_array is not None:
             labels_encoded = self._encoder(self.labels_array)
         return labels_encoded
+
+    def check_correctness(self):
+        '''
+        check if the mmarray is correct.
+        1. Check the batch is ordered.
+        2. Check training, validation and test set do not overlap.
+        This should be called before training start if verbose is set to True.
+        @return:
+        '''
+        pass
 
 def load_mmarray(path):
     """

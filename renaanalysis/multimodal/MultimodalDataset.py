@@ -93,4 +93,5 @@ class MultiModalDataset(Dataset):
     def to_tensor(self, device):
         self.data = batch_to_tensor(self.data, device)
         self.meta_info = batch_to_tensor(self.meta_info, device)
-        self.labels = torch.tensor(self.labels, device=device)
+        if self.labels is not None:
+            self.labels = torch.tensor(self.labels, device=device)

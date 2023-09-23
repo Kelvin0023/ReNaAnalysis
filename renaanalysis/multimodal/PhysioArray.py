@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
 from renaanalysis.multimodal.ChannelSpace import create_discretize_channel_space
-from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica
+from renaanalysis.utils.data_utils import z_norm_by_trial, compute_pca_ica, z_norm_by_subject_run
 
 
 class PhysioArray:
@@ -18,7 +18,7 @@ class PhysioArray:
     @attribute is_rebalance_by_channel: when supersampling method such as SMOTE is applied as part of rebalancing,
     whether to apply it by channel or not
     """
-    def __init__(self, array: np.ndarray, meta_info: dict, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name='', info=None):
+    def __init__(self, array: np.ndarray, meta_info: dict, sampling_rate: float, physio_type: str, is_rebalance_by_channel=False, dataset_name='', info=None, ch_names=None):
         assert np.all(array.shape[0] == np.array([len(m) for m in meta_info.values()])), 'all metainfo in a physio array must have the same number of trials/epochs'
         self.array = array
         self.meta_info = meta_info
@@ -26,6 +26,7 @@ class PhysioArray:
         self.meta_info_encoders = dict()
         self.meta_info_encoded = dict()
         self.encode_meta_info()
+        self.ch_names = ch_names
 
         self.sampling_rate = sampling_rate
         self.physio_type = physio_type
@@ -103,6 +104,16 @@ class PhysioArray:
 
     def apply_znorm_by_trial(self):
         self.array_preprocessed = z_norm_by_trial(self.array)
+        self.data_processor['znorm_by_trial'] = True
+
+    def apply_znorm_by_run(self):
+        self.array_preprocessed = z_norm_by_subject_run(self)
+        self.data_processor['znorm_by_run'] = True
+
+    def apply_znorm_global(self):
+        self.array_preprocessed = self.array.copy()
+        self.array_preprocessed -= self.array_preprocessed.mean()
+        self.array_preprocessed /= self.array_preprocessed.std()
         self.data_processor['znorm'] = True
 
     def apply_pca_ica(self, n_top_components=20):

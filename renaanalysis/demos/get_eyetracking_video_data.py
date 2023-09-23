@@ -9,7 +9,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 block_margin = 0.01
-block_marker = 3
+block_marker = 1  # 1 is RSVP
 n_blocks = 20
 
 include_dtn = False
@@ -82,6 +82,8 @@ eye_timestamps = eye_raw_timestamps - eye_raw_timestamps[0] + eye_timestamps[0] 
 eyetracking_start_indices = [np.argmin(abs(eye_timestamps - s)) for s in condition_block_start_times][:n_blocks]
 eyetracking_end_indices = [np.argmin(abs(eye_timestamps - s)) for s in condition_block_end_times][:n_blocks]
 eye_picks = [eyetracking_preset['ChannelNames'].index(f'gaze_forward_{ax}') for ax in ['x', 'y', 'z']] + [eyetracking_preset['ChannelNames'].index('status')]
+# add pupil channels
+eye_picks += [eyetracking_preset['ChannelNames'].index(x) for x in ["left_pupil_size", "right_pupil_size"]]
 eyetracking_data = data['Unity.VarjoEyeTrackingComplete'][0][eye_picks, :]
 
 block_eyetracking_stream = np.empty((len(eye_picks), 0))
@@ -128,7 +130,6 @@ block_video_stream = np.rot90(block_video_stream, k=-1, axes=(1, 2))
 block_video_stream = block_video_stream.reshape((len(block_video_stream), -1))
 block_video_stream = block_video_stream.T
 block_pixel_stream  = block_pixel_stream.T
-# add another stream for video's gaze pixel location ################################################################
 
 
 
@@ -142,4 +143,4 @@ out_data = {'Example-BioSemi-Midline': (block_eeg_stream, block_eeg_timestamps),
 if include_dtn:
     out_data['Example-EventMarker'] = (dtn_stream[None, :], dtn_timestamps)
 
-pickle.dump(out_data, open(r'D:\PycharmProjects\RenaLabApp\examples/fixation-detection-example.p', 'wb'))
+pickle.dump(out_data, open(r'D:\PhysioLabXR\multimodal-erp-classifier-example.p', 'wb'))

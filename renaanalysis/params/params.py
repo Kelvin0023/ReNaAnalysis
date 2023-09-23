@@ -175,6 +175,7 @@ patience = 10
 train_ratio = 0.8
 model_save_dir = 'renaanalysis/learning/saved_models'
 l2_weight = 1e-5
+verbose = 1
 
 random_seed = 13
 
@@ -189,3 +190,4 @@ class TaskName(Enum):
 
 eeg_name = 'eeg'
 pupil_name = 'pupil'
+fnirs_name = 'fnirs'
