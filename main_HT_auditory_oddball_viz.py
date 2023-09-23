@@ -55,7 +55,7 @@ num_channels, num_timesteps = X.shape[1:]  # X is x_eeg
 
 # Load the model state_dict
 model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2)
-window_size = model.patch_length
+window_size = model.time_conv_window_size
 model.load_state_dict(torch.load(model_path))
 model.to(device)
 rollout = VITAttentionRollout(model, device, attention_layer_class=Attention, token_shape=model.grid_dims, discard_ratio=0.9, head_fusion=head_fusion)

@@ -4,6 +4,7 @@ import pickle
 from matplotlib import pyplot as plt
 import torch
 
+from renaanalysis.learning.HT_cam_viz import ht_eeg_viz_cam
 from renaanalysis.learning.HT_viz import ht_viz, ht_eeg_viz_multimodal_batch, ht_viz_multimodal
 from renaanalysis.learning.RHT import RecurrentGeneralizedPFAttention
 from renaanalysis.multimodal.multimodal import load_mmarray
@@ -12,7 +13,7 @@ from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, 
 from renaanalysis.params.params import *
 from renaanalysis.learning.HT import HierarchicalTransformer
 
-results_path = r'D:\PycharmProjects\ReNaAnalysis\RHT_grid_search'
+results_path = r'/RHT_grid_search'
 
 # viz options
 plot_eeg_epochs = False
@@ -101,9 +102,9 @@ if plot_ht_viz:
     #                       note='', load_saved_rollout=False, head_fusion=head_fusion,
     #                       discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, use_meta_info=True)
 
-    ht_eeg_viz_multimodal_batch(best_model, mmarray, attention_layer_class, device, rollout_data_root,
+    ht_eeg_viz_cam(best_model, mmarray, attention_layer_class, device, rollout_data_root,
            note='', load_saved_rollout=False, head_fusion='max', cls_colors=mmarray.event_viz_colors,
-           discard_ratio=0.9,is_pca_ica=is_pca_ica, pca=pca, ica=ica, batch_size=128, use_ordered=use_ordered)
+           discard_ratio=0.9,is_pca_ica=is_pca_ica, pca=pca, ica=ica, batch_size=16, use_ordered=use_ordered)
 
 # visualize_eeg_samples(x_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)
 # # a = model(torch.from_numpy(x_eeg_pca_ica_test[viz_indc if viz_both else non_target_indc[0:num_samp]].astype('float32')))

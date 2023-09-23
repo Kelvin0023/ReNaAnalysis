@@ -96,7 +96,7 @@ num_channels, num_timesteps = X_pca_ica.shape[1:]  # X is x_eeg
 
 # Load the model state_dict
 model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2, output='multi')
-window_size = model.patch_length
+window_size = model.time_conv_window_size
 
 model.load_state_dict(torch.load(os.path.join(model_path, model_file_name)))
 model.to(device)

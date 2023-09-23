@@ -16,10 +16,9 @@ from renaanalysis.learning.cam.grad_cam import GradCAM
 from renaanalysis.utils.viz_utils import get_line_styles
 
 
-def ht_eeg_viz_cam(model, mmarray, attention_layer_class, device, data_root, cls_colors,
+def ht_eeg_viz_cam(model, mmarray, attention_layer_class, device, data_root,
                                 note='', head_fusion='max', discard_ratio=0.1,
-                                load_saved_rollout=False, batch_size=512,
-                                is_pca_ica=False, pca=None, ica=None,
+                                batch_size=512,
                                 use_ordered=False, eeg_montage=mne.channels.make_standard_montage('biosemi64'), topo_map='forward',
                                 roll_topo_map_samples='all', roll_topo_map_n_samples=10,
                                 picks=('Fz', 'Cz', 'Oz'), tmin=-0.1, tmax=0.8, *args, **kwargs):
@@ -48,16 +47,11 @@ def ht_eeg_viz_cam(model, mmarray, attention_layer_class, device, data_root, cls
         test_iterator = mmarray.get_test_ordered_batch_iterator(encode_y=False,  device=device)
     else:
         test_iterator = mmarray.get_test_dataloader(batch_size=batch_size, encode_y=False, device=device)
-    n_samples = len(test_iterator.dataset)
     event_ids = mmarray.event_ids
-    event_ids_inversed = {v: k for k, v in event_ids.items()}
     window_size = model.patch_length
     eeg_channel_names = eeg_montage.ch_names
-    n_eeg_chan = len(eeg_channel_names)
-    n_model_chan = model.num_channels
     exg_resample_rate = mmarray['eeg'].sampling_rate
     split_window_eeg = model.window_duration
-    y_encoder = mmarray._encoder
 
     info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))
     info.set_montage(eeg_montage)

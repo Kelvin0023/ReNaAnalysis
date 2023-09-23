@@ -242,16 +242,16 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
     self.mems
      [  [layerouts, r_t, r_c, r_p] ]
     """
-    def __init__(self, embedding_dim, depth, num_heads, dim_head, feedforward_mlp_dim, pos_embed_mode, drop_attention=0., dropout=0.1, mem_len=0):
+    def __init__(self, embedding_dim, depth, num_heads, dim_head, feedforward_mlp_dim, pos_embed_mode, drop_attention=0., dropout_ff=0.1, mem_len=0):
         super().__init__()
 
         self.depth = depth
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                PreNorm(embedding_dim, RecurrentGeneralizedPFAttention(embedding_dim, pos_embed_mode, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout)),
+                PreNorm(embedding_dim, RecurrentGeneralizedPFAttention(embedding_dim, pos_embed_mode, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout_ff)),
                 # RecurrentGeneralizedPFAttention(embedding_dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout),
-                PreNorm(embedding_dim, FeedForward(embedding_dim, feedforward_mlp_dim, dropout=dropout))  # use pre norm for the attention output residual
+                PreNorm(embedding_dim, FeedForward(embedding_dim, feedforward_mlp_dim, dropout=dropout_ff))  # use pre norm for the attention output residual
             ]))
         self.num_heads = num_heads
         self.dim_head = dim_head
@@ -350,7 +350,7 @@ class RecurrentPositionalFeatureTransformer(nn.Module):
 
 class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, physio_type=eeg_name, depth=4, num_heads=8, feedforward_mlp_dim=32, pool='cls',
-                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, dropout=0.1, output='multi', n_participant=13, mem_len=1,
+                 patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, ff_dropout=0.1, output='multi', n_participant=13, mem_len=1,
                  reset_mem_each_session=False, pos_embed_mode='learnable',
                  window_duration=0.1,
                  token_recep_field = 0.3,
@@ -422,7 +422,7 @@ class RecurrentHierarchicalTransformer(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
 
         self.mem_len = (self.n_tokens * mem_len + 1 ) if mem_len != 0 else 0  # +1 for cls token
-        self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, pos_embed_mode, drop_attention=attn_dropout, dropout=dropout, mem_len=self.mem_len)
+        self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, pos_embed_mode, drop_attention=attn_dropout, dropout_ff=ff_dropout, mem_len=self.mem_len)
 
         self.pool = pool
         self.to_latent = nn.Identity()
@@ -595,7 +595,7 @@ class RecurrentHierarchicalTransformerAutoEncoderPretrain(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
 
         self.mem_len = (self.num_channels * self.num_windows * mem_len + 1 ) if mem_len != 0 else 0  # +1 for cls token
-        self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=attn_dropout, dropout=dropout, mem_len=self.mem_len, pos_embed_mode=pos_embed_mode)
+        self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, drop_attention=attn_dropout, dropout_ff=dropout, mem_len=self.mem_len, pos_embed_mode=pos_embed_mode)
 
         self.pool = pool
         self.to_latent = nn.Identity()

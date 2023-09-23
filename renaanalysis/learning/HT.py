@@ -249,7 +249,8 @@ class HierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, physio_type=eeg_name, depth=4, num_heads=8, feedforward_mlp_dim=32, pool='cls',
                  patch_embed_dim=128, dim_head=64, attn_dropout=0.5, emb_dropout=0.5, output='multi',
                  pos_embed_mode='learnable',
-                 window_duration=0.1,
+                 time_conv_window=0.1,
+                 time_conv_strid=0.05,
                  token_recep_field=0.3,
                  token_recep_field_overlap=0.2,
                  *args, **kwargs):
@@ -271,8 +272,8 @@ class HierarchicalTransformer(nn.Module):
         super().__init__()
         self.depth = depth
         self.num_heads = num_heads
-        self.window_duration = window_duration
-        self.patch_embed_dim = patch_embed_dim
+        self.window_duration = time_conv_window
+        self.token_embed_dim = patch_embed_dim
         self.pos_embed_mode = pos_embed_mode
         self.num_timesteps = num_timesteps
         self.output = output
@@ -281,9 +282,10 @@ class HierarchicalTransformer(nn.Module):
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
-        self.patch_embed_dim = patch_embed_dim
-        self.patch_length = int(window_duration * sampling_rate)
-        self.num_windows = num_timesteps // self.patch_length
+        self.token_embed_dim = patch_embed_dim
+        self.time_conv_window_size = int(time_conv_window * sampling_rate)
+        self.time_conv_stride = int(time_conv_strid * sampling_rate)
+        self.num_windows = num_timesteps // self.time_conv_window_size
 
         self.num_patches = self.num_channels * self.num_windows
 
@@ -297,17 +299,16 @@ class HierarchicalTransformer(nn.Module):
         #     nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
         #     # Rearrange('b patchEmbed eegc nPatch -> b patchEmbed (eegc nPatch)', patchEmbed=patch_embed_dim),
         # )
-        t_conv_stride = 10
-        self.pool_size = int(sampling_rate * (token_recep_field - window_duration) // t_conv_stride)
-        self.pool_stride = (int(sampling_rate * (token_recep_field - window_duration - token_recep_field_overlap)) + self.patch_length)  // t_conv_stride
-        self.n_conv_tokens = int((self.num_timesteps - self.patch_length) // t_conv_stride + 1)  # denominator is the stride of the time conv
+        self.pool_size = int(sampling_rate * (token_recep_field - self.time_conv_window_size) // self.time_conv_stride)
+        self.pool_stride = (int(sampling_rate * (token_recep_field - self.time_conv_window_size - token_recep_field_overlap)) + self.time_conv_window_size) // self.time_conv_stride
+        self.n_conv_tokens = int((self.num_timesteps - self.time_conv_window_size) // self.time_conv_stride + 1)  # denominator is the stride of the time conv
         self.n_tokens = int((self.n_conv_tokens - self.pool_size) // self.pool_stride + 1)
 
         self.grid_dims = 1, self.n_tokens
 
         self.to_patch_embedding = nn.Sequential(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
-            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, t_conv_stride), bias=True),
+            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.time_conv_window_size), stride=(1, self.time_conv_stride), bias=True),
             nn.Conv2d(patch_embed_dim, patch_embed_dim, (self.num_channels, 1), (1, 1)),
             nn.BatchNorm2d(patch_embed_dim),
             nn.ELU(),
@@ -372,16 +373,16 @@ class HierarchicalTransformer(nn.Module):
         self.window_duration = window_duration
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
-        self.patch_length = int(window_duration * sampling_rate)
-        self.num_windows = num_timesteps // self.patch_length
+        self.time_conv_window_size = int(window_duration * sampling_rate)
+        self.num_windows = num_timesteps // self.time_conv_window_size
         self.num_patches = self.num_channels * self.num_windows
 
         if self.pos_embed_mode == 'learnable':
             learnable_pos_embedding = self.learnable_pos_embedding.unsqueeze(0)
-            self.learnable_pos_embedding = F.interpolate(learnable_pos_embedding, size=(self.num_patches+1, self.patch_embed_dim), mode='bilinear',
-            align_corners=False).squeeze(0)
+            self.learnable_pos_embedding = F.interpolate(learnable_pos_embedding, size=(self.num_patches+1, self.token_embed_dim), mode='bilinear',
+                                                         align_corners=False).squeeze(0)
         else:
-            self.learnable_pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.patch_embed_dim), requires_grad=False)
+            self.learnable_pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.token_embed_dim), requires_grad=False)
 
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
         patch_embed_projection = self.to_patch_embedding[1].weight.data
@@ -389,11 +390,11 @@ class HierarchicalTransformer(nn.Module):
         axs[0].set_title('pretrained projection matrix before resample')
         d, a, b, t = patch_embed_projection.shape
         resampled_weight = F.interpolate(
-            patch_embed_projection, size=(b, self.patch_length), mode='bilinear',
+            patch_embed_projection, size=(b, self.time_conv_window_size), mode='bilinear',
             align_corners=False)
         bias = self.to_patch_embedding[1].bias.data
-        self.to_patch_embedding[1] = nn.Conv2d(1, self.patch_embed_dim, kernel_size=(1, self.patch_length),
-                                               stride=(1, self.patch_length), bias=True)
+        self.to_patch_embedding[1] = nn.Conv2d(1, self.token_embed_dim, kernel_size=(1, self.time_conv_window_size),
+                                               stride=(1, self.time_conv_window_size), bias=True)
         self.to_patch_embedding[1].weight.data = resampled_weight
         self.to_patch_embedding[1].bias.data = bias
         axs[1].imshow(self.to_patch_embedding[1].weight.data.squeeze().squeeze().cpu().detach().numpy())
@@ -402,15 +403,15 @@ class HierarchicalTransformer(nn.Module):
             fig.show()
 
         # reinitialize classification parameters
-        self.cls_token = nn.Parameter(torch.randn(1, 1, self.patch_embed_dim))
+        self.cls_token = nn.Parameter(torch.randn(1, 1, self.token_embed_dim))
         if output == 'single':
             self.mlp_head = nn.Sequential(
-                nn.LayerNorm(self.patch_embed_dim),
-                nn.Linear(self.patch_embed_dim, 1))
+                nn.LayerNorm(self.token_embed_dim),
+                nn.Linear(self.token_embed_dim, 1))
         else:
             self.mlp_head = nn.Sequential(
-                nn.LayerNorm(self.patch_embed_dim),
-                nn.Linear(self.patch_embed_dim, num_classes))
+                nn.LayerNorm(self.token_embed_dim),
+                nn.Linear(self.token_embed_dim, num_classes))
 
 
     def forward(self, x, *args, **kwargs):
@@ -497,11 +498,11 @@ class HierarchicalTransformerAutoEncoderPretrain(nn.Module):
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
-        self.encoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, window_duration=window_duration, pool=pool,
-                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode)
+        self.encoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, time_conv_window=window_duration, pool=pool,
+                                               patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode)
         self.decoder = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth,
                                                num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim,
-                                               window_duration=window_duration, pool=pool,
+                                               time_conv_window=window_duration, pool=pool,
                                                patch_embed_dim=patch_embed_dim, dim_head=dim_head,
                                                attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode).transformer
         self.to_time_series = nn.Linear(patch_embed_dim, self.patch_length)
@@ -580,8 +581,8 @@ class HierarchicalTransformerContrastivePretrain(nn.Module):
 
         self.grid_dims = self.num_channels, self.num_windows
         self.num_patches = self.num_channels * self.num_windows
-        self.HierarchicalTransformer = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, window_duration=window_duration, pool=pool,
-                 patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode)
+        self.HierarchicalTransformer = HierarchicalTransformer(num_timesteps, num_channels, sampling_rate, num_classes, depth=depth, num_heads=num_heads, feedforward_mlp_dim=feedforward_mlp_dim, time_conv_window=window_duration, pool=pool,
+                                                               patch_embed_dim=patch_embed_dim, dim_head=dim_head, attn_dropout=attn_dropout, emb_dropout=emb_dropout, output=output, pos_embed_mode=pos_embed_mode)
         self.mask_layer = MaskLayer(p_t=p_t, p_c=p_c, c_span=False, mask_t_span=mask_t_span, mask_c_span=mask_c_span,
                                     t_mask_replacement=torch.nn.Parameter(
                                         torch.zeros(self.num_channels, self.patch_embed_dim), requires_grad=True),

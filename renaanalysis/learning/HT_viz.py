@@ -68,7 +68,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
         model = HierarchicalTransformer(num_timesteps, num_channels, exg_resample_rate, num_classes=2)
         model.load_state_dict(torch.load(model_path))
     model.to(device)
-    window_size = model.patch_length
+    window_size = model.time_conv_window_size
     eeg_channel_names = mne.channels.make_standard_montage('biosemi64').ch_names
     info = mne.create_info(eeg_channel_names, sfreq=exg_resample_rate, ch_types=['eeg'] * len(eeg_channel_names))
     info.set_montage(eeg_montage)
@@ -113,7 +113,7 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
 
                         roll = rollout(depth=roll_depth, input_tensor=x_data)
                         roll_tensor = torch.Tensor(roll).to(device)
-                        forward_activation = torch.empty((X.shape[1], model.num_windows, model.patch_length))
+                        forward_activation = torch.empty((X.shape[1], model.num_windows, model.time_conv_window_size))
                         # if roll.shape[0] != X.shape[1]:  # HT is using dimension-reduced input
 
                         # compute forward activation
@@ -128,9 +128,9 @@ def ht_viz(model: Union[str, HierarchicalTransformer], X, Y, y_encoder, event_na
                                 forward_window = x_window_data * roll_tensor_window.view(-1, 1) / denom
                                 forward_activation[:, window_i, :] = forward_window
                         if is_pca_ica:
-                            activation_reshaped = forward_activation.reshape((-1, model.num_windows * model.patch_length))[None, :]
+                            activation_reshaped = forward_activation.reshape((-1, model.num_windows * model.time_conv_window_size))[None, :]
                             forward_activation = pca.inverse_transform(ica.inverse_transform(activation_reshaped))[0]
-                            forward_activation = forward_activation.reshape((-1, model.num_windows, model.patch_length))
+                            forward_activation = forward_activation.reshape((-1, model.num_windows, model.time_conv_window_size))
 
                         activations[roll_depth].append(forward_activation)
                         rolls[roll_depth].append(roll)

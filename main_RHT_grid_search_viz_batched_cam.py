@@ -1,22 +1,16 @@
 import pickle
-import os
 import time
 import warnings
 
-import mne
-import numpy as np
-from matplotlib import pyplot as plt
-from sklearn.metrics import roc_curve, auc
-from torch import nn
 import torch
+from matplotlib import pyplot as plt
 
-from renaanalysis.learning.HT_cam_viz import ht_eeg_viz_cam
-from renaanalysis.learning.HT_viz import ht_viz, ht_eeg_viz_multimodal_batch
-from renaanalysis.utils.utils import remove_value
-from renaanalysis.learning.train import eval_test
-from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_samples
-from renaanalysis.params.params import *
 from renaanalysis.learning.HT import HierarchicalTransformer, Attention
+from renaanalysis.learning.HT_cam_viz import ht_eeg_viz_cam
+from renaanalysis.learning.HT_viz import ht_viz
+from renaanalysis.params.params import *
+from renaanalysis.utils.utils import remove_value
+from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_samples
 
 search_params = ['num_heads', 'patch_embed_dim', "feedforward_mlp_dim", "dim_head"]
 metric = 'folds test auc'
@@ -31,16 +25,16 @@ nfolds = 1
 use_ordered = True
 viz_pca_ica = False
 dataset_name = 'auditory_oddball'
-
+result_root = 'RHT_grid_search'
 colors = {1: 'red', 7: 'blue'}
 
 ########################################################################################################################
 
 mmarray = pickle.load(open(f'{export_data_root}/{dataset_name}_mmarray_class-weight.p', 'rb'))
 
-training_histories = pickle.load(open(f'HT_grid/{dataset_name}/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
-locking_performance = pickle.load(open(f'HT_grid/{dataset_name}/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
-models = pickle.load(open(f'HT_grid/{dataset_name}/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+training_histories = pickle.load(open(f'{result_root}/{dataset_name}/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+locking_performance = pickle.load(open(f'{result_root}/{dataset_name}/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+models = pickle.load(open(f'{result_root}/{dataset_name}/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
 
 criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(list(models.values())[0][0], device='cuda:0' if torch.cuda.is_available() else 'cpu')
 if use_ordered:
@@ -97,7 +91,7 @@ if is_plot_epochs:
         t_start = time.perf_counter()
         ht_eeg_viz_cam(best_model, mmarray, Attention, device, rollout_data_root,
                               note='', load_saved_rollout=False, head_fusion=head_fusion, cls_colors=mmarray.event_viz_colors,
-                              discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, batch_size=256, use_ordered=use_ordered)
+                              discard_ratio=discard_ratio, is_pca_ica=is_pca_ica, pca=pca, ica=ica, batch_size=16, use_ordered=use_ordered)
         print("ht viz batched took {} seconds".format(time.perf_counter() - t_start))
     else:
         visualize_eeg_samples(x_eeg_test[viz_indc if viz_both else non_target_indc], y_test[viz_indc if viz_both else non_target_indc], colors, this_picks)

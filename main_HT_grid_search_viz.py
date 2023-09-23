@@ -166,13 +166,13 @@ if is_plot_ROC:
         for i in range(len(model_list)):
             model = model_list[i]
             new_model = HierarchicalTransformer(180, 20, 200, num_classes=2,
-                                    extraction_layers=None,
-                                    depth=params['depth'], num_heads=params['num_heads'],
-                                    feedforward_mlp_dim=params['feedforward_mlp_dim'],
-                                    pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
-                                    dim_head=params['dim_head'], emb_dropout=params['emb_dropout'],
-                                    attn_dropout=params['attn_dropout'], output=params['output'],
-                                    training_mode='classification')
+                                                extraction_layers=None,
+                                                depth=params['depth'], num_heads=params['num_heads'],
+                                                feedforward_mlp_dim=params['feedforward_mlp_dim'],
+                                                pool=params['pool'], patch_embed_dim=params['patch_embed_dim'],
+                                                dim_head=params['dim_head'], emb_dropout=params['emb_dropout'],
+                                                attn_dropout=params['attn_dropout'], output=params['output'],
+                                                training_mode='classification')
             model = new_model.load_state_dict(model.state_dict())
             test_auc_model, test_loss_model, test_acc_model, num_test_standard_error, num_test_target_error, y_all, y_all_pred = eval(
                 model, x_eeg_pca_ica_test, y_test, criterion, last_activation, _encoder,
