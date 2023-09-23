@@ -154,7 +154,7 @@ def interaug(timg, label, encoder):
     aug_data = []
     aug_label = []
     for cls4aug in range(4):
-        cls_idx = np.where(np.all(label.cpu().numpy() == encoder(np.array(cls4aug).reshape(1, 1)), axis=1))[0]
+        cls_idx = np.where(np.all(label == encoder(np.array(cls4aug).reshape(1, 1)), axis=1))[0]
         tmp_data = timg[cls_idx]
         tmp_label = encoder(np.array(cls4aug).reshape(1, 1))
 

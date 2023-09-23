@@ -7,6 +7,7 @@ import time
 import matplotlib.pyplot as plt
 import torch
 
+from renaanalysis.learning.HT import HierarchicalTransformer
 from renaanalysis.learning.RHT import RecurrentHierarchicalTransformer
 from renaanalysis.learning.grid_search import grid_search_ht_eeg
 from renaanalysis.params.params import *
@@ -52,7 +53,7 @@ grid_search_params = {
 
     # "dim_head": [64],
     "dim_head": [128],
-    "attn_dropout": [0.3],
+    "attn_dropout": [0.0],
     "emb_dropout": [0.5],
     "ff_dropout": [0.1],
 
@@ -62,8 +63,8 @@ grid_search_params = {
 
     "lr_scheduler_type": ['cosine'],
 
-    # "pos_embed_mode": ['learnable'],
-    "pos_embed_mode": ['sinusoidal'],
+    "pos_embed_mode": ['learnable'],
+    # "pos_embed_mode": ['sinusoidal'],
 
     # "output": ['single'],
     "output": ['multi'],
@@ -95,9 +96,9 @@ else:
 param_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name,
                                                                    batch_size = batch_size,
                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed,
-                                                                   use_ordered_batch=True,
+                                                                   use_ordered_batch=False,
                                                                     is_augment_batch=is_augment_batch,
-                                                                   model_class=RecurrentHierarchicalTransformer,
+                                                                   model_class=HierarchicalTransformer,
                                                                    use_scheduler=use_scheduler)
 if task_name == TaskName.PreTrain:
     pickle.dump(training_histories,

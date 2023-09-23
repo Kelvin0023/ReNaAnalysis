@@ -352,7 +352,8 @@ class RecurrentHierarchicalTransformer(nn.Module):
     def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, physio_type=eeg_name, depth=4, num_heads=8, feedforward_mlp_dim=32, pool='cls',
                  patch_embed_dim=128, dim_head=64, attn_dropout=0.0, emb_dropout=0.1, ff_dropout=0.1, output='multi', n_participant=13, mem_len=1,
                  reset_mem_each_session=False, pos_embed_mode='learnable',
-                 window_duration=0.1,
+                 time_conv_window=0.1,
+                 time_conv_strid=0.05,
                  token_recep_field = 0.3,
                  token_recep_field_overlap = 0.2,
                  *args, **kwargs):
@@ -372,16 +373,14 @@ class RecurrentHierarchicalTransformer(nn.Module):
         self.depth = depth
         self.num_heads = num_heads
         self.dim_head = dim_head
-        self.window_duration = window_duration
+        self.time_conv_window = time_conv_window
         self.physio_type = physio_type
 
         self.num_channels = num_channels
         self.num_timesteps = num_timesteps
         self.patch_embed_dim = patch_embed_dim
-        self.patch_length = int(window_duration * sampling_rate)
-        self.num_windows = num_timesteps // self.patch_length
-        self.num_patches = self.num_channels * self.num_windows
-
+        self.time_conv_window_size = int(time_conv_window * sampling_rate)
+        self.time_conv_stride = int(time_conv_strid * sampling_rate)
 
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
 
@@ -391,17 +390,16 @@ class RecurrentHierarchicalTransformer(nn.Module):
         #     Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
         #     nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, self.patch_length), bias=True),
         # )
-        t_conv_stride = 10
-        self.pool_size = int(sampling_rate * (token_recep_field - window_duration) // t_conv_stride)
-        self.pool_stride = (int(sampling_rate * (token_recep_field - window_duration - token_recep_field_overlap)) + self.patch_length)  // t_conv_stride
-        self.n_conv_tokens = int((self.num_timesteps - self.patch_length) // t_conv_stride + 1)  # denominator is the stride of the time conv
+        self.pool_size = int(sampling_rate * (token_recep_field - time_conv_window) // self.time_conv_stride)
+        self.pool_stride = (int(sampling_rate * (token_recep_field - time_conv_window - token_recep_field_overlap)) + self.time_conv_window_size) // self.time_conv_stride
+        self.n_conv_tokens = int((self.num_timesteps - self.time_conv_window_size) // self.time_conv_stride + 1)  # denominator is the stride of the time conv
         self.n_tokens = int((self.n_conv_tokens - self.pool_size) // self.pool_stride + 1)
 
         self.grid_dims = 1, self.n_tokens
 
         self.to_patch_embedding = nn.Sequential(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
-            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.patch_length), stride=(1, t_conv_stride), bias=True),
+            nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.time_conv_window_size), stride=(1, self.time_conv_stride), bias=True),
             nn.Conv2d(patch_embed_dim, patch_embed_dim, (self.num_channels, 1), (1, 1)),
             nn.BatchNorm2d(patch_embed_dim),
             nn.ELU(),
@@ -474,9 +472,10 @@ class RecurrentHierarchicalTransformer(nn.Module):
 
         # get discretized time for each token
         # discretized_start_times = args[3]  // self.window_duration
-        mem_timesteps = int(self.transformer.mems[0][0].size(1) / self.num_channels) if (self.transformer.mems is not None and torch.numel(self.transformer.mems[0][0]) != 0) else 0
-        mem_num_epochs = mem_timesteps // self.num_windows
-        tlen = mem_timesteps + self.n_tokens
+        # mem_timesteps = int(self.transformer.mems[0][0].size(1) / self.num_channels) if (self.transformer.mems is not None and torch.numel(self.transformer.mems[0][0]) != 0) else 0
+        # mem_num_epochs = mem_timesteps // self.num_windows
+        # tlen = mem_timesteps + self.n_tokens
+        tlen = self.n_tokens
 
         participant_pos = torch.unique(x['subject_id']).to(int)
         assert len(torch.unique(x['subject_id']) == 0), 'only one subject per batch is supported'
@@ -529,10 +528,11 @@ class RecurrentHierarchicalTransformer(nn.Module):
             cls_tokens_pos_embedding = repeat(self.cls_token_pos_embedding, '1 1 h d -> b 1 h d', b=b)
 
         # insert cls pos embedding based on the number of mem steps
-        for i in range(mem_num_epochs + 1):
-            time_pos_embed = torch.cat((time_pos_embed[:, :i * ntoken, :], cls_tokens_pos_embedding, time_pos_embed[:, i * ntoken:, :]), dim=1)  # only time pos embedding can be of klen before the transformer
+        # for i in range(mem_num_epochs + 1):
+        #     time_pos_embed = torch.cat((time_pos_embed[:, :i * ntoken, :], cls_tokens_pos_embedding, time_pos_embed[:, i * ntoken:, :]), dim=1)  # only time pos embedding can be of klen before the transformer
         # channel_pos_embed = torch.cat((cls_tokens_pos_embedding, channel_pos_embed), dim=1)
         participant_pos_embed = torch.cat((cls_tokens_pos_embedding, participant_pos_embed), dim=1)
+        time_pos_embed = torch.cat((cls_tokens_pos_embedding, time_pos_embed), dim=1)
 
         # time_pos_embed = self.dropout(time_pos_embed)
         # channel_pos_embed = self.dropout(channel_pos_embed)

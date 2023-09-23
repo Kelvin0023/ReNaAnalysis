@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import torch
 from sklearn.model_selection import ParameterGrid
 
@@ -93,12 +94,12 @@ def get_grid_search_test_name(grid_search_params):
 #     return locking_performance, total_training_histories, models_param
 
 def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int,
-                       num_classes= 2,
                        physio_type=eeg_name,
                        test_size=0.1, val_size=0.1,
                        is_pca_ica=False,
                         batch_size=32,
                        task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, picks_sbj_run=None, is_augment_batch=False, use_ordered_batch=False,
+                        use_scheduler=True,
                        model_class=HierarchicalTransformer):
     """
 
@@ -118,6 +119,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
     """
     assert physio_type in mmarray.keys(), f"grid_search_ht: {physio_type} is not in x {mmarray.keys()} , please check the input dataset has {physio_type} data"
     test_name = get_grid_search_test_name(grid_search_params)
+    num_classes = len(np.unique(mmarray.labels_array))
 
     # get meta information about the training data
     num_channels, num_timesteps = mmarray[physio_type].get_pca_ica_array().shape[1:] if is_pca_ica else mmarray[physio_type].array.shape[1:]
@@ -150,7 +152,8 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
         'picks_sbj_run': picks_sbj_run,
         'is_augment_batch': is_augment_batch,
         'use_ordered': use_ordered_batch,
-        'batch_size': batch_size
+        'batch_size': batch_size,
+        'use_scheduler': use_scheduler
     }
 
     for model_params in param_grid:
