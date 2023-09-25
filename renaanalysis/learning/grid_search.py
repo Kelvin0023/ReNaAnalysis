@@ -1,4 +1,5 @@
 import os
+import pickle
 
 import numpy as np
 import torch
@@ -94,6 +95,7 @@ def get_grid_search_test_name(grid_search_params):
 #     return locking_performance, total_training_histories, models_param
 
 def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int,
+                    training_results_path="",
                        physio_type=eeg_name,
                        test_size=0.1, val_size=0.1,
                        is_pca_ica=False,
@@ -117,6 +119,10 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
     @param is_plot_rebalanced_eeg: if true,
     @return:
     """
+    assert os.path.exists(training_results_path), f"grid_search_ht_eeg: {training_results_path} does not exist"
+    model_check_points_dir = os.path.join(training_results_path, 'model_check_points')
+    if not os.path.exists(model_check_points_dir):
+        os.makedirs(model_check_points_dir, exist_ok=True)
     assert physio_type in mmarray.keys(), f"grid_search_ht: {physio_type} is not in x {mmarray.keys()} , please check the input dataset has {physio_type} data"
     test_name = get_grid_search_test_name(grid_search_params)
     num_classes = len(np.unique(mmarray.labels_array))
@@ -130,7 +136,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
     # variables to save the results
     total_training_histories = {}
     models_param = {}
-    locking_performance = {}
+    param_performance = {}
 
     # decide the training function based on the task name
     if task_name == TaskName.TrainClassifier:
@@ -161,39 +167,27 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
         train_params['model'] = model_class(num_timesteps, num_channels, fs, num_classes=num_classes, physio_type=physio_type, **model_params)
         results = train_func(**train_params, **model_params)
 
+        folds_metrics = {}
         if task_name == TaskName.TrainClassifier:
             models, training_histories, criterion, _, test_auc, test_loss, test_acc = results
+            folds_metrics['folds_train_acc'], folds_metrics['folds_val_acc'], folds_metrics['folds_val_auc'] = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_max_sublists(training_histories['auc_val'])
         elif task_name == TaskName.PreTrain:
             models, training_histories, criterion, last_activation = results
+        folds_metrics['folds_train_loss'], folds_metrics['folds_val_loss'] = mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
 
-        if task_name == TaskName.PreTrain:
-            folds_train_loss, folds_val_loss = mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
-            print(f'{test_name} with param {model_params}: folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss} ')
+        hashable_params = tuple(model_params.items())
+        total_training_histories[hashable_params] = training_histories
+        models_param[hashable_params] = models
 
-            hashable_params = tuple(model_params.items())
-            locking_performance[hashable_params] = {'folds val loss': folds_val_loss,
-                                                    'folds trian loss': folds_train_loss,
-                                                    'folds test loss': training_histories['loss_test']}
-            total_training_histories[hashable_params] = training_histories
-            models_param[hashable_params] = models
-            if not os.path.exists('HT_grid_pretrain'):
-                os.mkdir('HT_grid_pretrain')
-            for i in range(n_folds):
-                torch.save(models[i], os.path.join(model_save_dir, test_name + f"_lr_{model_params['lr']}_dimhead_{model_params['dim_head']}_feeddim_{model_params['feedforward_mlp_dim']}_numheads_{model_params['num_heads']}_patchdim_{model_params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt"))
-        else:
-            folds_train_acc, folds_val_acc, folds_train_loss, folds_val_loss = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
-            folds_val_auc = mean_max_sublists(training_histories['auc_val'])
-            print(f'{test_name} with param {model_params}: folds val AUC {folds_val_auc}, folds val accuracy: {folds_val_acc}, folds train accuracy: {folds_train_acc}, folds val loss: {folds_val_loss}, folds train loss: {folds_train_loss}, ')
+        print(f"{test_name} with param {model_params}: {[ f'{key}: {value}' for key, value in folds_metrics.items()]}")
+        param_performance[hashable_params] = folds_metrics
 
-            hashable_params = tuple(model_params.items())
-            locking_performance[hashable_params] = {'folds val auc': folds_val_auc, 'folds val acc': folds_val_acc, 'folds train acc': folds_train_acc, 'folds val loss': folds_val_loss,'folds train loss': folds_train_loss, 'folds test auc': training_histories['auc_test']}
-            total_training_histories[hashable_params] = training_histories
-            models_param[hashable_params] = models
-            if not os.path.exists('HT_grid'):
-                os.mkdir('HT_grid')
-            for i in range(n_folds):
-                torch.save(models[i], f"HT_grid/lr_{model_params['lr']}_dimhead_{model_params['dim_head']}_feeddim_{model_params['feedforward_mlp_dim']}_numheads_{model_params['num_heads']}_patchdim_{model_params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt")
-    return locking_performance, total_training_histories, models_param
+        for i in range(n_folds):
+            torch.save(models[i], os.path.join(model_save_dir, test_name + f"_lr_{model_params['lr']}_dimhead_{model_params['dim_head']}_feeddim_{model_params['feedforward_mlp_dim']}_numheads_{model_params['num_heads']}_patchdim_{model_params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt"))
+        pickle.dump(total_training_histories, open(os.path.join(training_results_path, f'model_training_histories_pcaica_{is_pca_ica}.p'), 'wb'))
+        pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_performances_pcaica_{is_pca_ica}.p'), 'wb'))
+        pickle.dump(models_param, open(os.path.join(training_results_path, f'models_with_params_pca_{is_pca_ica}.p'), 'wb'))
+    return param_performance, total_training_histories, models_param
 
 
 # def grid_search_ht_fnirs(grid_search_params, mmarray: MultiModalArrays, n_folds: int,

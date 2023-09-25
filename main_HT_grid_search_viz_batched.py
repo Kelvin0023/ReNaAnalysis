@@ -30,11 +30,13 @@ nfolds = 1
 use_ordered = True
 viz_pca_ica = False
 dataset_name = 'auditory_oddball'
-mmarray = pickle.load(open(f'{export_data_root}/{dataset_name}_mmarray_class-weight.p', 'rb'))
+mmarray = pickle.load(open(f'{export_data_root}/{dataset_name}_mmarray.p', 'rb'))
+model_class = HierarchicalTransformer
 
-training_histories = pickle.load(open(f'HT_grid/{dataset_name}/model_training_histories_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
-locking_performance = pickle.load(open(f'HT_grid/{dataset_name}/model_locking_performances_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
-models = pickle.load(open(f'HT_grid/{dataset_name}/models_with_params_pca_{viz_pca_ica}_chan_{is_by_channel}.p', 'rb'))
+
+training_histories = pickle.load(open(f'grid_search/{model_class.__name__}/{dataset_name}/model_training_histories_pca_{viz_pca_ica}.p', 'rb'))
+locking_performance = pickle.load(open(f'grid_search/{model_class.__name__}/{dataset_name}/model_locking_performances_pca_{viz_pca_ica}.p', 'rb'))
+models = pickle.load(open(f'grid_search/{model_class.__name__}/{dataset_name}/models_with_params_pca_{viz_pca_ica}.p', 'rb'))
 
 criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(list(models.values())[0][0], device='cuda:0' if torch.cuda.is_available() else 'cpu')
 # x_test, y_test = mmarray.get_test_set(device=device, return_metainfo=True, shuffle_within_batches=True)

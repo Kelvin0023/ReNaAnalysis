@@ -2,6 +2,7 @@
 import os
 import pickle
 import time
+from datetime import datetime
 
 # analysis parameters ######################################################################################
 import matplotlib.pyplot as plt
@@ -33,13 +34,14 @@ data_root = r'D:\Dropbox\Dropbox\EEGDatasets\BCICompetitionIV2a'
 dataset_name = 'BCICIVA'
 mmarray_fn = f'{dataset_name}_mmarray.p'
 task_name = TaskName.TrainClassifier
+model_class = HierarchicalTransformer
 
 batch_size = 16
 
-training_results_dir = 'RHT_grid_search'
+date_time_str = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
+training_results_dir = f'grid_search/{model_class.__name__}_{dataset_name}_{date_time_str}'
 training_results_path = os.path.join(os.getcwd(), training_results_dir)
-if not os.path.exists(training_results_path):
-    os.mkdir(training_results_path)
+os.makedirs(training_results_path, exist_ok=True)
 
 grid_search_params = {
     # "depth": [6],
@@ -93,21 +95,12 @@ else:
     mmarray = pickle.load(open(mmarray_path, 'rb'))
 
 
-param_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name,
+param_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds,
+                                                                    training_results_path=training_results_path,
+                                                                   task_name=task_name,
                                                                    batch_size = batch_size,
                                                                     is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed,
                                                                    use_ordered_batch=False,
                                                                     is_augment_batch=is_augment_batch,
-                                                                   model_class=HierarchicalTransformer,
+                                                                   model_class=model_class,
                                                                    use_scheduler=use_scheduler)
-if task_name == TaskName.PreTrain:
-    pickle.dump(training_histories,
-                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
-    pickle.dump(param_performance,
-                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
-else:
-    pickle.dump(training_histories, open(os.path.join(training_results_path, f'model_training_histories_pcaica_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
-    pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_performances_pcaica_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
-    pickle.dump(models, open(os.path.join(training_results_path, f'models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
-
