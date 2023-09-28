@@ -24,8 +24,6 @@ is_regenerate_epochs = True
 eeg_baseline = None
 
 eeg_resample_rate = 250
-is_augment_batch = False
-use_scheduler = False
 
 
 reject = None  # whether to apply auto rejection
@@ -42,6 +40,19 @@ date_time_str = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
 training_results_dir = f'grid_search/{model_class.__name__}_{dataset_name}_{date_time_str}'
 training_results_path = os.path.join(os.getcwd(), training_results_dir)
 os.makedirs(training_results_path, exist_ok=True)
+
+
+# train parameters won't be used in grid search, they also won't be used in model creation
+train_params = {
+    'epochs': 1000,
+    'patience': 200,
+    'batch_size': batch_size,
+    'use_ordered_batch': False,
+    'is_augment_batch': False,
+    'use_scheduler': False,
+    'test_size': 0.1,
+    'val_size': 0.1,
+}
 
 grid_search_params = {
     # "depth": [6],
@@ -98,9 +109,6 @@ else:
 param_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds,
                                                                     training_results_path=training_results_path,
                                                                    task_name=task_name,
-                                                                   batch_size = batch_size,
-                                                                    is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed,
-                                                                   use_ordered_batch=False,
-                                                                    is_augment_batch=is_augment_batch,
-                                                                   model_class=model_class,
-                                                                   use_scheduler=use_scheduler)
+                                                                    is_plot_confusion_matrix=is_plot_confusion_matrix,
+                                                                   random_seed=random_seed,
+                                                                   model_class=model_class, **train_params)

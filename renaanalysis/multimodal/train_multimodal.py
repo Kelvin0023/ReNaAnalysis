@@ -17,8 +17,8 @@ from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_his
 
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, l2_weight=1e-6, val_size=0.1, test_size=0.1,
-                                     lr_scheduler_type='exponential', is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30,
-                                     use_ordered=False, picks_sbj_run=None, is_augment_batch=False, batch_size=32, use_scheduler=True, *args, **kwargs):
+                                     lr_scheduler_type=None, is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30,
+                                     use_ordered=False, picks_sbj_run=None, is_augment_batch=False, batch_size=32, *args, **kwargs):
     """
 
     """
@@ -61,7 +61,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr, betas=(0.5, 0.999))
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)
-        if use_scheduler: scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+        if lr_scheduler_type: scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
         patience_counter = 0
 
@@ -90,7 +90,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
                 num_train_standard_errors.append(num_train_standard_error)
                 num_train_target_errors.append(num_train_target_error)
                 viz_confusion_matrix(train_true_label_all, train_predicted_labels_all, epoch, f_index, 'train')
-            if use_scheduler: scheduler.step()
+            if lr_scheduler_type: scheduler.step()
             # ht_viz_training(X, Y, model_copy, rollout, _encoder, device, epoch)
             val_auc, val_loss, val_accuracy, num_val_standard_error, num_val_target_error, val_y_all, val_y_all_pred = _run_one_epoch_classification(model_copy, val_dataloader, criterion, last_activation, optimizer, mmarray._encoder, rebalance_method=mmarray.rebalance_method, mode='val', device=device, l2_weight=l2_weight, test_name=test_name, task_name=task_name, is_augment_batch=is_augment_batch)
             if hasattr(model, 'reset'): model.reset()

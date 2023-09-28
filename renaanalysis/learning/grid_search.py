@@ -94,15 +94,12 @@ def get_grid_search_test_name(grid_search_params):
 #                 torch.save(models[i], f"HT_grid/lr_{params['lr']}_dimhead_{params['dim_head']}_feeddim_{params['feedforward_mlp_dim']}_numheads_{params['num_heads']}_patchdim_{params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt")
 #     return locking_performance, total_training_histories, models_param
 
-def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int,
-                    training_results_path="",
+def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: int, model_class=HierarchicalTransformer,
+                        training_results_path="",
                        physio_type=eeg_name,
-                       test_size=0.1, val_size=0.1,
                        is_pca_ica=False,
-                        batch_size=32,
-                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None, picks_sbj_run=None, is_augment_batch=False, use_ordered_batch=False,
-                        use_scheduler=True,
-                       model_class=HierarchicalTransformer):
+                       task_name=TaskName.PreTrain, is_plot_confusion_matrix=False, random_seed=None,
+                       picks_sbj_run=None, *args, **kwargs):
     """
 
     @param grid_search_params:
@@ -146,21 +143,16 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
     elif task_name == TaskName.PretrainedClassifierFineTune:
         raise NotImplementedError("PretrainedClassifierFineTune is not implemented yet")
 
-    train_params = {
+    train_params = {**{
         'mmarray': mmarray,
         'test_name': test_name,
         'task_name': task_name,
         'n_folds': n_folds,
         'is_plot_conf_matrix': is_plot_confusion_matrix,
         'random_seed': random_seed,
-        'test_size': test_size,
-        'val_size': val_size,
         'picks_sbj_run': picks_sbj_run,
-        'is_augment_batch': is_augment_batch,
-        'use_ordered': use_ordered_batch,
-        'batch_size': batch_size,
-        'use_scheduler': use_scheduler
-    }
+    }, **kwargs}
+
 
     for model_params in param_grid:
         print(f"Grid search params: {model_params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")

@@ -284,7 +284,7 @@ class HierarchicalTransformer(nn.Module):
         self.num_timesteps = num_timesteps
         self.token_embed_dim = patch_embed_dim
         self.time_conv_window_size = int(time_conv_window * sampling_rate)
-        self.time_conv_stride = int(time_conv_strid * sampling_rate)
+        self.time_conv_stride = max(int(time_conv_strid * sampling_rate), 1)
         self.num_windows = num_timesteps // self.time_conv_window_size
 
         self.num_patches = self.num_channels * self.num_windows

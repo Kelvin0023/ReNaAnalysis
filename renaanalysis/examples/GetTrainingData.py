@@ -1,4 +1,5 @@
 import os
+import pickle
 
 import torch
 
@@ -9,6 +10,7 @@ data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'  # IMPO
 export_data_root = 'C:/Data'  # location to save preloaded data
 
 dataset_name = 'auditory_oddball'
+export_dataloader_dir = fr'C:\Data\DataLoaders\{dataset_name}'
 '''
 dataset_name 
     auditory_oddball for erp
@@ -25,13 +27,29 @@ eeg_resample_rate = 200
 
 
 # training parameters
-n_folds = 2
+n_folds = 5
 epochs = 100
 test_size = 0.1
 val_size = 0.1
 batch_size = 16
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model_output_mode = 'multi'  # 'single' or 'multi', use single for BCE loss and multi for CE loss, we generally use multi even for binary classification
+
+
+meta_info = {
+    'n_folds': n_folds,
+    'epochs': epochs,
+    'test_size': test_size,
+    'val_size': val_size,
+    'batch_size': batch_size,
+    'eeg_resample_rate': eeg_resample_rate,
+    'reject': reject,
+    'is_pca_ica': is_pca_ica,
+    'eeg_baseline': eeg_baseline,
+    'random_seed': random_seed,
+}
+os.makedirs(export_dataloader_dir, exist_ok=True)
+pickle.dump(meta_info, open(os.path.join(export_dataloader_dir, 'meta_info.p'), 'wb'))
 
 '''
 mmarray: MultiModalArray is our data structure that contains all the data
@@ -48,8 +66,12 @@ mmarray.get_label_encoder_criterion(model_output_mode)  # get label encoder and 
 mmarray.test_train_val_split(n_folds, test_size=test_size, val_size=val_size, random_seed=random_seed)  # split data into training, validation and test sets
 test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, device=device) # get test dataloader, this is outside of the fold loop because we only need one test set
 
+pickle.dump(test_dataloader, open(os.path.join(export_dataloader_dir, 'test_dataloader.p'), 'wb'))
+
 for fold_index in range(n_folds):
     train_dataloader, val_dataloader = mmarray.get_dataloader_fold(fold_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=False)
+    pickle.dump(train_dataloader, open(os.path.join(export_dataloader_dir, f'train_dataloader_fold{fold_index}.p'), 'wb'))
+    pickle.dump(val_dataloader, open(os.path.join(export_dataloader_dir, f'val_dataloader_fold{fold_index}.p'), 'wb'))
     for epoch in range(epochs):
         for batch_data in train_dataloader:
             y = batch_data['y']  # this is the label

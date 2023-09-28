@@ -83,29 +83,24 @@ grid_search_params = {
     "depth": [4],
     "num_heads": [8],
     "pool": ['cls'],
-    "feedforward_mlp_dim": [32],
+    "feedforward_mlp_dim": [256],
 
-    # "patch_embed_dim": [64, 128, 256],
-    "patch_embed_dim": [128],
+    "patch_embed_dim": [256],
 
-    "dim_head": [64],
-    "attn_dropout": [0.5],
+    "dim_head": [128],
+    "attn_dropout": [0.0],
     "emb_dropout": [0.5],
     "lr": [1e-4],
     "l2_weight": [1e-5],
 
     "pos_embed_mode": ['learnable'],
-    # "pos_embed_mode": ['sinusoidal'],
 
-    # "lr_scheduler_type": ['cosine'],
     "lr_scheduler_type": ['cosine'],
     "output": ['multi'],
-    'temperature' : [0.1],
-    'n_neg': [1],
-    'p_t': [0.1],
-    'p_c': [0.25],
-    'mask_t_span': [1],
-    'mask_c_span': [5]
+
+    "time_conv_strid": 0.005,
+    "token_recep_field": 0.4,
+    'time_conv_window': 0.1,
 }
 
 
