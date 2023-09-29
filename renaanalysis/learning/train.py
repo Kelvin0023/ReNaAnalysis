@@ -17,7 +17,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
 
-from renaanalysis.learning.Conformer import interaug
+from renaanalysis.learning.Conformer import interaug_encoded, interaug
 from renaanalysis.learning.HATC import HierarchicalAutoTranscoder
 from renaanalysis.learning.HT import ContrastiveLoss
 
@@ -609,7 +609,7 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
         if mode == 'train':
             optimizer.zero_grad()
             if is_augment_batch:
-                aug_data, aug_labels = interaug(dataloader.mm_dataset.data['eeg'][:, None, :, :], dataloader.labels, encoder)
+                aug_data, aug_labels = interaug(dataloader.dataset.data_np['eeg'][:, None, :, :], dataloader.dataset.labels_np)
                 aug_data = torch.squeeze(aug_data, dim=1)
                 aug_data = aug_data.to(device)
                 aug_labels = aug_labels.to(device)
@@ -676,14 +676,15 @@ def _run_one_epoch_classification(model, dataloader, criterion, last_activation,
             true_label = y_tensor
         else:
             predicted_labels = torch.argmax(y_pred_postlogits, dim=1)
-            true_label = torch.argmax(y_tensor, dim=1)
+            true_label = torch.argmax(y_tensor, dim=1) if len(y_tensor.shape) > 1 else y_tensor
         num_correct_preds += torch.sum(true_label == predicted_labels).item()
         num_standard_errors += count_standard_error(true_label, predicted_labels)
         num_target_errors += count_target_error(true_label, predicted_labels)
         if verbose >= 1: pbar.set_description('{} [{}]: loss:{:.8f}'.format(mode, mini_batch_i, loss.item()))
 
     if verbose >= 1: pbar.close()
-    return metrics.roc_auc_score(y_all, y_all_pred_post_logits), np.mean(batch_losses), num_correct_preds / num_epochs, num_standard_errors, num_target_errors, y_all, y_all_pred_post_logits
+    _y_all = encoder(y_all) if len(y_all.shape) == 1 else y_all
+    return metrics.roc_auc_score(_y_all, y_all_pred_post_logits), np.mean(batch_losses), num_correct_preds / num_epochs, num_standard_errors, num_target_errors, y_all, y_all_pred_post_logits
 
 
 # def _run_one_epoch_classification_ordered_batch(model, dataloader, criterion, last_activation, optimizer, mode, l2_weight=1e-5, device=None, test_name='',

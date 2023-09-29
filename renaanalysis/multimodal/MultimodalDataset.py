@@ -47,6 +47,11 @@ class MultiModalDataset(Dataset):
         self.use_meta_info = use_meta_info
         self.n_samples = n_data_samples if indices is None else len(indices)
 
+        # keep np copies
+        self.data_np = {physio_type: d.copy() for physio_type, d in self.data.items()}
+        self.meta_info_np = {meta_name: d.copy() for meta_name, d in self.meta_info.items()}
+        self.labels_np = self.labels.copy() if self.labels is not None else None
+
     def __len__(self):
         return self.n_samples
 
@@ -94,4 +99,4 @@ class MultiModalDataset(Dataset):
         self.data = batch_to_tensor(self.data, device)
         self.meta_info = batch_to_tensor(self.meta_info, device)
         if self.labels is not None:
-            self.labels = torch.tensor(self.labels, device=device)
+            self.labels = torch.tensor(self.labels, device=device).to(torch.long)

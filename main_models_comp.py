@@ -86,12 +86,12 @@ train_params = {
     'epochs': 1000,
     'patience': 200,
     'batch_size': 16,
-    'use_ordered_batch': False,
+    'use_ordered': False,
     'is_augment_batch': False,
     'use_scheduler': False,
     'test_size': 0.1,
     'val_size': 0.1,
-    'n_folds': 3,
+    'n_folds': 3,  # TODO motorimagery's n_fold must be set to 1, otherwise it will have error
 }
 
 datasets = {

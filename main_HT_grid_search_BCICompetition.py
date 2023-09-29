@@ -31,12 +31,12 @@ dataset_params = {
 
 
 train_params = {
-    'n_folds': 2,
+    'n_folds': 1,
     'epochs': 1000,
     'patience': 200,
-    'batch_size': 16,
-    'use_ordered_batch': False,
-    'is_augment_batch': False,
+    'batch_size': 72,
+    'use_ordered': False,
+    'is_augment_batch': True,
     'use_scheduler': False,
     'test_size': 0.0,
     'val_size': 0.1,  # doesn't matter because we are using predefined splits
@@ -45,37 +45,37 @@ train_params = {
     'model_class': HierarchicalTransformer,
     'is_plot_confusion_matrix': False,
 
+    'encode_y': False,
+
     'grid_search_params': {
-    # "depth": [6],
-    "depth": [4],
-    "num_heads": [8],
-    "pool": ['cls'],
-    "feedforward_mlp_dim": [256],
-    # "feedforward_mlp_dim": [32],
+        "depth": [4],
+        "num_heads": [8],
+        "pool": ['cls'],
+        "feedforward_mlp_dim": [256],
 
-    "patch_embed_dim": [256],
+        "patch_embed_dim": [64],
 
-    # "dim_head": [64],
-    "dim_head": [128],
-    "attn_dropout": [0.0],
-    "emb_dropout": [0.5],
-    "ff_dropout": [0.1],
+        "dim_head": [64],
+        "attn_dropout": [0.5],
+        "emb_dropout": [0.5],
+        "ff_dropout": [0.5],
 
-    "lr": [1e-4],
-    # "lr": [1e-3],
-    "l2_weight": [1e-5],
+        "lr": [1e-4],
+        "l2_weight": [1e-5],
 
-    "lr_scheduler_type": ['cosine'],
+        "lr_scheduler_type": [None],
 
-    "pos_embed_mode": ['learnable'],
-    # "pos_embed_mode": ['sinusoidal'],
+        "pos_embed_mode": ['learnable'],
+        # "pos_embed_mode": ['sinusoidal'],
 
-    # "output": ['single'],
-    "output": ['multi'],
+        # "output": ['single'],
+        "output": ['multi'],
 
-    "token_recep_field": [0.4],
-    "time_conv_strid": [0.005],
-    'time_conv_window': [0.1],
+        "time_conv_strid": [0.005],
+        'time_conv_window': [0.1],
+
+        "token_recep_field": [0.4],
+        "token_recep_field_overlap": [0.3]
     }
 }
 

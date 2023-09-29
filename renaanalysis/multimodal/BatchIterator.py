@@ -29,7 +29,8 @@ class OrderedBatchIterator:
         self.labels = labels
 
         # check the max sample index is no greater than the number of samples
-        assert np.max(no_none_batch_sample_indices) < len(self.data_arrays[0])
+        if len(batch_sample_indices) > 0:
+            assert np.max(no_none_batch_sample_indices) < len(self.data_arrays[0])
 
         self.batch_sample_indices = batch_sample_indices
         self.batch_size = batch_sample_indices.shape[1]

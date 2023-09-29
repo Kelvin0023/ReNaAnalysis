@@ -313,7 +313,7 @@ class HierarchicalTransformer(nn.Module):
             nn.BatchNorm2d(patch_embed_dim),
             nn.ELU(),
             nn.AvgPool2d((1, self.pool_size), (1, self.pool_stride)),
-            nn.Dropout(0.5),
+            nn.Dropout(emb_dropout),
         )
 
         # self.to_patch_embedding = ConvFeatureExtractionModel(self.extraction_layers, dropout=emb_dropout)
@@ -324,7 +324,6 @@ class HierarchicalTransformer(nn.Module):
         self.sinusoidal_pos_embedding = SinusoidalPositionalEmbedding(patch_embed_dim)
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, patch_embed_dim))
-        self.dropout = nn.Dropout(emb_dropout)
 
         self.transformer = Transformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, attn_dropout)
 
@@ -420,7 +419,6 @@ class HierarchicalTransformer(nn.Module):
 
     def encode(self, x, *args, **kwargs):
         x_eeg = x[self.physio_type] if type(x) is dict else x
-        channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
 
         x = self.to_patch_embedding(x_eeg)
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
@@ -431,6 +429,7 @@ class HierarchicalTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
+            channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
 
@@ -464,7 +463,6 @@ class HierarchicalTransformer(nn.Module):
             raise ValueError(f"pos_embed_mode must be either 'sinusoidal' or 'learnable', but got {self.pos_embed_mode}")
 
         x += pos_embed
-        x = self.dropout(x)
 
         x, att_matrix = self.transformer(x)
         # att_matrix = att_matrix[:, :, 1:, 1:]

@@ -2,111 +2,107 @@
 import os
 import pickle
 import time
+from datetime import datetime
 
 # analysis parameters ######################################################################################
 import matplotlib.pyplot as plt
 import torch
 
+from renaanalysis.learning.HT import HierarchicalTransformer
 from renaanalysis.learning.RHT import RecurrentHierarchicalTransformer
 from renaanalysis.learning.grid_search import grid_search_ht_eeg
 from renaanalysis.params.params import *
 from renaanalysis.utils.dataset_utils import get_dataset
 
 # user parameters
-n_folds = 2
-is_pca_ica = False # apply pca and ica on data or not
-is_by_channel = False # use by channel version of SMOT rebalance or not, no big difference according to experiment and ERP viz
-is_plot_confusion_matrix = False # plot confusion matrix of training and validation during training or not
-is_regenerate_epochs = True
 
-eeg_baseline = None
+dataset_params = {
+     'dataset_name': 'BCICIVA',
+     'data_root': r'D:\Dropbox\Dropbox\EEGDatasets\BCICompetitionIV2a',
+     'export_root': export_data_root,
+     'reject': None,
+     'is_apply_pca_ica_eeg': False,
+     'eeg_baseline': False,
+     'eeg_resample_rate': 250,
+     'random_seed': random_seed,
+     'rebalance_method': None,
+     'is_regenerate_epochs': True
+}
 
-eeg_resample_rate = 250
-is_augment_batch = False
-use_scheduler = False
 
+train_params = {
+    'n_folds': 1,
+    'epochs': 1000,
+    'patience': 200,
+    'batch_size': 72,
+    'use_ordered': True,
+    'is_augment_batch': False,
+    'use_scheduler': False,
+    'test_size': 0.0,
+    'val_size': 0.1,  # doesn't matter because we are using predefined splits
+    'split_picks': {'subjects': [{'train': ['A03'], 'val': ['A03']}, ], 'run': [{'train': [1], 'val': [2]}, ]},
+    'task_name': TaskName.TrainClassifier,
+    'model_class': RecurrentHierarchicalTransformer,
+    'is_plot_confusion_matrix': False,
 
-reject = None  # whether to apply auto rejection
-# data_root = 'D:/Dataset/auditory_oddball'
-data_root = r'D:\Dropbox\Dropbox\EEGDatasets\BCICompetitionIV2a'
-dataset_name = 'BCICIVA'
-mmarray_fn = f'{dataset_name}_mmarray.p'
-task_name = TaskName.TrainClassifier
+    'encode_y': False,
 
-batch_size = 16
+    'grid_search_params': {
+        "depth": [4],
+        "num_heads": [8],
+        "pool": ['cls'],
+        "feedforward_mlp_dim": [256],
 
-training_results_dir = 'RHT_grid_search'
-training_results_path = os.path.join(os.getcwd(), training_results_dir)
-if not os.path.exists(training_results_path):
-    os.mkdir(training_results_path)
+        "patch_embed_dim": [64],
 
-grid_search_params = {
-    # "depth": [6],
-    "depth": [4],
-    "num_heads": [8],
-    "pool": ['cls'],
-    "feedforward_mlp_dim": [256],
-    # "feedforward_mlp_dim": [32],
+        "dim_head": [64],
+        "attn_dropout": [0.5],
+        "emb_dropout": [0.5],
+        "ff_dropout": [0.5],
 
-    "patch_embed_dim": [256],
+        "lr": [1e-4],
+        "l2_weight": [1e-5],
 
-    # "dim_head": [64],
-    "dim_head": [128],
-    "attn_dropout": [0.3],
-    "emb_dropout": [0.5],
-    "ff_dropout": [0.1],
+        "lr_scheduler_type": [None],
 
-    "lr": [1e-4],
-    # "lr": [1e-3],
-    "l2_weight": [1e-5],
+        # "pos_embed_mode": ['learnable'],
+        "pos_embed_mode": ['sinusoidal'],
 
-    "lr_scheduler_type": ['cosine'],
+        # "output": ['single'],
+        "output": ['multi'],
 
-    # "pos_embed_mode": ['learnable'],
-    "pos_embed_mode": ['sinusoidal'],
+        "time_conv_strid": [0.005],
+        'time_conv_window': [0.1],
 
-    # "output": ['single'],
-    "output": ['multi'],
+        "token_recep_field": [0.4],
+        "token_recep_field_overlap": [0.3],
 
-    "time_conv_strid": [0.005],
-    "token_recep_field": [0.4]
+        "mem_len": [0, 1, 2, 3]
+    }
 }
 
 
 # start of the main block ######################################################
 plt.rcParams.update({'font.size': 22})
 
+date_time_str = datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
+training_results_dir = f"grid_search/{train_params['model_class'].__name__}_{dataset_params['dataset_name']}_{date_time_str}"
+training_results_path = os.path.join(os.getcwd(), training_results_dir)
+os.makedirs(training_results_path, exist_ok=True)
+dataset_params['filename'] = f"{dataset_params['dataset_name']}_mmarray.p"
+train_params['training_results_path'] = training_results_path
+
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
 
 start_time = time.time()  # record the start time of the analysis
 
-mmarray_path = os.path.join(export_data_root, mmarray_fn)
+mmarray_path = os.path.join(export_data_root, dataset_params['filename'])
 if not os.path.exists(mmarray_path):
-    mmarray = get_dataset(dataset_name, epochs_root=export_data_root, dataset_root=data_root,
-                          reject=reject, is_apply_pca_ica_eeg=is_pca_ica, is_regenerate_epochs=is_regenerate_epochs,
-                          random_seed=random_seed, rebalance_method=None, filename=mmarray_path,
-                          eeg_baseline=eeg_baseline)
-    mmarray.save()
+    train_params['mmarray'] = get_dataset(**dataset_params)
+    train_params['mmarray'].save()
 else:
-    mmarray = pickle.load(open(mmarray_path, 'rb'))
+    train_params['mmarray'] = pickle.load(open(mmarray_path, 'rb'))
 
 
-param_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name,
-                                                                   batch_size = batch_size,
-                                                                    is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed,
-                                                                   use_ordered_batch=True,
-                                                                    is_augment_batch=is_augment_batch,
-                                                                   model_class=RecurrentHierarchicalTransformer,
-                                                                   use_scheduler=use_scheduler)
-if task_name == TaskName.PreTrain:
-    pickle.dump(training_histories,
-                open(f'HT_grid/model_training_histories_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
-    pickle.dump(param_performance,
-                open(f'HT_grid/model_locking_performances_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
-    pickle.dump(models, open(f'HT_grid/models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}_pretrain.p', 'wb'))
-else:
-    pickle.dump(training_histories, open(os.path.join(training_results_path, f'model_training_histories_pcaica_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
-    pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_performances_pcaica_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
-    pickle.dump(models, open(os.path.join(training_results_path, f'models_with_params_pca_{is_pca_ica}_chan_{is_by_channel}.p'), 'wb'))
-
+param_performance, training_histories, models = grid_search_ht_eeg(**train_params)

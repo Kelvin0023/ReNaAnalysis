@@ -12,6 +12,7 @@ from torch import nn, LongTensor
 from torch.autograd import Variable
 from torch.utils.data import TensorDataset
 
+from renaanalysis.learning.HT import HierarchicalTransformer
 # from renaanalysis.learning.HT_viz import ht_eeg_viz_dataloader_batch
 from renaanalysis.utils.utils import visualize_eeg_epochs
 from torch import optim, nn
@@ -1350,9 +1351,35 @@ test_label = torch.from_numpy(test_label).long().cuda()
 test_dataset = torch.utils.data.TensorDataset(test_data, test_label)
 test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
+# model_params = {
+#             "num_classes": 4,
+#             "num_channels": 22,
+#             "num_timesteps": 1000,
+#             "sampling_rate": 250,
+#
+#             "depth": 4,
+#             "num_heads": 8,
+#             "pool": 'cls',
+#             "feedforward_mlp_dim": 256,
+#             "patch_embed_dim": 256,
+#             "dim_head": 128,
+#             "attn_dropout": 0.0,
+#             "emb_dropout": 0.5,
+#             "ff_dropout": 0.1,
+#             "lr": 1e-4,
+#             "l2_weight": 1e-5,
+#             "lr_scheduler_type": 'cosine',
+#             "pos_embed_mode": 'learnable',  # RHT is using sinusoidal positional embedding
+#             "output": 'multi',
+#             "time_conv_strid": 0.005,
+#             'time_conv_window': 0.1,
+#
+#             "token_recep_field": 0.4,
+#             "token_recep_field_overlap": 0.3
+# }
+# model = HierarchicalTransformer(**model_params).cuda()
 
 model = Conformer().cuda()
-# model = model.cuda()
 _, _, num_channels, num_timesteps = train_data.shape
 # model = EEGCNN(train_data.squeeze().shape, num_classes=4)
 # model = PhysioTransformer(num_timesteps=num_timesteps, num_channels=num_channels, sampling_rate=srate, num_classes=4,
@@ -1425,7 +1452,7 @@ for e in range(n_epochs):
         # if isinstance(model, RecurrentHierarchicalTransformer):
         #     img = torch.squeeze(img)
         #     outputs = model({'eeg': img, 'subject_id': torch.Tensor([3] * len(img)).cuda()})
-        if isinstance(model, PhysioTransformer) or isinstance(model, HierarchicalConvalueTransformer) or isinstance(model, EEGCNN):
+        if isinstance(model, HierarchicalTransformer) or isinstance(model, HierarchicalConvalueTransformer) or isinstance(model, EEGCNN):
             img = torch.squeeze(img)
             outputs = model(img)
         else:
@@ -1448,7 +1475,7 @@ for e in range(n_epochs):
         y_pred_all = torch.Tensor([]).cuda()
         test_label_all = torch.Tensor([]).cuda()
         for test_data, test_label in test_dataloader:
-            if isinstance(model, PhysioTransformer) or isinstance(model, HierarchicalConvalueTransformer) or isinstance(model, EEGCNN):
+            if isinstance(model, HierarchicalTransformer) or isinstance(model, HierarchicalConvalueTransformer) or isinstance(model, EEGCNN):
                 test_data = torch.squeeze(test_data)
                 Cls = model(test_data)
             else:

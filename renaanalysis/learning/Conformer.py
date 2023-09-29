@@ -125,7 +125,7 @@ class GELU(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         return input*0.5*(1.0+torch.erf(input/math.sqrt(2.0)))
 
-class TransformerEncoderBlock(nn.Sequential):
+class TransformerEn5coderBlock(nn.Sequential):
     def __init__(self,
                  emb_size,
                  num_heads=10,
@@ -150,11 +150,14 @@ class TransformerEncoder(nn.Sequential):
     def __init__(self, depth, emb_size):
         super().__init__(*[TransformerEncoderBlock(emb_size) for _ in range(depth)])
 
-def interaug(timg, label, encoder):
+def interaug_encoded(timg, label, encoder):
     aug_data = []
     aug_label = []
+    label_cpu = label.clone().cpu().numpy() if isinstance(label, torch.Tensor) else label
+
     for cls4aug in range(4):
-        cls_idx = np.where(np.all(label == encoder(np.array(cls4aug).reshape(1, 1)), axis=1))[0]
+
+        cls_idx = np.where(np.all(label_cpu == encoder(np.array(cls4aug).reshape(1, 1)), axis=1))[0]
         tmp_data = timg[cls_idx]
         tmp_label = encoder(np.array(cls4aug).reshape(1, 1))
 
@@ -176,6 +179,36 @@ def interaug(timg, label, encoder):
     aug_data = torch.from_numpy(aug_data)
     aug_data = aug_data.float()
     aug_label = torch.from_numpy(aug_label)
+    aug_label = aug_label.long()
+    return aug_data, aug_label
+
+
+def interaug(timg, label):
+    aug_data = []
+    aug_label = []
+    for cls4aug in range(4):
+        cls_idx = np.where(label == cls4aug)
+        tmp_data = timg[cls_idx]
+        tmp_label = label[cls_idx]
+
+        tmp_aug_data = np.zeros((int(batch_size / 4), 1, 22, 1000))
+        for ri in range(int(batch_size / 4)):
+            for rj in range(8):
+                rand_idx = np.random.randint(0, tmp_data.shape[0], 8)
+                tmp_aug_data[ri, :, :, rj * 125:(rj + 1) * 125] = tmp_data[rand_idx[rj], :, :,
+                                                                  rj * 125:(rj + 1) * 125]
+
+        aug_data.append(tmp_aug_data)
+        aug_label.append(tmp_label[:int(batch_size / 4)])
+    aug_data = np.concatenate(aug_data)
+    aug_label = np.concatenate(aug_label)
+    aug_shuffle = np.random.permutation(len(aug_data))
+    aug_data = aug_data[aug_shuffle, :, :]
+    aug_label = aug_label[aug_shuffle]
+
+    aug_data = torch.from_numpy(aug_data).cuda()
+    aug_data = aug_data.float()
+    aug_label = torch.from_numpy(aug_label).cuda()
     aug_label = aug_label.long()
     return aug_data, aug_label
 

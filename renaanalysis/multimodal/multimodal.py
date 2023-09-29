@@ -14,6 +14,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from renaanalysis.learning.HT import HierarchicalTransformerContrastivePretrain
+from renaanalysis.learning.data_utils import fill_batch_with_none_indices
 from renaanalysis.multimodal.BatchIterator import OrderedBatchIterator
 from renaanalysis.multimodal.MultimodalDataset import MultiModalDataset
 from renaanalysis.multimodal.PhysioArray import PhysioArray
@@ -228,7 +229,7 @@ class MultiModalArrays:
             val_indices_fold.append(this_val_indices)
         return [(np.array(i), np.array(j)) for (i, j) in zip(train_indices_fold, val_indices_fold)]
 
-    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, picks=None, *args, **kwargs):
+    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, encode_y=True, *args, **kwargs):
         """
         get the dataloader for a given fold
         this function must be called after training_val_split
@@ -241,15 +242,17 @@ class MultiModalArrays:
             warnings.warn("Using class_weight as rebalancing method while encoder is LabelEncoder because BCELoss can not apply class weights ")
 
         training_indices, val_indices = self.training_val_split_indices[fold_index]
-        val_dataset = MultiModalDataset(self.physio_arrays, labels=(encoded_labels := self.get_encoded_labels()), indices=val_indices)
-        # print('check if physio and label arrays are the same after previous call')
+        labels = self.get_encoded_labels() if encode_y else np.copy(self.labels_array)
+
+        val_dataset = MultiModalDataset(self.physio_arrays, labels=labels, indices=val_indices)
 
         # rebalance training set
         if self.rebalance_method == 'SMOTE' and is_rebalance_training:
+            if not encode_y: warnings.warn("Using smote may not work when not encoding y, please double check")
             train_dataset = MultiModalDataset(self.physio_arrays, labels=self.labels_array, indices=training_indices)
             train_dataset.get_rebalanced_set(random_seed=random_seed, encoder=self._encoder)
         else:
-            train_dataset = MultiModalDataset(self.physio_arrays, labels=encoded_labels, indices=training_indices)
+            train_dataset = MultiModalDataset(self.physio_arrays, labels=labels, indices=training_indices)
             # print('check if physio and label arrays are the same after previous call')
 
         val_dataset.to_tensor(device=device)
@@ -389,45 +392,12 @@ class MultiModalArrays:
         @return:
         """
         assert self.test_indices is not None or self.test_batch_sample_indices is not None, 'test indices have not been set, please call train_test_split first, or training_val_test_split_ordered_by_subject_run'
-        # if use_ordered:
-        #     test_indices = self.get_ordered_test_indices()
-        # else:
-        test_indices = self.test_indices
-        # x_test = []
-        # for parray in self.physio_arrays:
-        #     is_pca_ica_preprocessed = 'pca' in parray.data_processor.keys() or 'ica' in parray.data_processor.keys()
-        #     if is_pca_ica_preprocessed:
-        #         print("\033[93m  {}\033[00m".format('test set is pca or ica preprocessed, make sure preprocessing is needed for this model'))
-        #     else:
-        #         print("\033[93m  {}\033[00m".format('test set is not pca or ica preprocessed, make sure preprocessing is not needed for this model'))
-        #     if convert_to_tensor:
-        #         x_test.append(torch.Tensor(parray[test_indices]).to(device))
-        #     else:
-        #         x_test.append(parray[test_indices])
-        #
-        #
-        # if self.labels_array is not None:
-        #     y_test = self.labels_array[test_indices]
-        #     if encode_y:
-        #         y_test = self._encoder(y_test)
-        #     if convert_to_tensor:
-        #         y_test = torch.Tensor(y_test).to(device)
-        # else:
-        #     warnings.warn('labels array is None, make sure label is not needed for this model')
-        #     y_test = None
-        #
-        # meta_info = [{name: value[test_indices] for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
-        # meta_info = {k: v for d in meta_info for k, v in d.items()}
-        # if convert_to_tensor:
-        #     meta_info = {k: torch.Tensor(v).to(device) for k, v in meta_info.items()}
-        # test_set = (*x_test, *list(meta_info.values()), y_test) if return_metainfo else (*x_test, y_test)
 
-        # return test_set
+        test_indices = self.test_indices
 
         if self.labels_array is None:
             warnings.warn('labels array is None, make sure label is not needed for this model')
         test_set = MultiModalDataset(self.physio_arrays, labels=self.get_encoded_labels(), indices=test_indices)
-        # print('check if physio and label arrays are the same after previous call')
 
         if convert_to_tensor:
             test_set.to_tensor(device=device)
@@ -595,7 +565,7 @@ class MultiModalArrays:
             pickle.dump(copy_without_encoder, open(self.filename, 'wb'))
             raise KeyboardInterrupt
 
-    def training_val_test_split_ordered_by_subject_run(self, n_folds, batch_size, val_size, test_size, random_seed=None):
+    def training_val_test_split_ordered_by_subject_run(self, n_folds, batch_size, val_size, test_size, random_seed=None, split_picks=None):
         """
         generate the sample indices for each fold and each batch, for train, val, and test
         consecutive batches have consecutive samples, for example, when the batch size is 3, and there are 120 samples for
@@ -622,6 +592,8 @@ class MultiModalArrays:
         @return:
         """
         np.random.seed(random_seed)
+
+
         subject_meta = self.physio_arrays[0].get_meta_info_by_name('subject_id')
         run_meta = self.physio_arrays[0].get_meta_info_by_name('run')
 
@@ -634,47 +606,58 @@ class MultiModalArrays:
         val_batch_sample_indices = [np.empty((0, batch_size), dtype=int) for i in range(n_folds)]
         train_batch_sample_indices = [np.empty((0, batch_size), dtype=int) for i in range(n_folds)]
 
-        for (subject, run), sample_indices in subject_run_samples.items():
-            n_batches = len(sample_indices) // batch_size
-            if n_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} has fewer samples than batch size. Ignored.")
-                continue
-            n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
-            sample_indices = np.concatenate([sample_indices, [None] * n_add])
-            n_batches = len(sample_indices) / batch_size
-            assert n_batches.is_integer()
-            n_batches = int(n_batches)
-
-            n_test_batches = math.floor(test_size * n_batches)
-            n_val_batches = math.floor(val_size * n_batches)
-            if n_test_batches == 0 or n_val_batches == 0:
-                warnings.warn(f"Subject {subject} run {run} have too few samples to create enough batches for test and val.{n_batches =}. Ignored.")
-                # TODO maybe when this subject&run doesn't have enough samples, we can add it to the next subject&run
-                continue
-            batch_indices = sample_indices[:n_batches * batch_size].reshape(batch_size, -1).T  # n_batches x batch_size
-            print(f"Generated {n_batches} batches for subject {subject} run {run}. Last {len(sample_indices) - batch_size * n_batches} samples are ignored.")
-
-            test_start_index = np.random.randint(0, n_batches - n_test_batches)
-            test_batch_indices = np.arange(test_start_index, test_start_index + n_test_batches)
-            test_batch_sample_indices = np.concatenate([test_batch_sample_indices, batch_indices[test_batch_indices]])
-
+        if split_picks:
+            n_folds = len(split_picks['subjects'])
+            self.training_val_split_indices = self.get_indices_from_picks(split_picks)
             for fold in range(n_folds):
-                val_start_index = np.random.choice([np.random.randint(0, test_start_index - n_val_batches)] if test_start_index > n_val_batches else [] +
-                                                    [np.random.randint(test_start_index + n_test_batches, n_batches - n_val_batches)] if test_start_index + n_test_batches < n_batches - n_val_batches else [])
-                val_batch_indices = np.arange(val_start_index, val_start_index + n_val_batches)
+                train_indices_fold = fill_batch_with_none_indices(self.training_val_split_indices[fold][0], batch_size)
+                val_indices_fold = fill_batch_with_none_indices(self.training_val_split_indices[fold][1], batch_size)
+                train_batch_sample_indices[fold] = train_indices_fold.reshape(batch_size, -1).T
+                val_batch_sample_indices[fold] = val_indices_fold.reshape(batch_size, -1).T
+        else:
+            for (subject, run), sample_indices in subject_run_samples.items():
+                n_batches = len(sample_indices) // batch_size
+                if n_batches == 0:
+                    warnings.warn(f"Subject {subject} run {run} has fewer samples than batch size. Ignored.")
+                    continue
+                # TODO this should be n_add = len(sample_indices) % (batch_size * n_batches)
+                warnings.warn("Please check the TODO in the code.")
+                n_add = batch_size - len(sample_indices) % (batch_size * n_batches)
+                sample_indices = np.concatenate([sample_indices, [None] * n_add])
+                n_batches = len(sample_indices) / batch_size
+                assert n_batches.is_integer()
+                n_batches = int(n_batches)
 
-                val_batch_sample_indices[fold] = np.concatenate([val_batch_sample_indices[fold], batch_indices[val_batch_indices]])
-                train_batch_sample_indices[fold] = np.concatenate([train_batch_sample_indices[fold], np.delete(batch_indices, np.concatenate([val_batch_indices, test_batch_indices]), axis=0)])
-        self.test_batch_sample_indices = np.array(test_batch_sample_indices)
-        self.val_batch_sample_indices = np.array(val_batch_sample_indices)
-        self.train_batch_sample_indices = np.array(train_batch_sample_indices)
+                n_test_batches = math.floor(test_size * n_batches)
+                n_val_batches = math.floor(val_size * n_batches)
+                if n_test_batches == 0 or n_val_batches == 0:
+                    warnings.warn(f"Subject {subject} run {run} have too few samples to create enough batches for test and val.{n_batches =}. Ignored.")
+                    # TODO maybe when this subject&run doesn't have enough samples, we can add it to the next subject&run
+                    continue
+                batch_indices = sample_indices[:n_batches * batch_size].reshape(batch_size, -1).T  # n_batches x batch_size
+                print(f"Generated {n_batches} batches for subject {subject} run {run}. Last {len(sample_indices) - batch_size * n_batches} samples are ignored.")
+
+                test_start_index = np.random.randint(0, n_batches - n_test_batches)
+                test_batch_indices = np.arange(test_start_index, test_start_index + n_test_batches)
+                test_batch_sample_indices = np.concatenate([test_batch_sample_indices, batch_indices[test_batch_indices]])
+
+                for fold in range(n_folds):
+                    val_start_index = np.random.choice([np.random.randint(0, test_start_index - n_val_batches)] if test_start_index > n_val_batches else [] +
+                                                        [np.random.randint(test_start_index + n_test_batches, n_batches - n_val_batches)] if test_start_index + n_test_batches < n_batches - n_val_batches else [])
+                    val_batch_indices = np.arange(val_start_index, val_start_index + n_val_batches)
+
+                    val_batch_sample_indices[fold] = np.concatenate([val_batch_sample_indices[fold], batch_indices[val_batch_indices]])
+                    train_batch_sample_indices[fold] = np.concatenate([train_batch_sample_indices[fold], np.delete(batch_indices, np.concatenate([val_batch_indices, test_batch_indices]), axis=0)])
+        self.test_batch_sample_indices = np.array(test_batch_sample_indices).astype(int)
+        self.val_batch_sample_indices = np.array(val_batch_sample_indices).astype(int)
+        self.train_batch_sample_indices = np.array(train_batch_sample_indices).astype(int)
         for i in range(n_folds):
             assert set(self.test_batch_sample_indices[self.test_batch_sample_indices != None]).intersection(set(self.train_batch_sample_indices[i][self.train_batch_sample_indices[i] != None])) == set(), "test and train is not disjoint"
             assert set(self.test_batch_sample_indices[self.test_batch_sample_indices != None]).intersection(set(self.val_batch_sample_indices[i][self.val_batch_sample_indices[i] != None])) == set(), "test and val is not disjoint"
             assert set(self.train_batch_sample_indices[i][self.train_batch_sample_indices[i] != None]).intersection(set(self.val_batch_sample_indices[i][self.val_batch_sample_indices[i] != None])) == set(), "train and val is not disjoint"
         self.save()
 
-    def get_train_val_ordered_batch_iterator_fold(self, fold, device, shuffle_within_batches=False, *args, **kwargs):
+    def get_train_val_ordered_batch_iterator_fold(self, fold, device, shuffle_within_batches=False, encode_y=True, *args, **kwargs):
         """
         get a batch iterator for a specific fold
         @param fold:
@@ -686,13 +669,14 @@ class MultiModalArrays:
         assert self.val_batch_sample_indices is not None and self.train_batch_sample_indices is not None, \
             "Please call training_val_test_split_ordered_by_subject_run() first."
         if self.labels_array is not None:
-            labels_encoded = self._encoder(self.labels_array)
-            rtn = OrderedBatchIterator(self.physio_arrays, labels_encoded, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
-                    OrderedBatchIterator(self.physio_arrays, labels_encoded, self.val_batch_sample_indices[fold], device, shuffle_within_batches),
+            _labels  = self._encoder(self.labels_array) if encode_y else np.copy(self.labels_array)
+            rtn = OrderedBatchIterator(self.physio_arrays, _labels, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
+                    OrderedBatchIterator(self.physio_arrays, _labels, self.val_batch_sample_indices[fold], device, shuffle_within_batches),
             return rtn
         else:
             return OrderedBatchIterator(self.physio_arrays, None, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
                 OrderedBatchIterator(self.physio_arrays, None, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
+
     def get_test_ordered_batch_iterator(self, device, encode_y=True, shuffle_within_batches=False):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
         if self.labels_array is not None:
