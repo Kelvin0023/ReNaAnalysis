@@ -138,7 +138,8 @@ class MultiModalArrays:
     """
 
     """
-    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str= '', event_viz_colors: dict=None, rebalance_method='SMOTE', filename=None, experiment_info: dict=None):
+    def __init__(self, physio_arrays: List[PhysioArray], labels_array: np.ndarray =None, dataset_name: str= '', event_viz_colors: dict=None, rebalance_method='SMOTE',
+                 filename=None, experiment_info: dict=None):
         """
         mmarray will assume the ordered set of labels correpond to each event in event_viz_colors
         @param physio_arrays:
@@ -238,70 +239,7 @@ class MultiModalArrays:
         """
         if self.rebalance_method == 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
             warnings.warn("Using class_weight as rebalancing method while encoder is LabelEncoder because BCELoss can not apply class weights ")
-        # if task_name == TaskName.TrainClassifier or task_name == TaskName.PretrainedClassifierFineTune:
-        # # assert self.labels_array is not None, 'labels array must be provided to use rebalancing'
-        #     assert self._encoder is not None, 'get_label_encoder_criterion_for_model must be called before get_rebalanced_dataloader_fold'
-        #     training_indices, val_indices = self.training_val_split_indices[fold_index]
-        #     x_train = []
-        #     x_val = []
-        #     y_train = self.labels_array[training_indices]
-        #     y_val = self.labels_array[val_indices]
-        #
-        #     labels = []
-        #     for parray in self.physio_arrays:
-        #         this_x_train, this_y_train = parray[training_indices], y_train
-        #         if self.rebalance_method == 'SMOTE' and is_rebalance_training:
-        #             assert self.labels_array is not None, 'get_dataloader_fold: labels array must be provided to use rebalancing'
-        #             this_x_train, this_y_train = rebalance_classes(parray[training_indices], y_train, by_channel=parray.is_rebalance_by_channel, random_seed=random_seed)
-        #         x_train.append(torch.Tensor(this_x_train).to(device))
-        #         x_val.append(torch.Tensor(parray[val_indices]).to(device))
-        #
-        #         labels.append(this_y_train)  # just for assertion
-        #
-        #         # meta_info_train.append({name: values[training_indices] for name, values in parray.meta_info.items()})
-        #         # meta_info_val.append({name: values[val_indices] for name, values in parray.meta_info.items()})
-        #     meta_info_train = [{name: torch.Tensor(value[training_indices]).to(device) for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
-        #     meta_info_val = [{name: torch.Tensor(value[val_indices]).to(device) for name, value in darray.meta_info_encoded.items()} for darray in self.physio_arrays]
-        #
-        #     meta_info_train = [v for d in meta_info_train for k, v in d.items()]
-        #     meta_info_val = [v for d in meta_info_val for k, v in d.items()]
-        #
-        #     n_train, n_val = len(x_train[0]), len(x_val[0])
-        #     if len(meta_info_train) > 0 and len(meta_info_train[0]) != n_train and return_metainfo:
-        #         warnings.warn("get_dataloader_fold: return_metainfo is not supported for SMOTE. The meta info will be duplicated using the first sample's")
-        #         meta_info_train = [v[0].repeat(n_train,  *([1] * (len(v.shape)-1) ) ) for v in meta_info_train]
-        #         meta_info_val = [v[0].repeat(n_val, *([1] * (len(v.shape)-1) ) ) for v in meta_info_val]
-        #
-        #     assert np.all([label_set == labels[0] for label_set in labels])
-        #     y_train = labels[0]
-        #     y_train_encoded = self._encoder(y_train)
-        #     y_val_encoded = self._encoder(y_val)
-        #     y_train_encoded = torch.Tensor(y_train_encoded)
-        #     y_val_encoded = torch.Tensor(y_val_encoded)
-        #
-        #     if len(x_train) == 1:   # how many input modalities
-        #         dataset_class = TensorDataset
-        #     else:
-        #         dataset_class = MultiInputDataset
-        #     train_set = (*x_train, *meta_info_train, y_train_encoded ) if return_metainfo else (*x_train, y_train_encoded)
-        #     val_set = (*x_val, *meta_info_val, y_val_encoded )if return_metainfo else (*x_val, y_val_encoded)
-        #     train_dataset = dataset_class(*train_set)
-        #     val_dataset = dataset_class(*val_set)
-        # elif task_name == TaskName.PreTrain:
-        #     training_indices, val_indices = self.training_val_split_indices[fold_index]
-        #     x_train = []
-        #     x_val = []
-        #     for parray in self.physio_arrays:
-        #         x_train.append(torch.Tensor(parray[training_indices]).to(device))
-        #         x_val.append(torch.Tensor(parray[val_indices]).to(device))
-        #     if len(x_train) == 1:
-        #         dataset_class = TensorDataset
-        #         x_train = x_train[0]
-        #         x_val = x_val[0]
-        #     else:
-        #         dataset_class = MultiInputDataset
-        #     train_dataset = dataset_class(x_train)
-        #     val_dataset = dataset_class(x_val)
+
         training_indices, val_indices = self.training_val_split_indices[fold_index]
         val_dataset = MultiModalDataset(self.physio_arrays, labels=(encoded_labels := self.get_encoded_labels()), indices=val_indices)
         # print('check if physio and label arrays are the same after previous call')
@@ -323,7 +261,7 @@ class MultiModalArrays:
         return train_dataloader, val_dataloader
 
 
-    def training_val_split(self, n_folds, val_size=0.1, random_seed=None, picks=None):
+    def training_val_split(self, n_folds, val_size=0.1, random_seed=None, split_picks=None):
         """
         split the train set into training and validation sets
 
@@ -333,8 +271,7 @@ class MultiModalArrays:
         @return:
         """
         assert self.train_indices is not None, 'train indices have not been set, please call train_test_split first'
-        self.training_val_split_indices = []
-        if picks is None:
+        if split_picks is None:
             if self.labels_array is not None:
                 skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
                 for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices], self.labels_array[self.train_indices])):
@@ -344,7 +281,8 @@ class MultiModalArrays:
                 for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices])):
                     self.training_val_split_indices.append((np.array(self.train_indices)[train], np.array(self.train_indices)[val]))
         else:
-            self.training_val_split_indices = self.get_indices_from_picks(picks)
+            print("training_val_split: Using predefined picks, n_fold and val_size will be ignored")
+            self.training_val_split_indices = self.get_indices_from_picks(split_picks)
         self.save()
 
 
@@ -375,7 +313,7 @@ class MultiModalArrays:
         self.save()
 
 
-    def test_train_val_split(self, n_folds, test_size=0.1, val_size=0.1, random_seed=None, picks=None):
+    def test_train_val_split(self, n_folds, test_size=0.1, val_size=0.1, random_seed=None, split_picks=None):
         """
         create indices for test, train and validation sets
 
@@ -387,7 +325,9 @@ class MultiModalArrays:
         """
         self.train_test_split(test_size=test_size, random_seed=random_seed)
         val_size = val_size / (1 - test_size)  # adjust the val size to be a percentage of the training set
-        self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed, picks=picks)
+        if split_picks is not None:
+            n_folds = len(split_picks['subjects'])
+        self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed, split_picks=split_picks)
         for i in range(n_folds):
             assert set(self.training_val_split_indices[i][0]).intersection(set(self.test_indices)) == set(), 'train and test sets are not disjoint'
             assert set(self.training_val_split_indices[i][0]).intersection(set(self.training_val_split_indices[i][1])) == set(), 'train and val sets are not disjoint'

@@ -384,11 +384,12 @@ def get_BCICIVA_samples(data_root, export_data_root, eeg_resample_rate=200, epoc
             eval_path = os.path.join(data_root, f'{s}E.gdf')
 
             raw_train = mne.io.read_raw_gdf(os.path.join(data_root, train_path), preload=True)
+            n_train_event = [e_id for e_id in raw_train.annotations.description if e_id in event_id_mapping.keys()]
             raw_train, _ = mne.set_eeg_reference(raw_train, 'average', projection=False)
 
             raw_val = mne.io.read_raw_gdf(os.path.join(data_root, eval_path), preload=True)
+            n_eval_event = [e_id for e_id in raw_val.annotations.description if e_id in event_id_mapping.keys()]
             raw_val, _ = mne.set_eeg_reference(raw_val, 'average', projection=False)
-
 
             assert raw_train.info['sfreq'] == raw_val.info['sfreq']
             this_epoch_tmax = epoch_tmax - 1 / raw_train.info['sfreq']
@@ -433,53 +434,7 @@ def get_BCICIVA_samples(data_root, export_data_root, eeg_resample_rate=200, epoc
                 ar = AutoReject(n_jobs=16, verbose=False, random_state=random_seed)
                 data, log = ar.fit_transform(data, return_log=True)
             subject_epochs.append(data)
-            # from renaanalysis.utils.utils import visualize_eeg_epochs
-            # visualize_eeg_epochs(data, data.event_id, event_viz_colors, tmin_eeg_viz=epoch_tmin, tmax_eeg_viz=this_epoch_tmax,
-            #                      eeg_picks=kept_channels, sfreq=eeg_resample_rate, title='EEG Epochs ' + 'title',
-            #                      low_frequency=0, high_frequency=40, is_plot_PSD=True,
-            #                      is_plot_ERD=True)
 
-            # if 'T' in file_name:
-            #     subject_id = int(re.findall(r'\d+', file_name)[0])
-            #     epoch_tmax_copy = copy.copy(epoch_tmax)
-            #     raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
-            #     epoch_tmax_copy -= 1 / raw.info['sfreq']
-            #     mne.rename_channels(raw.info, channel_mapping)
-            #     raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right']) # otherwise the channel names are not consistent with montage
-            #     events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
-            #     is_merge_event = 'drop'
-            #     data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax_copy, baseline=(epoch_tmin, epoch_tmin + (epoch_tmax-epoch_tmin)*0.1), preload=True, event_repeated=is_merge_event)
-            #     metadata_dict['subject_id'] = [subject_id] * len(data)
-            #     metadata_dict['run'] = [1] * len(data)
-            #     metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
-            #     metadata = pd.DataFrame(metadata_dict)
-            #     data.metadata = metadata
-            #     data.set_montage(mont1020)
-            #     subjects.append(data)
-            # elif 'E' in file_name:
-            #     subject_id = int(re.findall(r'\d+', file_name)[0])
-            #     epoch_tmax_copy = copy.copy(epoch_tmax)
-            #     raw = mne.io.read_raw_gdf(os.path.join(data_root, file_name), preload=True)
-            #     epoch_tmax_copy -= 1 / raw.info['sfreq']
-            #     mne.rename_channels(raw.info, channel_mapping)
-            #     raw.drop_channels(['EOG-left', 'EOG-central', 'EOG-right'])  # otherwise the channel names are not consistent with montage
-            #     events, event_id = mne.events_from_annotations(raw, event_id=event_id_mapping)
-            #     is_merge_event = 'drop'
-            #     data = mne.Epochs(raw, events, event_id=event_id, tmin=epoch_tmin, tmax=epoch_tmax_copy,
-            #                       baseline=(epoch_tmin, epoch_tmin + (epoch_tmax - epoch_tmin) * 0.1), preload=True,
-            #                       event_repeated=is_merge_event)
-            #     data = data['783']
-            #     metadata_dict['subject_id'] = [subject_id] * len(data)
-            #     metadata_dict['run'] = [2] * len(data)
-            #     metadata_dict['epoch_start_times'] = raw.times[data.events[:, 0]]
-            #     metadata = pd.DataFrame(metadata_dict)
-            #     data.metadata = metadata
-            #     data.set_montage(mont1020)
-            #     true_label_path = os.path.join(data_root, 'true_labels', file_name.replace('gdf', 'mat'))
-            #     true_label = scipy.io.loadmat(true_label_path)
-            #     data.events[:, -1] = (true_label['classlabel'] - 1).squeeze(axis=-1)
-            #     data.event_id = {'769': 0, '770': 1, '771': 2, '772': 3}
-            #     subjects.append(data)
             T = {}
             E = {}
             T['data'] = data[np.where(data.metadata['run'] == 1)[0]].get_data()
@@ -816,6 +771,7 @@ def get_dataset(dataset_name, epochs_root=None, dataset_root=None, is_regenerate
         assert epochs_root is not None, "epochs_root must be specified if is_regenerate_epochs is True"
         print(f"Regenerating epochs from {dataset_root}, nothing from epochs_root will be used")
 
+    mmarray_params = {}
     if dataset_name == 'auditory_oddball':
         x, y, metadata, event_viz_colors = get_auditory_oddball_samples(dataset_root, epochs_root, is_regenerate_epochs, None, eeg_resample_rate, random_seed=random_seed, baseline=eeg_baseline)
         physio_arrays = [PhysioArray(x, metadata, sampling_rate=eeg_resample_rate, physio_type=eeg_name, dataset_name=dataset_name)]

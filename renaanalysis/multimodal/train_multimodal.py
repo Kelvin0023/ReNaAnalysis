@@ -18,7 +18,7 @@ from renaanalysis.utils.viz_utils import viz_confusion_matrix, plot_training_his
 def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=TaskName.TrainClassifier,
                                      n_folds=10, lr=1e-4, l2_weight=1e-6, val_size=0.1, test_size=0.1,
                                      lr_scheduler_type=None, is_plot_conf_matrix=False, plot_histories=True, random_seed=None, epochs=5000, patience=30,
-                                     use_ordered=False, picks_sbj_run=None, is_augment_batch=False, batch_size=32, *args, **kwargs):
+                                     use_ordered=False, split_picks=None, is_augment_batch=False, batch_size=32, *args, **kwargs):
     """
 
     """
@@ -34,7 +34,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, shuffle_within_batches=False)
         train_val_func = mmarray.get_train_val_ordered_batch_iterator_fold
     else:
-        mmarray.test_train_val_split(n_folds, test_size=test_size, val_size=val_size, random_seed=random_seed, picks=picks_sbj_run)
+        mmarray.test_train_val_split(n_folds, test_size=test_size, val_size=val_size, random_seed=random_seed, split_picks=split_picks)
         test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, device=device)
         train_val_func = mmarray.get_dataloader_fold
 

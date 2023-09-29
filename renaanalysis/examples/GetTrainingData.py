@@ -6,10 +6,10 @@ import torch
 from renaanalysis.utils.dataset_utils import get_dataset
 
 
-data_root = r'D:\Dropbox\Dropbox\EEGDatasets\auditory_oddball_openneuro'  # IMPORTANT: change this to your data root
+data_root = r'D:\Dropbox\Dropbox\EEGDatasets\BCICompetitionIV2a'  # IMPORTANT: change this to your data root
 export_data_root = 'C:/Data'  # location to save preloaded data
 
-dataset_name = 'auditory_oddball'
+dataset_name = 'BCICIVA'
 export_dataloader_dir = fr'C:\Data\DataLoaders\{dataset_name}'
 '''
 dataset_name 
@@ -23,11 +23,11 @@ is_pca_ica = False # apply pca and ica on data as a preprocessing step
 is_regenerate_epochs = True  # whether to regenerate epochs, if false, will load from export_data_root
 random_seed = 0  # just a random seed
 eeg_baseline = None  # not applying any baseline correction
-eeg_resample_rate = 200
+eeg_resample_rate = 250
 
 
 # training parameters
-n_folds = 5
+n_folds = 1
 epochs = 100
 test_size = 0.1
 val_size = 0.1
@@ -72,8 +72,8 @@ for fold_index in range(n_folds):
     train_dataloader, val_dataloader = mmarray.get_dataloader_fold(fold_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=False)
     pickle.dump(train_dataloader, open(os.path.join(export_dataloader_dir, f'train_dataloader_fold{fold_index}.p'), 'wb'))
     pickle.dump(val_dataloader, open(os.path.join(export_dataloader_dir, f'val_dataloader_fold{fold_index}.p'), 'wb'))
-    for epoch in range(epochs):
-        for batch_data in train_dataloader:
-            y = batch_data['y']  # this is the label
-            x = batch_data  # this is the input data, it is a dictionary including different physiological modalities (e.g., eeg), and other information (e.g., channel location, subject, session, etc.)
-            # put your training code here
+    # for epoch in range(epochs):
+    #     for batch_data in train_dataloader:
+    #         y = batch_data['y']  # this is the label
+    #         x = batch_data  # this is the input data, it is a dictionary including different physiological modalities (e.g., eeg), and other information (e.g., channel location, subject, session, etc.)
+    #         # put your training code here

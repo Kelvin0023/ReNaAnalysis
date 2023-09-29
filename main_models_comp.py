@@ -96,7 +96,7 @@ train_params = {
 
 datasets = {
     'Motor Imagery':
-        {'dataset_name': 'Motor Imagery',
+        {'dataset_name': 'BCICIVA',
          'data_root': r'D:\Dropbox\Dropbox\EEGDatasets\BCICompetitionIV2a',
          'export_root': export_data_root,
          'reject': None,

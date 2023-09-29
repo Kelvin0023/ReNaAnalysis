@@ -51,7 +51,7 @@ grid_search_params = {
 
     # "dim_head": [64],
     "dim_head": [128],
-    "attn_dropout": [0.0],
+    "attn_dropout": [0.5],
     "emb_dropout": [0.5],
     "ff_dropout": [0.1],
 
@@ -67,12 +67,11 @@ grid_search_params = {
     # "output": ['single'],
     "output": ['multi'],
 
-    'temperature' : [0.1],
-    'n_neg': [1],
-    'p_t': [0.7],
-    'p_c': [0.7],
-    'mask_t_span': [1],
-    'mask_c_span': [1]
+    "token_recep_field": [0.3],
+    "token_recep_field_overlap": [0.2],
+    "time_conv_strid": [0.05],
+    'time_conv_window': [0.1],
+    "mem_len": [0, 1, 2, 3],
 }
 
 
@@ -96,6 +95,7 @@ else:
 
 
 param_performance, training_histories, models = grid_search_ht_eeg(grid_search_params, mmarray, n_folds, task_name=task_name,
+                                                                   training_results_path=training_results_path,
                                                                    batch_size = batch_size,
                                                                      is_plot_confusion_matrix=is_plot_confusion_matrix, random_seed=random_seed,
                                                                    use_ordered_batch=True,
