@@ -612,8 +612,8 @@ class MultiModalArrays:
             for fold in range(n_folds):
                 train_indices_fold = fill_batch_with_none_indices(self.training_val_split_indices[fold][0], batch_size)
                 val_indices_fold = fill_batch_with_none_indices(self.training_val_split_indices[fold][1], batch_size)
-                train_batch_sample_indices[fold] = train_indices_fold.reshape(batch_size, -1).T
-                val_batch_sample_indices[fold] = val_indices_fold.reshape(batch_size, -1).T
+                train_batch_sample_indices[fold] = train_indices_fold.reshape(batch_size, -1).T.astype(int)
+                val_batch_sample_indices[fold] = val_indices_fold.reshape(batch_size, -1).T.astype(int)
         else:
             for (subject, run), sample_indices in subject_run_samples.items():
                 n_batches = len(sample_indices) // batch_size
@@ -648,9 +648,9 @@ class MultiModalArrays:
 
                     val_batch_sample_indices[fold] = np.concatenate([val_batch_sample_indices[fold], batch_indices[val_batch_indices]])
                     train_batch_sample_indices[fold] = np.concatenate([train_batch_sample_indices[fold], np.delete(batch_indices, np.concatenate([val_batch_indices, test_batch_indices]), axis=0)])
-        self.test_batch_sample_indices = np.array(test_batch_sample_indices).astype(int)
-        self.val_batch_sample_indices = np.array(val_batch_sample_indices).astype(int)
-        self.train_batch_sample_indices = np.array(train_batch_sample_indices).astype(int)
+        self.test_batch_sample_indices = np.array(test_batch_sample_indices)
+        self.val_batch_sample_indices = np.array(val_batch_sample_indices)
+        self.train_batch_sample_indices = np.array(train_batch_sample_indices)
         for i in range(n_folds):
             assert set(self.test_batch_sample_indices[self.test_batch_sample_indices != None]).intersection(set(self.train_batch_sample_indices[i][self.train_batch_sample_indices[i] != None])) == set(), "test and train is not disjoint"
             assert set(self.test_batch_sample_indices[self.test_batch_sample_indices != None]).intersection(set(self.val_batch_sample_indices[i][self.val_batch_sample_indices[i] != None])) == set(), "test and val is not disjoint"
@@ -681,6 +681,8 @@ class MultiModalArrays:
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
         if self.labels_array is not None:
             labels = self._encoder(self.labels_array) if encode_y else self.labels_array
+            if not encode_y:  # check the labels are going from 0 to n_classes - 1
+                assert np.all(np.unique(labels) == np.arange(len(self.event_names))), "labels are not going from 0 to n_classes - 1"
             return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
         else:
             return OrderedBatchIterator(self.physio_arrays, None, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)

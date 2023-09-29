@@ -99,4 +99,5 @@ class MultiModalDataset(Dataset):
         self.data = batch_to_tensor(self.data, device)
         self.meta_info = batch_to_tensor(self.meta_info, device)
         if self.labels is not None:
-            self.labels = torch.tensor(self.labels, device=device).to(torch.long)
+            label_dtype = torch.long if len(self.labels.shape) == 1 else torch.float
+            self.labels = torch.tensor(self.labels, device=device).to(label_dtype)

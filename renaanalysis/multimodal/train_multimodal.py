@@ -31,7 +31,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     if hasattr(model, 'reset'): model.reset()
     if use_ordered:
         mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=test_size, random_seed=random_seed, split_picks=split_picks)
-        test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, shuffle_within_batches=False)
+        test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, shuffle_within_batches=False, encode_y=encode_y)
         train_val_func = mmarray.get_train_val_ordered_batch_iterator_fold
     else:
         mmarray.test_train_val_split(n_folds, test_size=test_size, val_size=val_size, random_seed=random_seed, split_picks=split_picks)
