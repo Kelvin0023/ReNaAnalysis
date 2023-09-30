@@ -13,9 +13,9 @@ from mne.viz import plot_topomap
 from torch.utils.data import TensorDataset, DataLoader
 
 
-from renaanalysis.learning.HT import HierarchicalTransformer, Attention
+from renaanalysis.learning.HT import HierarchicalTransformer
+from renaanalysis.learning.Transformer import Attention
 from renaanalysis.learning.transformer_rollout import VITAttentionRollout
-from renaanalysis.utils.data_utils import min_max_by_trial
 from renaanalysis.utils.viz_utils import get_line_styles
 
 

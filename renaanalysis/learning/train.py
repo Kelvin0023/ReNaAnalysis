@@ -8,7 +8,6 @@ import warnings
 import mne
 import numpy as np
 import torch
-from matplotlib import pyplot as plt
 from sklearn import preprocessing, metrics
 from sklearn.model_selection import StratifiedShuffleSplit, ShuffleSplit
 from sklearn.preprocessing import LabelEncoder
@@ -17,8 +16,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
 
-from renaanalysis.learning.Conformer import interaug_encoded, interaug
-from renaanalysis.learning.HATC import HierarchicalAutoTranscoder
+from renaanalysis.learning.Conformer import interaug
 from renaanalysis.learning.HT import ContrastiveLoss
 
 from tqdm import tqdm

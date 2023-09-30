@@ -6,7 +6,7 @@ from einops.layers.torch import Rearrange
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-from renaanalysis.learning.HT import PreNorm, Attention, SinusoidalPositionalEmbedding, MaskLayer
+from renaanalysis.learning.Transformer import PreNorm, Attention, SinusoidalPositionalEmbedding
 from renaanalysis.params.params import verbose
 
 

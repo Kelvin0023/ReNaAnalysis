@@ -12,98 +12,16 @@ import torch.nn.utils.rnn as rnn_utils
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
+from renaanalysis.learning.ChannelWeightTransformer import ChannelAgnosticTransformer
+from renaanalysis.learning.Transformer import Transformer, SinusoidalPositionalEmbedding
+from renaanalysis.models.model_utils import SequentialKwargs
 from renaanalysis.params.params import verbose
 
 from renaanalysis.params.params import eeg_name
 
 
-class SinusoidalPositionalEmbedding(nn.Module):
-    def __init__(self, embed_dim):
-        super().__init__()
-
-        self.embed_dim = embed_dim
-        inverse_frequency = 1. / (10000 ** (torch.arange(0, embed_dim, 2).float() / embed_dim))
-        inverse_frequency = torch.unsqueeze(inverse_frequency, dim=0)  # unsequeeze for broadcasting to batches
-        self.register_buffer('inverse_frequency', inverse_frequency)
-
-    def forward(self, p):
-        # t has shape (batch_size, seq_len, embed_dim)
-        outer_product = torch.einsum('bn,nd->bnd', p, self.inverse_frequency)   # b=batch size, n=number of tokens,
-        pos_emb = torch.cat([outer_product.sin(), outer_product.cos()], dim=-1)
-        return pos_emb
-
-class PreNorm(nn.Module):
-    def __init__(self, dim, fn):
-        super().__init__()
-        self.norm = nn.LayerNorm(dim)
-        self.fn = fn
-
-    def forward(self, x, **kwargs):
-        return self.fn(self.norm(x), **kwargs)
 
 
-class FeedForward(nn.Module):
-    def __init__(self, dim, hidden_dim, dropout=0.):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(dim, hidden_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, dim),
-            nn.Dropout(dropout)
-        )
-
-    def forward(self, x):
-        return self.net(x)
-
-class Attention(nn.Module):
-    def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
-        super().__init__()
-        inner_dim = dim_head * heads
-        project_out = not (heads == 1 and dim_head == dim)
-
-        self.heads = heads
-        self.scale = dim_head ** -0.5
-
-        self.attend = nn.Softmax(dim=-1)
-        self.dropout = nn.Dropout(dropout)
-
-        self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
-
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, dim),
-            nn.Dropout(dropout)
-        ) if project_out else nn.Identity()
-
-    def forward(self, x):
-        qkv = self.to_qkv(x).chunk(3, dim=-1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
-
-        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
-
-        attention = self.attend(dots)
-        attention = self.dropout(attention)  # TODO
-
-        out = torch.matmul(attention, v)
-        out = rearrange(out, 'b h n d -> b n (h d)')
-        return self.to_out(out), attention
-
-class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
-        super().__init__()
-        self.layers = nn.ModuleList([])
-        for _ in range(depth):
-            self.layers.append(nn.ModuleList([
-                PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
-                PreNorm(dim, FeedForward(dim, feedforward_mlp_dim, dropout=dropout))
-            ]))
-
-    def forward(self, x):
-        for prenorm_attention, prenorm_feedforward in self.layers:
-            out, attention = prenorm_attention(x)
-            x = out + x
-            x = prenorm_feedforward(x) + x
-        return x, attention  # last layer
 
 
 class ConvFeatureExtractionModel(nn.Module):
@@ -253,6 +171,7 @@ class HierarchicalTransformer(nn.Module):
                  time_conv_strid=0.05,
                  token_recep_field=0.3,
                  token_recep_field_overlap=0.2,
+                 channel_conv_weight_mode='transformer',
                  *args, **kwargs):
     # def __init__(self, num_timesteps, num_channels, sampling_rate, num_classes, depth=2, num_heads=5,
     #              feedforward_mlp_dim=64, window_duration=0.1, pool='cls', patch_embed_dim=128, dim_head=64, attn_dropout=0., emb_dropout=0., output='single'):
@@ -265,7 +184,8 @@ class HierarchicalTransformer(nn.Module):
         @param output: str: can be 'single' or 'multi'. If 'single', the output is a single number to be put with sigmoid activation. If 'multi', the output is a vector of size num_classes to be put with softmax activation.
         note that 'single' only works when the number of classes is 2.
         @param pos_embed_mode: str: can be 'learnable' or 'sinusoidal'. If 'learnable', the positional embedding is learned.
-        If 'sinusoidal', the positional embedding is sinusoidal. The sinusoidal positional embedding requires meta_info to be passed in with forward
+            If 'sinusoidal', the positional embedding is sinusoidal. The sinusoidal positional embedding requires meta_info to be passed in with forward
+        @param channel_conv_weight_mode: can be learnable or transformer,
         """
         if output == 'single':
             assert num_classes == 2, 'output can only be single when num_classes is 2'
@@ -306,10 +226,15 @@ class HierarchicalTransformer(nn.Module):
 
         self.grid_dims = 1, self.n_tokens
 
-        self.to_patch_embedding = nn.Sequential(
+        if channel_conv_weight_mode == 'conv':
+            channel_conv = nn.Conv2d(patch_embed_dim, patch_embed_dim, (self.num_channels, 1), (1, 1))
+        else:
+            channel_conv = ChannelAgnosticTransformer()
+
+        self.to_patch_embedding = SequentialKwargs(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),
             nn.Conv2d(1, patch_embed_dim, kernel_size=(1, self.time_conv_window_size), stride=(1, self.time_conv_stride), bias=True),
-            nn.Conv2d(patch_embed_dim, patch_embed_dim, (self.num_channels, 1), (1, 1)),
+            channel_conv,
             nn.BatchNorm2d(patch_embed_dim),
             nn.ELU(),
             nn.AvgPool2d((1, self.pool_size), (1, self.pool_stride)),
@@ -420,7 +345,8 @@ class HierarchicalTransformer(nn.Module):
     def encode(self, x, *args, **kwargs):
         x_eeg = x[self.physio_type] if type(x) is dict else x
 
-        x = self.to_patch_embedding(x_eeg)
+        x = self.to_patch_embedding(x_eeg, channel_positions=x['channel_positions'] if type(x) is dict else None)
+
         x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
 
         b, n, _ = x.shape
@@ -429,6 +355,7 @@ class HierarchicalTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
 
         if self.pos_embed_mode == 'sinusoidal':
+            raise NotImplementedError
             channel_pos = x['channel_voxel_indices']  # batch_size x num_channels
             assert channel_pos.shape[1] == self.num_channels, "number of channels in meta info and the input tensor's number of channels does not match. when using sinusoidal positional embedding, they must match. This is likely a result of using pca-ica-ed data."
             time_pos = torch.stack([torch.arange(0, self.num_windows, device=x_eeg.device, dtype=torch.long) for a in range(b)])  # batch_size x num_windows  # use sample-relative time positions
@@ -447,10 +374,10 @@ class HierarchicalTransformer(nn.Module):
             pos_embed = time_pos_embed + channel_pos_embed
             cls_tokens_pos_embedding = repeat(self.learnable_pos_embedding[:, -1, :], '1 d -> b 1 d', b=b)
             pos_embed = torch.concatenate([pos_embed, cls_tokens_pos_embedding], dim=1)
-
         elif self.pos_embed_mode == 'learnable':
             pos_embed = self.learnable_pos_embedding[:, :(self.num_channels * self.num_windows + 1)]
         elif self.pos_embed_mode == 'concate':
+            raise NotImplementedError
             channel_pos = x['channel_voxel_indices'][0] # num_channels
             time_pos = torch.arange(0, self.num_windows, device=x_eeg.device,
                                     dtype=torch.long)  # batch_size x num_windows  # use sample-relative time positions

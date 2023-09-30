@@ -275,6 +275,7 @@ class MultiModalArrays:
         """
         assert self.train_indices is not None, 'train indices have not been set, please call train_test_split first'
         if split_picks is None:
+            self.training_val_split_indices = []
             if self.labels_array is not None:
                 skf = StratifiedShuffleSplit(test_size=val_size, n_splits=n_folds, random_state=random_seed)
                 for f_index, (train, val) in enumerate(skf.split(self.physio_arrays[0].array[self.train_indices], self.labels_array[self.train_indices])):

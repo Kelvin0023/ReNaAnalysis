@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from renaanalysis.learning.HT import Attention
+from renaanalysis.learning.Transformer import Attention
 
 
 def rollout(depth, attentions, discard_ratio, head_fusion, token_shape):
