@@ -229,7 +229,7 @@ class HierarchicalTransformer(nn.Module):
         if channel_conv_weight_mode == 'conv':
             channel_conv = nn.Conv2d(patch_embed_dim, patch_embed_dim, (self.num_channels, 1), (1, 1))
         else:
-            channel_conv = ChannelAgnosticTransformer()
+            channel_conv = ChannelAgnosticTransformer(patch_embed_dim)
 
         self.to_patch_embedding = SequentialKwargs(
             Rearrange('b c t -> b 1 c t', c=self.num_channels, t=self.num_timesteps),

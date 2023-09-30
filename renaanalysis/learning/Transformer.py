@@ -91,8 +91,9 @@ class Attention(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0.):
+    def __init__(self, dim, depth, heads, dim_head, feedforward_mlp_dim, dropout=0., return_attention=True):
         super().__init__()
+        self.return_attention = return_attention
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
@@ -105,4 +106,7 @@ class Transformer(nn.Module):
             out, attention = prenorm_attention(x)
             x = out + x
             x = prenorm_feedforward(x) + x
-        return x, attention  # last layer
+        if self.return_attention:
+            return x, attention  # last layer
+        else:
+            return x

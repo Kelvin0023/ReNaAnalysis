@@ -78,7 +78,7 @@ train_params = {
         "time_conv_strid": [0.05],
         'time_conv_window': [0.1],
 
-        'channel_conv_weight_mode': ['conv'],
+        'channel_conv_weight_mode': ['transformer'],
     }
 }
 
