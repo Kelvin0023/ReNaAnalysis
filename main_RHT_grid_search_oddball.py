@@ -79,6 +79,7 @@ train_params = {
         'time_conv_window': [0.1],
 
         "mem_len": [0, 1, 2, 3]
+        # "mem_len": [0]
     }
 }
 
@@ -92,6 +93,12 @@ training_results_path = os.path.join(os.getcwd(), training_results_dir)
 os.makedirs(training_results_path, exist_ok=True)
 dataset_params['filename'] = f"{dataset_params['dataset_name']}_mmarray.p"
 train_params['training_results_path'] = training_results_path
+
+# save the params
+with open(os.path.join(training_results_path, 'dataset_params.p'), 'wb') as f:
+    pickle.dump(dataset_params, f)
+with open(os.path.join(training_results_path, 'train_params.p'), 'wb') as f:
+    pickle.dump(train_params, f)
 
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)

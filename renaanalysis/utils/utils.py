@@ -772,3 +772,4 @@ def is_button_after_oddball(oddball_time, button_times, response_threshold):
 
     after_oddball_button_times = button_times[button_times > oddball_time] - oddball_time
     return np.any(after_oddball_button_times > 0) and np.any(after_oddball_button_times < response_threshold)
+

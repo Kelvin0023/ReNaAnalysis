@@ -150,9 +150,12 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
         'n_folds': n_folds,
         'is_plot_conf_matrix': is_plot_confusion_matrix,
         'random_seed': random_seed,
-        'picks_sbj_run': picks_sbj_run,
+        'picks_sbj_run': picks_sbj_run
     }, **kwargs}
 
+    # create split for mmarray
+    mmarray.create_split(**train_params)
+    mmarray.save_to_path(os.path.join(training_results_path, "mmarray.p"))  # save the mmarray with the split
 
     for model_params in param_grid:
         print(f"Grid search params: {model_params}. Searching {len(total_training_histories) + 1} of {len(param_grid)}")
@@ -163,6 +166,7 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
         if task_name == TaskName.TrainClassifier:
             models, training_histories, criterion, _, test_auc, test_loss, test_acc = results
             folds_metrics['folds_train_acc'], folds_metrics['folds_val_acc'], folds_metrics['folds_val_auc'] = mean_max_sublists(training_histories['acc_train']), mean_max_sublists(training_histories['acc_val']), mean_max_sublists(training_histories['auc_val'])
+            folds_metrics['folds_test_acc'], folds_metrics['folds_test_auc'], folds_metrics['folds_test_loss'] = test_acc, test_auc, test_loss
         elif task_name == TaskName.PreTrain:
             models, training_histories, criterion, last_activation = results
         folds_metrics['folds_train_loss'], folds_metrics['folds_val_loss'] = mean_min_sublists(training_histories['loss_train']), mean_min_sublists(training_histories['loss_val'])
@@ -176,9 +180,9 @@ def grid_search_ht_eeg(grid_search_params, mmarray: MultiModalArrays, n_folds: i
 
         for i in range(n_folds):
             torch.save(models[i], os.path.join(model_save_dir, test_name + f"_lr_{model_params['lr']}_dimhead_{model_params['dim_head']}_feeddim_{model_params['feedforward_mlp_dim']}_numheads_{model_params['num_heads']}_patchdim_{model_params['patch_embed_dim']}_fold_{i}_pca_{is_pca_ica}.pt"))
-        pickle.dump(total_training_histories, open(os.path.join(training_results_path, f'model_training_histories_pcaica_{is_pca_ica}.p'), 'wb'))
-        pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_performances_pcaica_{is_pca_ica}.p'), 'wb'))
-        pickle.dump(models_param, open(os.path.join(training_results_path, f'models_with_params_pca_{is_pca_ica}.p'), 'wb'))
+        pickle.dump(total_training_histories, open(os.path.join(training_results_path, f'training_histories.p'), 'wb'))
+        pickle.dump(param_performance, open(os.path.join(training_results_path, f'model_performances.p'), 'wb'))
+        pickle.dump(models_param, open(os.path.join(training_results_path, f'models_with_params.p'), 'wb'))
     return param_performance, total_training_histories, models_param
 
 

@@ -229,7 +229,7 @@ class MultiModalArrays:
             val_indices_fold.append(this_val_indices)
         return [(np.array(i), np.array(j)) for (i, j) in zip(train_indices_fold, val_indices_fold)]
 
-    def get_dataloader_fold(self, fold_index, batch_size, is_rebalance_training=True, random_seed=None, device=None, encode_y=True, *args, **kwargs):
+    def get_dataloader_fold(self, fold_index, batch_size, random_seed=None, device=None, encode_y=True, *args, **kwargs):
         """
         get the dataloader for a given fold
         this function must be called after training_val_split
@@ -238,7 +238,7 @@ class MultiModalArrays:
         @param picks: dict of subject and run to pick for train and val respectively, if None, dataloader split it randomly
         @return:
         """
-        if self.rebalance_method == 'class_weight' and is_rebalance_training and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
+        if self.rebalance_method == 'class_weight' and self._encoder_object is not None and isinstance(self._encoder_object, LabelEncoder):
             warnings.warn("Using class_weight as rebalancing method while encoder is LabelEncoder because BCELoss can not apply class weights ")
 
         training_indices, val_indices = self.training_val_split_indices[fold_index]
@@ -247,7 +247,7 @@ class MultiModalArrays:
         val_dataset = MultiModalDataset(self.physio_arrays, labels=labels, indices=val_indices)
 
         # rebalance training set
-        if self.rebalance_method == 'SMOTE' and is_rebalance_training:
+        if self.rebalance_method == 'SMOTE':
             if not encode_y: warnings.warn("Using smote may not work when not encoding y, please double check")
             train_dataset = MultiModalDataset(self.physio_arrays, labels=self.labels_array, indices=training_indices)
             train_dataset.get_rebalanced_set(random_seed=random_seed, encoder=self._encoder)
@@ -264,7 +264,7 @@ class MultiModalArrays:
         return train_dataloader, val_dataloader
 
 
-    def training_val_split(self, n_folds, val_size=0.1, random_seed=None, split_picks=None):
+    def _training_val_split(self, n_folds, val_size=0.1, random_seed=None, split_picks=None):
         """
         split the train set into training and validation sets
 
@@ -290,7 +290,7 @@ class MultiModalArrays:
         self.save()
 
 
-    def train_test_split(self, test_size=0.1, random_seed=None):
+    def _train_test_split(self, test_size=0.1, random_seed=None):
         """
         split the raw dataset in to train and test sets
         if label is provided,
@@ -327,11 +327,11 @@ class MultiModalArrays:
         @param random_seed:
         @return:
         """
-        self.train_test_split(test_size=test_size, random_seed=random_seed)
+        self._train_test_split(test_size=test_size, random_seed=random_seed)
         val_size = val_size / (1 - test_size)  # adjust the val size to be a percentage of the training set
         if split_picks is not None:
             n_folds = len(split_picks['subjects'])
-        self.training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed, split_picks=split_picks)
+        self._training_val_split(n_folds=n_folds, val_size=val_size, random_seed=random_seed, split_picks=split_picks)
         for i in range(n_folds):
             assert set(self.training_val_split_indices[i][0]).intersection(set(self.test_indices)) == set(), 'train and test sets are not disjoint'
             assert set(self.training_val_split_indices[i][0]).intersection(set(self.training_val_split_indices[i][1])) == set(), 'train and val sets are not disjoint'
@@ -378,41 +378,27 @@ class MultiModalArrays:
         indices = indices[indices != None].astype(int)
         return indices
 
-    def get_ordered_test_set(self, convert_to_tensor=False, device=None):
-        test_indices = self.get_ordered_test_indices()
-        if self.labels_array is None:
-            warnings.warn('labels array is None, make sure label is not needed for this model')
-        test_set = self.multi_modal_dataset[test_indices]
-        if convert_to_tensor:
-            test_set = batch_to_tensor(test_set, device=device)
-        return test_set
-
-    def get_test_set(self, convert_to_tensor=False, device=None):
+    def get_test_set(self, use_ordered, convert_to_tensor=False, device=None):
         """
         get the test set
         @return:
         """
-        assert self.test_indices is not None or self.test_batch_sample_indices is not None, 'test indices have not been set, please call train_test_split first, or training_val_test_split_ordered_by_subject_run'
-
-        test_indices = self.test_indices
-
-        if self.labels_array is None:
-            warnings.warn('labels array is None, make sure label is not needed for this model')
-        test_set = MultiModalDataset(self.physio_arrays, labels=self.get_encoded_labels(), indices=test_indices)
+        if use_ordered:
+            test_indices = self.get_ordered_test_indices()
+            if self.labels_array is None:
+                warnings.warn('labels array is None, make sure label is not needed for this model')
+            test_set = self.multi_modal_dataset[test_indices]
+        else:
+            assert self.test_indices is not None or self.test_batch_sample_indices is not None, 'test indices have not been set, please call train_test_split first, or training_val_test_split_ordered_by_subject_run'
+            test_indices = self.test_indices
+            if self.labels_array is None:
+                warnings.warn('labels array is None, make sure label is not needed for this model')
+            test_set = MultiModalDataset(self.physio_arrays, labels=self.get_encoded_labels(), indices=test_indices)
 
         if convert_to_tensor:
             test_set.to_tensor(device=device)
         return test_set
 
-    def get_test_dataloader(self, batch_size, device=None):
-        test_set = self.get_test_set(convert_to_tensor=True, device=device)
-        # if len(self.physio_arrays) == 1:
-        #     dataset_class = TensorDataset
-        # else:
-        #     dataset_class = MultiInputDataset
-        # test_dataset = dataset_class(*test_set)
-        test_dataloader = DataLoader(test_set, batch_size=batch_size)
-        return test_dataloader
 
     def get_random_sample(self, convert_to_tensor=False, device=None):
         """
@@ -423,19 +409,6 @@ class MultiModalArrays:
         if convert_to_tensor:
             sample = batch_to_tensor(sample, device=device)
         return sample
-        # rtn = [(parray[random_sample_index][None, :]) for parray in self.physio_arrays]
-        # rtn = [torch.tensor(r, dtype=torch.float32, device=device) for r in rtn] if convert_to_tensor else rtn
-        # rtn = rtn if len(rtn) > 1 else rtn[0]
-        #
-        # meta_info = None
-        # if include_metainfo:
-        #     meta_info = [parray.get_meta_info(random_sample_index, encoded=True) for parray in self.physio_arrays]
-        #     meta_info = [[torch.tensor([value], device=device) for name, value in m.items()] for m in meta_info] if convert_to_tensor else meta_info
-        #     meta_info = list(itertools.chain.from_iterable(meta_info))
-        # if include_metainfo:
-        #     return rtn, *meta_info
-        # else:
-        #     return rtn
 
     def get_class_weight(self, convert_to_tensor=False, device=None):
         """
@@ -678,7 +651,7 @@ class MultiModalArrays:
             return OrderedBatchIterator(self.physio_arrays, None, self.train_batch_sample_indices[fold], device, shuffle_within_batches), \
                 OrderedBatchIterator(self.physio_arrays, None, self.val_batch_sample_indices[fold], device, shuffle_within_batches)
 
-    def get_test_ordered_batch_iterator(self, device, encode_y=True, shuffle_within_batches=False):
+    def get_test_ordered_batch_iterator(self, device, encode_y=True, shuffle_within_batches=False, *args, **kwargs):
         assert self.test_batch_sample_indices is not None, "Please call training_val_test_split_ordered_by_subject_run() first."
         if self.labels_array is not None:
             labels = self._encoder(self.labels_array) if encode_y else self.labels_array
@@ -687,20 +660,6 @@ class MultiModalArrays:
             return OrderedBatchIterator(self.physio_arrays, labels, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
         else:
             return OrderedBatchIterator(self.physio_arrays, None, self.test_batch_sample_indices, device, shuffle_within_batches=shuffle_within_batches)
-    # def traning_val_test_split_ordered(self, n_folds, batch_size, val_size, test_size, random_seed=None):
-    #     n_batches = self.get_num_samples() // batch_size
-    #     test_n_batches = math.floor(test_size * n_batches)
-    #     test_start_index = np.random.randint(0, n_batches - test_n_batches)
-    #     test_batch_indices = np.arange(test_start_index, test_start_index + test_n_batches)
-    #
-    #     val_n_batches = math.floor(val_size * n_batches)
-    #     val_start_index = np.random.choice([np.random.randint(0, test_start_index - val_n_batches) if test_start_index > val_n_batches else [], np.random.randint(test_start_index + test_n_batches, n_batches - val_n_batches)])
-    #     val_batch_indices = np.arange(val_start_index, val_start_index + val_n_batches)
-    #
-    #     batch_indices = np.arange(n_batches * batch_size).reshape(batch_size, -1).T  # n_batches x batch_size
-    #
-    #     val_sample_indices = batch_indices[val_batch_indices]
-        # self.physio_arrays[0][]
 
     def get_encoded_labels(self):
         labels_encoded = None
@@ -717,6 +676,45 @@ class MultiModalArrays:
         @return:
         '''
         pass
+
+    def has_split(self, use_ordered):
+        if use_ordered:
+            return self.train_batch_sample_indices is not None and self.val_batch_sample_indices is not None and self.test_batch_sample_indices is not None
+        else:
+            return self.train_indices is not None and self.test_indices is not None and self.training_val_split_indices is not None
+
+    def create_split(self, use_ordered, n_folds, batch_size, val_size, test_size, random_seed,
+                     split_picks=None, force_resplit=False, *args, **kwargs):
+        """"
+        use this function when you want to create a train, val, test split for mmarray, ordered or unordered
+        It checks if the mmarray already has a split, if not, it will create a new split. It will also create a new split if force_resplit is True
+        """
+        use_cuda = torch.cuda.is_available()
+        device = torch.device("cuda:0" if use_cuda else "cpu")
+        if use_ordered:
+            split_func = self.training_val_test_split_ordered_by_subject_run
+            train_val_func = self.get_train_val_ordered_batch_iterator_fold
+        else:
+            split_func = self.train_test_val_split
+            train_val_func = self.get_dataloader_fold
+
+        if not self.has_split(use_ordered) or force_resplit:
+            print( f"creating {'ordered' if use_ordered else 'unordered'} split for mmarray {n_folds} folds, and {len(self)} samples")
+            split_func(n_folds, batch_size=batch_size, val_size=val_size, test_size=test_size, random_seed=random_seed,split_picks=split_picks)
+
+    def get_test_dataloader(self, use_ordered, device, encode_y, *args, **kwargs):
+        if use_ordered:
+            return self.get_test_ordered_batch_iterator(device, encode_y, *args, **kwargs)
+        else:
+            test_set = self.get_test_set(use_ordered, convert_to_tensor=True, device=device)
+            test_dataloader = DataLoader(test_set,  *args, **kwargs)
+            return test_dataloader
+
+    def get_train_val_loader(self, fold, use_ordered, device, encode_y, *args, **kwargs):
+        if use_ordered:
+            return self.get_train_val_ordered_batch_iterator_fold(fold, device, encode_y=encode_y, *args, **kwargs)
+        else:
+            return self.get_dataloader_fold(fold, device, encode_y, *args, **kwargs)
 
 def load_mmarray(path):
     """

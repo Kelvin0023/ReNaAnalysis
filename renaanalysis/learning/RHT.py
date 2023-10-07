@@ -9,6 +9,13 @@ from renaanalysis.learning.HT import MaskLayer
 from renaanalysis.models.model_utils import init_weight
 from renaanalysis.params.params import eeg_name
 
+def check_zeros_mem(mem_x, ntokens):
+    for i, batch_mem in enumerate(mem_x):
+        try:
+            assert not torch.all(batch_mem[-ntokens:] == 0)
+        except AssertionError:
+            raise ValueError(f"the last {ntokens} tokens, mem_x in batch {i} has all zeros, check how mem is padded in update_mem")
+
 
 class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, embed_dim):
@@ -79,7 +86,7 @@ class FeedForward(nn.Module):
 
 
 
-class RecurrentGeneralizedPFAttention(nn.Module):
+class RelAttention(nn.Module):
     def __init__(self, embedding_dim, pos_embed_mode, num_heads=8, dim_head=64, drop_attention=0., dropout=0.1, pos_embed_activation=None):
         super().__init__()
         all_heads_dim = dim_head * num_heads
@@ -249,7 +256,7 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                PreNorm(embedding_dim, RecurrentGeneralizedPFAttention(embedding_dim, pos_embed_mode, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout_ff)),
+                PreNorm(embedding_dim, RelAttention(embedding_dim, pos_embed_mode, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout_ff)),
                 # RecurrentGeneralizedPFAttention(embedding_dim, num_heads=num_heads, dim_head=dim_head, drop_attention=drop_attention, dropout=dropout),
                 PreNorm(embedding_dim, FeedForward(embedding_dim, feedforward_mlp_dim, dropout=dropout_ff))  # use pre norm for the attention output residual
             ]))
@@ -276,12 +283,13 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         qlen = x.size(1)
         klen = self.mem_len + qlen
         layer_outs_rs = []
-        if self.mem_len > 0: layer_outs_rs.append((x, r_t[:, -qlen:], r_p))
+        if self.mem_len > 0: layer_outs_rs.append([x, r_t[:, -qlen:], r_p])  # put the input as the first layer "output"
         for i, (attention_layer, prenorm_ff_residual_postnorm) in enumerate(self.layers):
             if self.mems is not None:
                 mem_x, _, _, = self.mems[i]
                 if b != mem_x.shape[0]:
                     mem_x= mem_x[:b]
+                    check_zeros_mem(mem_x, qlen)  # for debug
                 x_with_mems = torch.cat([mem_x, x], dim=1)   # concate x with mem here so they are prenorm together
                 out, attention = attention_layer(x_with_mems, r_t=r_t, r_p=r_p, bias_pf=self.bias_pf, mems=self.mems[i], qlen=qlen)
             else:
@@ -290,7 +298,7 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
             x = out + x  # residual connection
             x = prenorm_ff_residual_postnorm(x) + x
 
-            if self.mem_len > 0: layer_outs_rs.append((x, r_t[:, -qlen:], r_p))  # r_t can be of the same len as t
+            if self.mem_len > 0: layer_outs_rs.append([x, r_t[:, -qlen:], r_p])  # r_t can be of the same len as t
         self.update_mems(layer_outs_rs, qlen, b)
         return x, attention  # last layer
 
@@ -322,16 +330,18 @@ class RecurrentGeneralizedPFTransformer(nn.Module):
         if self.mems is None: return
         assert len(layer_outs_rs) == len(self.mems)
         cur_mem_len = self.mems[0][0].size(1) if self.mems[0][0].numel() != 0 else 0
-        b_mismatch = len(self.mems[0][0]) - b  # check the batch size
+        b_mismatch = b - len(self.mems[0][0])  # check the batch size, sometimes b can be less than batch size, b is always greater than mem
         with torch.no_grad():
             new_mems = []
             end_idx = cur_mem_len + max(0, qlen)
             beg_idx = max(0, end_idx - self.mem_len)
             for layer_index in range(len(layer_outs_rs)):
                 # only append mem when 1) mems are empty 2) the number of tokens between the mem and the embeddings matches, when they don't match, it implies the caller is managing the mems for this embedding
-                if b_mismatch != 0:
-                    layer_outs_rs[layer_index] = [torch.concatenate((self.mems[layer_index][embed_index][-b_mismatch:], layer_outs_rs[layer_index][embed_index]), dim=0)
-                                                  for embed_index in range(self.num_embeds)]
+                if b_mismatch != 0 and cur_mem_len != 0:  # and mem is not empty
+                    # this for loop: padding zeros to the new layer output to make up the batch size; this old mem is not used for batch size will become regular in the next experiment run (mem resets)
+                    for embed_index in range(self.num_embeds):  # go through all the embeddings TODO no need keep embeddings r's for each layer because they are the same through the layers
+                        paddings = repeat(torch.zeros_like(layer_outs_rs[layer_index][embed_index][0]), 'n d -> b n d', b=b_mismatch)
+                        layer_outs_rs[layer_index][embed_index] = torch.concatenate((layer_outs_rs[layer_index][embed_index], paddings), dim=0)
                 cat = [torch.cat([self.mems[layer_index][embed_index], layer_outs_rs[layer_index][embed_index]], dim=1) for embed_index in range(self.num_embeds)]
                 new_mems.append([c[:, beg_idx:end_idx].detach() for c in cat])
         self.mems = new_mems
@@ -419,7 +429,7 @@ class RecurrentHierarchicalTransformer(nn.Module):
         self.cls_token_pos_embedding = nn.Parameter(torch.randn(1, 1, patch_embed_dim )) if pos_embed_mode == 'sinusoidal' else nn.Parameter(torch.randn(1, 1, num_heads, dim_head))
         self.dropout = nn.Dropout(emb_dropout)
 
-        self.mem_len = (self.n_tokens * mem_len + 1 ) if mem_len != 0 else 0  # +1 for cls token
+        self.mem_len = ((self.n_tokens + 1) * mem_len) if mem_len != 0 else 0  # +1 for cls token
         self.transformer = RecurrentGeneralizedPFTransformer(patch_embed_dim, depth, num_heads, dim_head, feedforward_mlp_dim, pos_embed_mode, drop_attention=attn_dropout, dropout_ff=ff_dropout, mem_len=self.mem_len)
 
         self.pool = pool

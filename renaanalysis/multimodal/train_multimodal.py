@@ -29,15 +29,9 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
     criterion, last_activation = mmarray.get_label_encoder_criterion_for_model(model, device)
     # reset the model if reset is defined as a method in the model
     if hasattr(model, 'reset'): model.reset()
-    if use_ordered:
-        mmarray.training_val_test_split_ordered_by_subject_run(n_folds, batch_size=batch_size, val_size=val_size, test_size=test_size, random_seed=random_seed, split_picks=split_picks)
-        test_dataloader = mmarray.get_test_ordered_batch_iterator(device=device, shuffle_within_batches=False, encode_y=encode_y)
-        train_val_func = mmarray.get_train_val_ordered_batch_iterator_fold
-    else:
-        mmarray.test_train_val_split(n_folds, test_size=test_size, val_size=val_size, random_seed=random_seed, split_picks=split_picks)
-        test_dataloader = mmarray.get_test_dataloader(batch_size=batch_size, device=device)
-        train_val_func = mmarray.get_dataloader_fold
 
+    mmarray.create_split(mmarray, use_ordered, n_folds, batch_size, val_size, test_size, random_seed, split_picks)
+    test_dataloader = mmarray.get_test_dataloader(use_ordered, device=device, encode_y=encode_y, batch_size=batch_size, )
 
     train_losses_folds = []
     train_accs_folds = []
@@ -56,7 +50,7 @@ def train_test_classifier_multimodal(mmarray, model, test_name="", task_name=Tas
         model_copy = model_copy.to(device)
         if hasattr(model_copy, 'disable_pretrain_parameters'): model_copy.disable_pretrain_parameters()
 
-        train_dataloader, val_dataloader = train_val_func(f_index, batch_size=batch_size, is_rebalance_training=True, random_seed=random_seed, device=device, shuffle_within_batches=False, encode_y=encode_y)
+        train_dataloader, val_dataloader = mmarray.get_train_val_loader(f_index, use_ordered, device, encode_y, batch_size=batch_size, shuffle_within_batches=False)
 
         optimizer = torch.optim.Adam(model_copy.parameters(), lr=lr, betas=(0.5, 0.999))
         # optimizer = torch.optim.SGD(model_copy.parameters(), lr=lr, momentum=0.9)

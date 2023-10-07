@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import torch
 
 from renaanalysis.learning.HT_viz import ht_viz, ht_eeg_viz_multimodal_batch, ht_viz_multimodal
-from renaanalysis.learning.RHT import RecurrentGeneralizedPFAttention
+from renaanalysis.learning.RHT import RelAttention
 from renaanalysis.multimodal.multimodal import load_mmarray
 from renaanalysis.utils.utils import remove_value
 from renaanalysis.utils.viz_utils import viz_binary_roc, plot_training_history, visualize_eeg_samples
@@ -33,7 +33,7 @@ sample_fusion = 'sum'
 discard_ratio = 0.9
 num_sample = 2
 rollout_data_root = f'RHT_viz'
-attention_layer_class = RecurrentGeneralizedPFAttention
+attention_layer_class = RelAttention
 load_saved_rollout = False
 use_ordered = True
 

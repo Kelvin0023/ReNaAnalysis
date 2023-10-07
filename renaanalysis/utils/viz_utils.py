@@ -15,7 +15,8 @@ from renaanalysis.eye.eyetracking import Fixation, Saccade, GazeRayIntersect
 from renaanalysis.utils.Event import get_events_between, get_block_start_event, get_overlapping_events_single_at_time
 from renaanalysis.params.params import *
 from renaanalysis.utils.TorchUtils import prepare_image_for_sim_score
-from renaanalysis.utils.utils import visualize_pupil_epochs, visualize_eeg_epochs
+from renaanalysis.utils.utils import visualize_pupil_epochs, visualize_eeg_epochs, remove_value
+
 
 def visualiza_session(events):
     plt.rcParams["figure.figsize"] = [40, 3.5]
@@ -467,6 +468,31 @@ def viz_binary_roc(true_label, pred_score, param_list, fold, target_label=1):
 
     plt.show()
 
+def reorganize_folds_histories(total_training_histories):
+    """
+    reorganize the histories from the folds
+    from
+        param: tuple of tuples (hashable dict) -> metric (dict) -> metric name (str) -> list of folds -> list of epoch history for this fold
+    to
+        param: tuple of tuples (hashable dict) -> list of folds ->  metric name (str) -> list of epoch history for this fold
+    """
+    reorganized_histories = {}
+    n_folds = len(list(list(total_training_histories.values())[0].values())[0])
+    for param, metric_dict in total_training_histories.items():
+        reorganized_histories[param] = []
+        for fold_i in range(n_folds):
+            fold_metrics = {metric_name: metric_folds[fold_i] for metric_name, metric_folds in metric_dict.items()}
+            reorganized_histories[param].append(fold_metrics)
+    return reorganized_histories
+
+
+def plot_training_history_folds(total_training_histories):
+    training_history_reorganized = reorganize_folds_histories(total_training_histories)
+    for param, histories in training_history_reorganized.items():
+        for fold_i, fold_hist in enumerate(histories):
+            plot_training_history(fold_hist, dict(param)['mem_len'], fold_i)
+
+
 def plot_training_history(history, param_list, fold, is_plot_auc=True):
     # Extract the training history
     train_loss = history['loss_train']
@@ -511,7 +537,7 @@ def plot_training_history(history, param_list, fold, is_plot_auc=True):
     # Display the plot
     plt.tight_layout()
     if param_list is not None:
-        plt.savefig(f'renaanalysis/learning/saved_images/training_history/{param_list}_{fold}.png')
+        plt.savefig(f'{param_list}_{fold}.png')
     plt.show()
 
 def plot_training_loss_history(history, param_list, fold):
@@ -560,8 +586,7 @@ def visualize_eeg_samples(x, y, colors, eeg_picks, title='', out_dir=None, verbo
                 x2 = x_mean - scipy.stats.sem(x[idx][event_idx], axis=0)
                 time_vector = np.linspace(-0.1, 0.8, x[idx][event_idx].shape[-1])
                 # Plot the EEG data as a shaded area
-                plt.fill_between(time_vector, x1, x2, where=x2 <= x1, facecolor=colors[event], interpolate=True,
-                                 alpha=0.5)
+                plt.fill_between(time_vector, x1, x2, where=x2 <= x1, facecolor=colors[event], interpolate=True, alpha=0.5)
                 plt.plot(time_vector, x_mean, c=colors[event], label='{0}, N={1}'.format(event, x[idx][event_idx].shape[0]))
 
                 # Set the labels and title for the plot
@@ -590,3 +615,56 @@ def get_line_styles(num_styles):
     """
     line_styles = ['-', '--', '-.', ':', (0, (1, 1)), (0, (5, 1)), (0, (3, 1, 1, 1)), (0, (3, 5, 1, 5)), (0, (3, 5, 3, 5, 1, 5))]
     return line_styles[:num_styles]
+
+def grid_search_bars(model_performance, grid_search_params, metric, title="Grid Search"):
+    # plot performance for different params
+    plot_params = [param_name for param_name, param_values in grid_search_params.items() if len(param_values) > 1]
+
+    grouped_results = {}
+    for key, value in model_performance.items():
+        params = [dict(key)[x] for x in plot_params]
+        grouped_results[tuple(params)] = sum(value[metric]) / len(value[metric]) if isinstance(value[metric], list) else value[metric]
+
+    unique_params = dict([(param_name, np.unique([key[i] for key in grouped_results.keys()])) for i, param_name in enumerate(plot_params)])
+
+    # Create subplots for each parameter
+    fig, axes = plt.subplots(nrows=1, ncols=len(plot_params), figsize=(16, 5))
+
+    # Plot the bar charts for each parameter
+    for i, (param_name, param_values) in enumerate(unique_params.items()):  # iterate over the hyperparameter types
+        axis = axes[i] if len(plot_params) > 1 else axes
+        labels = []
+        auc_values = []
+
+        common_keys = []  # find the intersection of keys for this parameter to avoid biasing the results (needed when the grid search is incomplete)
+        for j, param_val in enumerate(param_values):  # iterate over the values of the parameter
+            other_keys = [list(key) for key, value in grouped_results.items() if key[i] == param_val]
+            [x.remove(param_val) for x in other_keys]
+            other_keys = [tuple(x) for x in other_keys]
+            common_keys.append(other_keys)
+        common_keys = set(common_keys[0]).intersection(*common_keys[1:])
+
+        for j, param_val in enumerate(param_values):  # iterate over the values of the parameter
+            # metric_values = [value for key, value in grouped_results.items() if key[i] == param_val and remove_value(key, param_val) in common_keys]
+            metric_values = []
+            for key, value in grouped_results.items():
+                if key[i] == param_val and tuple(remove_value(key, param_val)) in common_keys:
+                    metric_values.append(value)
+
+            auc_values.append(np.mean(metric_values))
+            labels.append(param_val)
+
+        xticks = np.arange(len(labels))
+        axis.bar(xticks, auc_values)
+        # put text of the auc values
+        for j, auc_value in enumerate(auc_values):
+            axis.text(xticks[j], auc_value, f'{auc_value:.6f}', ha='center', va='bottom', fontsize=12)
+        axis.set_xticks(xticks, labels=labels, rotation=45)
+        axis.set_xlabel(param_name)
+        axis.set_ylabel(metric)
+        axis.set_title(title)
+
+    # Adjust the layout of subplots and show the figure
+    fig.tight_layout()
+    plt.show()
+

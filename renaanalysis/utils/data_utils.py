@@ -403,3 +403,4 @@ def check_arrays_equal(array_list):
         if not np.array_equal(reference_array, arr):
             return False
     return True
+
